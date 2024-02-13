@@ -3,7 +3,7 @@ A longterm project for a simple C compiler in rust. I will be working on this un
 
 
 ### Roadmap
-
+<pre>
 [ ] Integer arithmetic lexing / parsing 
 [ ] Boolean algebra lexing / parsing
 [ ] Basic types
@@ -21,7 +21,7 @@ A longterm project for a simple C compiler in rust. I will be working on this un
 [ ] Structs
 [ ] #include directive
 [ ] Function pointers
-
+</pre>
 
 #### Why?
 I am doing this project to study program compilation. I want to write a fully fledged C compiler and hopeful this someday becomes that. 
