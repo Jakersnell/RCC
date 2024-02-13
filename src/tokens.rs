@@ -1,42 +1,39 @@
+use arcstr::Substr;
 use derive_new::new;
-use std::sync::Arc;
+use std::{default, error, sync::Arc};
 use thiserror::Error as ErrorType;
 
 #[derive(Debug, PartialEq, ErrorType)]
 pub enum TokenProblem {
-    #[error("Invalid decimal literal.")]
-    InvalidHex,
+    #[error("{0}")]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error("{0}")] 
+    ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("Invalid character.")]
     InvalidCharacter,
 }
 
 #[derive(Debug, new)]
 pub struct LexToken {
-    pub kind: SyntaxTokenKind,
-    pub location: Location,
+    pub kind: TokenKind,
+    pub location: Span,
     pub problems: Vec<TokenProblem>,
 }
 
 #[derive(Debug, PartialEq, new)]
-pub struct Location {
-    filename: Arc<String>,
+pub struct Span {
     start: usize,
     end: usize,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum SyntaxTokenKind {
-    Symbol(SymbolKind),
-    Literal(LiteralKind),
-}
+#[derive(Debug, PartialEq, Default)]
+pub enum TokenKind {
+    #[default]
+    BadToken,
 
-#[derive(Debug, PartialEq)]
-pub enum LiteralKind {
     Integer(u64),
-}
+    FloatLiteral(f64),
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum SymbolKind {
     Plus,
     Minus,
     Star,
@@ -91,13 +88,13 @@ pub enum SymbolKind {
 
     Sizeof,
 
-    InvalidSymbol,
 }
 
-impl SymbolKind {
-    pub fn match_symbol(symbol: &str) -> Option<SymbolKind> {
-        use SymbolKind::*;
+impl TokenKind {
+    pub fn match_symbol(symbol: &str) -> Option<TokenKind> {
+        use TokenKind::*;
         match symbol {
+            "sizeof" => Some(Sizeof),
             "+" => Some(Plus),
             "+=" => Some(PlusEqual),
             "++" => Some(Increment),
