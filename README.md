@@ -1,5 +1,5 @@
-# rcc
-A longterm project for a simple C compiler in rust. I will be working on this until it is done, and im very excited for where this goes.
+# microc
+A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 
 
 ### Roadmap
@@ -12,23 +12,21 @@ A longterm project for a simple C compiler in rust. I will be working on this un
 [ ] Function declarations
 [ ] "int main" entry point
 [ ] First codegen with cranelift
-[ ] Temp Buildin of printf for testing
+[ ] Temp Buildin of printf function
 [ ] If control flow
 [ ] While loops
 [ ] For loops
 [ ] Arrays 
-[ ] Pointers / buildin of malloc and free for testing
+[ ] Pointers & buildin of malloc and free functions
 [ ] Structs
-[ ] #include directive
 [ ] Function pointers
 
 
 #### Why?
-I am doing this project to study program compilation. I want to write a fully fledged C compiler and hopeful this someday becomes that. 
+I am doing this project to study program compilation. I want to write a fully fledged C compiler and this is a good precursor to that. 
 
 The phases I hope for this compiler to have are as follows.
-1. Preprocessor (#include, #define, etc)
-2. Lexical analysis (Reading literals, keywords, operators, etc)
-3. Parsing (Reading the logical structure of the code)
-4. Binding (Type checking and the like)
-5. Codegen (Creating the IR, linking the object files, creating a binary)
+1. Lexical analysis (Reading literals, keywords, operators, etc)
+2. Parsing (Reading the logical structure of the code)
+3. Binding (Type checking and the like)
+4. Codegen (Creating the IR, linking the object files, creating a binary)
