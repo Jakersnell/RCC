@@ -14,3 +14,4 @@ Cargo.lock
 *.pdb
 
 _c/
+_c_test_files/

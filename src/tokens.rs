@@ -7,7 +7,7 @@ use thiserror::Error as ErrorType;
 pub enum TokenProblem {
     #[error("{0}")]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("{0}")] 
+    #[error("{0}")]
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("{0} is an invalid hex Literal")]
     InvalidHexLiteral(String),
@@ -39,7 +39,7 @@ pub enum TokenKind {
 
     IntKeyword,
     DoubleKeyword,
-
+    ReturnKeyword,
 
     Plus,
     Minus,
@@ -94,60 +94,71 @@ pub enum TokenKind {
     Semicolon,
 
     Sizeof,
-
 }
 
-impl TokenKind {
-    pub fn match_symbol(symbol: &str) -> Option<TokenKind> {
-        use TokenKind::*;
-        match symbol {
-            "sizeof" => Some(Sizeof),
-            "+" => Some(Plus),
-            "+=" => Some(PlusEqual),
-            "++" => Some(Increment),
-            "-" => Some(Minus),
-            "->" => Some(Arrow),
-            "-=" => Some(MinusEqual),
-            "--" => Some(Decrement),
-            "*" => Some(Star),
-            "*=" => Some(StarEqual),
-            "/" => Some(Slash),
-            "/=" => Some(SlashEqual),
-            "%" => Some(Modulo),
-            "%=" => Some(ModuloEqual),
-            "=" => Some(Equal),
-            "==" => Some(EqualEqual),
-            "!" => Some(Bang),
-            "!=" => Some(BangEqual),
-            "|" => Some(Pipe),
-            "|=" => Some(PipeEqual),
-            "||" => Some(DoublePipe),
-            "&" => Some(Ampersand),
-            "&=" => Some(AmpersandEqual),
-            "&&" => Some(DoubleAmpersand),
-            "^" => Some(Caret),
-            "^=" => Some(CaretEqual),
-            "~" => Some(Tilde),
-            "<<" => Some(LeftShift),
-            "<<=" => Some(LeftShiftEqual),
-            ">>" => Some(RightShift),
-            ">>=" => Some(RightShiftEqual),
-            ">" => Some(GreaterThan),
-            ">=" => Some(GreaterThanEqual),
-            "<" => Some(LessThan),
-            "<=" => Some(LessThanEqual),
-            "?" => Some(QuestionMark),
-            ":" => Some(Colon),
-            "," => Some(Comma),
-            "." => Some(Dot),
-            "[" => Some(OpenSquare),
-            "]" => Some(CloseSquare),
-            "{" => Some(OpenCurly),
-            "}" => Some(CloseCurly),
-            "(" => Some(OpenParen),
-            ")" => Some(CloseParen),
-            ";" => Some(Semicolon),
-            _ => None,
-        }
-    }
+pub enum Keyword {
+    Int,
+    Double,
+    Return,
+}
+
+pub enum Literal {
+    Integer(u64),
+    Float(f64),
+}
+
+pub enum Operator {
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Modulo,
+
+    EqualEqual,
+    BangEqual,
+    GreaterThan,
+    GreaterThanEqual,
+    LessThan,
+    LessThanEqual,
+
+    Bang,
+    DoubleAmpersand,
+    DoublePipe,
+    Ampersand,
+    Pipe,
+    Caret,
+    Tilde,
+    LeftShift,
+    RightShift,
+
+    Equal,
+    PlusEqual,
+    MinusEqual,
+    StarEqual,
+    SlashEqual,
+    ModuloEqual,
+    AmpersandEqual,
+    PipeEqual,
+    CaretEqual,
+    LeftShiftEqual,
+    RightShiftEqual,
+
+    Increment,
+    Decrement,
+
+    QuestionMark,
+    Colon,
+    Comma,
+    Dot,
+    Arrow,
+}
+
+pub enum Symbol {
+    OpenSquare,
+    CloseSquare,
+    OpenCurly,
+    CloseCurly,
+    OpenParen,
+    CloseParen,
+    Semicolon,
 }

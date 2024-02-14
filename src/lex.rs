@@ -47,6 +47,31 @@ impl Lexer {
         self.current
     }
 
+    /// This will consume the next identifier like token
+    /// Such tokens include Identifiers, Keywords, and Special operators like "sizeof"
+    fn eat_ident_like(&mut self) -> Option<TokenKind> {
+        if !self.current.is_some_and(|c| c.is_alphabetic() || c == '_') {
+            return None;
+        }
+        let mut ident = String::new();
+        while let Some(current) = self.current {
+            if current.is_alphanumeric() || current == '_' {
+                ident.push(current);
+            } else {
+                break;
+            }
+            self.next_char();
+        }
+        Some(
+            match ident.as_str() {
+                "int" => TokenKind::IntKeyword,
+                "double" => TokenKind::DoubleKeyword,
+                "return" => TokenKind::ReturnKeyword,
+                _ => TokenKind::Identifier(ident),
+            }
+        )
+    }
+
     fn eat_number(&mut self) -> Option<TokenKind> {
         if !self.current.is_some_and(|c| c.is_digit(16)) {
             return None;
@@ -159,59 +184,208 @@ impl Lexer {
     }
 
     fn eat_symbol(&mut self) -> Option<TokenKind> {
-        let mut symbol = String::new();
-        let character = self
-            .current
-            .expect("Method eat_symbol called on an empty input.");
-        self.next_char();
-        symbol.push(character);
-
-        macro_rules! push_if_matches {
-            ($($pattern:literal)|+) => {
-                {
-                    let matches = matches!(self.next, Some(x) if $(x == $pattern)||+);
-                    if  matches {
-                        symbol.push(self.next.unwrap());
-                        self.next_char();
-                    }
-                    matches
-                }
+        use TokenKind::*;
+        macro_rules! single_type {
+            ($kind:ident) => {
+                Some({
+                    self.next_char();
+                    $kind
+                })
             };
         }
+        /// I hate this and im sorry
+        self.current
+            .map(|current| match current {
+                '+' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            PlusEqual
+                        }
+                        Some('+') => {
+                            self.next_char();
+                            Increment
+                        }
+                        _ => Plus,
+                    }
+                }),
 
-        // use cargo expand to see the expanded code
-        match character {
-            '-' => {
-                push_if_matches!('-' | '=' | '>');
-            }
-            '+' => {
-                push_if_matches!('+' | '=');
-            }
-            '/' | '*' | '%' | '=' | '!' | '^' => {
-                push_if_matches!('=');
-            }
-            '<' => {
-                push_if_matches!('=');
-                if push_if_matches!('<') {
-                    push_if_matches!('=');
-                }
-            }
-            '>' => {
-                push_if_matches!('=');
-                if push_if_matches!('>') {
-                    push_if_matches!('=');
-                }
-            }
-            '&' => {
-                push_if_matches!('&' | '=');
-            }
-            '|' => {
-                push_if_matches!('|' | '=');
-            }
-            _ => (),
-        };
+                '-' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            MinusEqual
+                        }
+                        Some('-') => {
+                            self.next_char();
+                            Decrement
+                        }
+                        Some('>') => {
+                            self.next_char();
+                            Arrow
+                        }
+                        _ => Minus,
+                    }
+                }),
 
-        TokenKind::match_symbol(&symbol)
+                '*' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            StarEqual
+                        }
+                        _ => Star,
+                    }
+                }),
+
+                '/' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            SlashEqual
+                        }
+                        Some('*' | '/') if cfg!(debug_assertions) => {
+                            panic!("Unhandled comment in input position: {}", self.position);
+                        }
+                        _ => Slash,
+                    }
+                }),
+                '%' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            ModuloEqual
+                        }
+                        _ => Modulo,
+                    }
+                }),
+
+                '=' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            EqualEqual
+                        }
+                        _ => Equal,
+                    }
+                }),
+
+                '!' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            BangEqual
+                        }
+                        _ => Bang,
+                    }
+                }),
+
+                '|' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            PipeEqual
+                        }
+                        Some('|') => {
+                            self.next_char();
+                            DoublePipe
+                        }
+                        _ => Pipe,
+                    }
+                }),
+
+                '&' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            AmpersandEqual
+                        }
+                        Some('&') => {
+                            self.next_char();
+                            DoubleAmpersand
+                        }
+                        _ => Ampersand,
+                    }
+                }),
+
+                '^' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            CaretEqual
+                        }
+                        _ => Caret,
+                    }
+                }),
+
+                '<' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            LessThanEqual
+                        }
+                        Some('<') => {
+                            self.next_char();
+                            match self.current {
+                                Some('=') => {
+                                    self.next_char();
+                                    LeftShiftEqual
+                                }
+                                _ => LeftShift,
+                            }
+                        }
+                        _ => LessThan,
+                    }
+                }),
+
+                '>' => Some({
+                    self.next_char();
+                    match self.current {
+                        Some('=') => {
+                            self.next_char();
+                            GreaterThanEqual
+                        }
+                        Some('>') => {
+                            self.next_char();
+                            match self.current {
+                                Some('=') => {
+                                    self.next_char();
+                                    RightShiftEqual
+                                }
+                                _ => RightShift,
+                            }
+                        }
+                        _ => GreaterThan,
+                    }
+                }),
+
+                '.' => single_type!(Dot),
+                '?' => single_type!(QuestionMark),
+                ':' => single_type!(Colon),
+                '~' => single_type!(Tilde),
+                ',' => single_type!(Comma),
+                ';' => single_type!(Semicolon),
+                '(' => single_type!(OpenParen),
+                ')' => single_type!(CloseParen),
+                '[' => single_type!(OpenSquare),
+                ']' => single_type!(CloseSquare),
+                '{' => single_type!(OpenCurly),
+                '}' => single_type!(CloseCurly),
+
+                _ => None,
+            })
+            .flatten()
     }
 }
 
