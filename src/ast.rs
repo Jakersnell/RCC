@@ -8,7 +8,7 @@ pub struct SyntaxTree {
 
 #[derive(Debug)]
 pub enum Node {
-    LiteralExpr(TokenKind),
+    LiteralExpr(Literal),
     BinaryExpr {
         left: Box<Node>,
         op: TokenKind,
@@ -72,14 +72,6 @@ pub enum UnOp {
 
 pub enum DataType {
     Int,
+    UnsignedInt,
     Float,
-    Char,
-    Bool,
-    Void,
-}
-
-pub enum LiteralValue {
-    Int(u64),
-    Float(f64),
-    Char(char),
 }

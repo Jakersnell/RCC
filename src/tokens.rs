@@ -34,12 +34,9 @@ pub enum TokenKind {
     BadToken,
 
     Identifier(String),
-    Integer(u64),
-    FloatLiteral(f64),
-
-    IntKeyword,
-    DoubleKeyword,
-    ReturnKeyword,
+    Literal(Literal),
+    Keyword(Keyword),
+    Symbol(Symbol),
 
     Plus,
     Minus,
@@ -93,21 +90,26 @@ pub enum TokenKind {
     CloseParen,
     Semicolon,
 
-    Sizeof,
+    Sizeof
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Literal {
+    Integer(u64),
+    Float(f64),
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Keyword {
     Int,
     Double,
     Return,
 }
 
-pub enum Literal {
-    Integer(u64),
-    Float(f64),
-}
+#[derive(Debug, PartialEq)]
+pub enum Symbol {
+    Sizeof,
 
-pub enum Operator {
     Plus,
     Minus,
     Star,
@@ -151,9 +153,7 @@ pub enum Operator {
     Comma,
     Dot,
     Arrow,
-}
 
-pub enum Symbol {
     OpenSquare,
     CloseSquare,
     OpenCurly,
