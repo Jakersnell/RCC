@@ -3,7 +3,7 @@ A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 
 
 ### Roadmap
-
+<pre>
 [ ] Integer arithmetic lexing / parsing 
 [ ] Boolean algebra lexing / parsing
 [ ] Basic types
@@ -20,7 +20,7 @@ A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 [ ] Pointers & buildin of malloc and free functions
 [ ] Structs
 [ ] Function pointers
-
+</pre>
 
 #### Why?
 I am doing this project to study program compilation. I want to write a fully fledged C compiler and this is a good precursor to that. 
