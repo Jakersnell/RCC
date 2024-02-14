@@ -1,6 +1,7 @@
 use crate::{
+    error::CompilerError,
     lex,
-    tokens::{Keyword, LexToken, Literal, Span, Symbol, TokenKind, TokenProblem},
+    tokens::{Keyword, Literal, Locatable, Span, Symbol, Token},
 };
 use arcstr::{ArcStr, Substr};
 use std::{
@@ -12,12 +13,10 @@ use std::{
 };
 use thiserror::Error;
 
-
-
 pub struct Lexer {
     position: usize,
     source: ArcStr,
-    problems: Vec<TokenProblem>,
+    problems: Vec<CompilerError>,
     current: Option<char>,
     next: Option<char>,
 }
@@ -51,7 +50,7 @@ impl Lexer {
 
     /// This will consume the next identifier like token
     /// Such tokens include Identifiers, Keywords, and Special Symbols like "sizeof"
-    fn eat_ident_like(&mut self) -> Option<TokenKind> {
+    fn eat_ident_like(&mut self) -> Option<Token> {
         if !self.current.is_some_and(|c| c.is_alphabetic() || c == '_') {
             return None;
         }
@@ -65,15 +64,15 @@ impl Lexer {
             self.next_char();
         }
         Some(match ident.as_str() {
-            "int" => TokenKind::Keyword(Keyword::Int),
-            "double" => TokenKind::Keyword(Keyword::Double),
-            "return" => TokenKind::Keyword(Keyword::Return),
-            "sizeof" => TokenKind::Symbol(Symbol::Sizeof),
-            _ => TokenKind::Identifier(ident),
+            "int" => Token::Keyword(Keyword::Int),
+            "double" => Token::Keyword(Keyword::Double),
+            "return" => Token::Keyword(Keyword::Return),
+            "sizeof" => Token::Symbol(Symbol::Sizeof),
+            _ => Token::Identifier(ident),
         })
     }
 
-    fn eat_number(&mut self) -> Option<TokenKind> {
+    fn eat_number(&mut self) -> Option<Token> {
         if !self.current.is_some_and(|c| c.is_digit(16)) {
             return None;
         }
@@ -173,7 +172,7 @@ impl Lexer {
                 let result = u64::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
                     /// I would like to improve this error message
-                    self.problems.push(TokenProblem::from(error));
+                    self.problems.push(CompilerError::from(error));
                     0
                 });
                 Literal::Integer(value)
@@ -181,7 +180,7 @@ impl Lexer {
             State::Float => {
                 let result = number.parse();
                 let value = result.unwrap_or_else(|error| {
-                    self.problems.push(TokenProblem::from(error));
+                    self.problems.push(CompilerError::from(error));
                     0.0
                 });
                 Literal::Float(value)
@@ -189,10 +188,10 @@ impl Lexer {
             _ => unreachable!(),
         };
 
-        Some(TokenKind::Literal(literal))
+        Some(Token::Literal(literal))
     }
 
-    fn eat_symbol(&mut self) -> Option<TokenKind> {
+    fn eat_symbol(&mut self) -> Option<Token> {
         /// I hate this and im sorry
         self.current
             .map(|current| {
@@ -395,14 +394,15 @@ impl Lexer {
 
                     _ => None,
                 }
-                .map(|symbol| TokenKind::Symbol(symbol))
+                .map(|symbol| Token::Symbol(symbol))
             })
             .flatten()
     }
 }
 
 impl Iterator for Lexer {
-    type Item = LexToken;
+    /// the only reason this is a Vec<CompilerError> is for strings with multiple invalid escapes.
+    type Item = Result<Locatable<Token>, Locatable<Vec<CompilerError>>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current.is_some_and(|c| c.is_whitespace()) {
@@ -427,10 +427,14 @@ impl Iterator for Lexer {
 
                 c => self.eat_symbol(),
             }
-            .unwrap_or(TokenKind::BadToken);
+            .unwrap_or(Token::BadSymbol(self.current.unwrap()));
             let end = self.position;
             let location = Span::new(start, end);
-            LexToken::new(kind, location, mem::take(&mut self.problems))
+            if (self.problems.is_empty()) {
+                Ok(Locatable::new(location, kind))
+            } else {
+                Err(Locatable::new(location, mem::take(&mut self.problems)))
+            }
         })
     }
 }
@@ -454,52 +458,52 @@ fn test_next_char_iterates_correctly() {
 #[test]
 fn test_symbols_lex_correctly() {
     let symbols = [
-        ("+", TokenKind::Symbol(Symbol::Plus)),
-        ("-", TokenKind::Symbol(Symbol::Minus)),
-        ("*", TokenKind::Symbol(Symbol::Star)),
-        ("/", TokenKind::Symbol(Symbol::Slash)),
-        ("%", TokenKind::Symbol(Symbol::Modulo)),
-        ("==", TokenKind::Symbol(Symbol::EqualEqual)),
-        ("!=", TokenKind::Symbol(Symbol::BangEqual)),
-        (">", TokenKind::Symbol(Symbol::GreaterThan)),
-        (">=", TokenKind::Symbol(Symbol::GreaterThanEqual)),
-        ("<", TokenKind::Symbol(Symbol::LessThan)),
-        ("<=", TokenKind::Symbol(Symbol::LessThanEqual)),
-        ("!", TokenKind::Symbol(Symbol::Bang)),
-        ("&&", TokenKind::Symbol(Symbol::DoubleAmpersand)),
-        ("||", TokenKind::Symbol(Symbol::DoublePipe)),
-        ("&", TokenKind::Symbol(Symbol::Ampersand)),
-        ("|", TokenKind::Symbol(Symbol::Pipe)),
-        ("^", TokenKind::Symbol(Symbol::Caret)),
-        ("~", TokenKind::Symbol(Symbol::Tilde)),
-        ("<<", TokenKind::Symbol(Symbol::LeftShift)),
-        (">>", TokenKind::Symbol(Symbol::RightShift)),
-        ("=", TokenKind::Symbol(Symbol::Equal)),
-        ("+=", TokenKind::Symbol(Symbol::PlusEqual)),
-        ("-=", TokenKind::Symbol(Symbol::MinusEqual)),
-        ("*=", TokenKind::Symbol(Symbol::StarEqual)),
-        ("/=", TokenKind::Symbol(Symbol::SlashEqual)),
-        ("%=", TokenKind::Symbol(Symbol::ModuloEqual)),
-        ("&=", TokenKind::Symbol(Symbol::AmpersandEqual)),
-        ("|=", TokenKind::Symbol(Symbol::PipeEqual)),
-        ("^=", TokenKind::Symbol(Symbol::CaretEqual)),
-        ("<<=", TokenKind::Symbol(Symbol::LeftShiftEqual)),
-        (">>=", TokenKind::Symbol(Symbol::RightShiftEqual)),
-        ("++", TokenKind::Symbol(Symbol::Increment)),
-        ("--", TokenKind::Symbol(Symbol::Decrement)),
-        ("?", TokenKind::Symbol(Symbol::QuestionMark)),
-        (":", TokenKind::Symbol(Symbol::Colon)),
-        (",", TokenKind::Symbol(Symbol::Comma)),
-        (".", TokenKind::Symbol(Symbol::Dot)),
-        ("->", TokenKind::Symbol(Symbol::Arrow)),
-        ("?", TokenKind::Symbol(Symbol::QuestionMark)),
-        ("[", TokenKind::Symbol(Symbol::OpenSquare)),
-        ("]", TokenKind::Symbol(Symbol::CloseSquare)),
-        ("{", TokenKind::Symbol(Symbol::OpenCurly)),
-        ("}", TokenKind::Symbol(Symbol::CloseCurly)),
-        ("(", TokenKind::Symbol(Symbol::OpenParen)),
-        (")", TokenKind::Symbol(Symbol::CloseParen)),
-        (";", TokenKind::Symbol(Symbol::Semicolon)),
+        ("+", Token::Symbol(Symbol::Plus)),
+        ("-", Token::Symbol(Symbol::Minus)),
+        ("*", Token::Symbol(Symbol::Star)),
+        ("/", Token::Symbol(Symbol::Slash)),
+        ("%", Token::Symbol(Symbol::Modulo)),
+        ("==", Token::Symbol(Symbol::EqualEqual)),
+        ("!=", Token::Symbol(Symbol::BangEqual)),
+        (">", Token::Symbol(Symbol::GreaterThan)),
+        (">=", Token::Symbol(Symbol::GreaterThanEqual)),
+        ("<", Token::Symbol(Symbol::LessThan)),
+        ("<=", Token::Symbol(Symbol::LessThanEqual)),
+        ("!", Token::Symbol(Symbol::Bang)),
+        ("&&", Token::Symbol(Symbol::DoubleAmpersand)),
+        ("||", Token::Symbol(Symbol::DoublePipe)),
+        ("&", Token::Symbol(Symbol::Ampersand)),
+        ("|", Token::Symbol(Symbol::Pipe)),
+        ("^", Token::Symbol(Symbol::Caret)),
+        ("~", Token::Symbol(Symbol::Tilde)),
+        ("<<", Token::Symbol(Symbol::LeftShift)),
+        (">>", Token::Symbol(Symbol::RightShift)),
+        ("=", Token::Symbol(Symbol::Equal)),
+        ("+=", Token::Symbol(Symbol::PlusEqual)),
+        ("-=", Token::Symbol(Symbol::MinusEqual)),
+        ("*=", Token::Symbol(Symbol::StarEqual)),
+        ("/=", Token::Symbol(Symbol::SlashEqual)),
+        ("%=", Token::Symbol(Symbol::ModuloEqual)),
+        ("&=", Token::Symbol(Symbol::AmpersandEqual)),
+        ("|=", Token::Symbol(Symbol::PipeEqual)),
+        ("^=", Token::Symbol(Symbol::CaretEqual)),
+        ("<<=", Token::Symbol(Symbol::LeftShiftEqual)),
+        (">>=", Token::Symbol(Symbol::RightShiftEqual)),
+        ("++", Token::Symbol(Symbol::Increment)),
+        ("--", Token::Symbol(Symbol::Decrement)),
+        ("?", Token::Symbol(Symbol::QuestionMark)),
+        (":", Token::Symbol(Symbol::Colon)),
+        (",", Token::Symbol(Symbol::Comma)),
+        (".", Token::Symbol(Symbol::Dot)),
+        ("->", Token::Symbol(Symbol::Arrow)),
+        ("?", Token::Symbol(Symbol::QuestionMark)),
+        ("[", Token::Symbol(Symbol::OpenSquare)),
+        ("]", Token::Symbol(Symbol::CloseSquare)),
+        ("{", Token::Symbol(Symbol::OpenCurly)),
+        ("}", Token::Symbol(Symbol::CloseCurly)),
+        ("(", Token::Symbol(Symbol::OpenParen)),
+        (")", Token::Symbol(Symbol::CloseParen)),
+        (";", Token::Symbol(Symbol::Semicolon)),
     ];
 
     for (symbol, kind) in symbols.iter() {
@@ -519,7 +523,7 @@ fn test_parse_number_works_for_valid_int() {
     let test = "344";
     let mut lexer = Lexer::new(test.to_string());
     let kind = lexer.eat_number();
-    assert_eq!(kind, Some(TokenKind::Literal(Literal::Integer(344))));
+    assert_eq!(kind, Some(Token::Literal(Literal::Integer(344))));
 }
 
 #[test]
@@ -527,7 +531,7 @@ fn test_eat_number_for_float_number() {
     let test = "3.14";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(TokenKind::Literal(Literal::Float(3.14))));
+    assert_eq!(token, Some(Token::Literal(Literal::Float(3.14))));
 }
 
 #[test]
@@ -535,7 +539,7 @@ fn test_eat_number_leading_zeros_are_still_float() {
     let test = "003.44";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(TokenKind::Literal(Literal::Float(3.44))));
+    assert_eq!(token, Some(Token::Literal(Literal::Float(3.44))));
 }
 
 #[test]
@@ -543,7 +547,7 @@ fn test_eat_number_decimal_number() {
     let test = "123";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(TokenKind::Literal(Literal::Integer(123))));
+    assert_eq!(token, Some(Token::Literal(Literal::Integer(123))));
 }
 
 #[test]
@@ -551,5 +555,5 @@ fn test_eat_number_for_hex_number() {
     let test = "0x1A";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(TokenKind::Literal(Literal::Integer(0x1A))));
+    assert_eq!(token, Some(Token::Literal(Literal::Integer(0x1A))));
 }

@@ -3,23 +3,12 @@ use derive_new::new;
 use std::{default, error, sync::Arc};
 use thiserror::Error as ErrorType;
 
-#[derive(Debug, PartialEq, ErrorType)]
-pub enum TokenProblem {
-    #[error("{0}")]
-    ParseIntError(#[from] std::num::ParseIntError),
-    #[error("{0}")]
-    ParseFloatError(#[from] std::num::ParseFloatError),
-    #[error("{0} is an invalid hex Literal")]
-    InvalidHexLiteral(String),
-    #[error("Invalid character.")]
-    InvalidCharacter,
-}
+use crate::error::CompilerError;
 
-#[derive(Debug, new)]
-pub struct LexToken {
-    pub kind: TokenKind,
+#[derive(Debug, PartialEq, new)]
+pub struct Locatable<T> {
     pub location: Span,
-    pub problems: Vec<TokenProblem>,
+    pub value: T,
 }
 
 #[derive(Debug, PartialEq, new)]
@@ -28,11 +17,10 @@ pub struct Span {
     end: usize,
 }
 
-#[derive(Debug, PartialEq, Default)]
-pub enum TokenKind {
-    #[default]
-    BadToken,
 
+#[derive(Debug, PartialEq)]
+pub enum Token {
+    BadSymbol(char),
     Identifier(String),
     Literal(Literal),
     Keyword(Keyword),

@@ -1,40 +1,68 @@
-use crate::tokens::{Literal, Symbol};
+use derive_new::new;
+
+use crate::{error::CompilerError, tokens::{Literal, Symbol}};
 
 #[derive(Debug)]
-pub struct SyntaxTree {
-    pub global: Vec<Node>,
+pub struct Program {
+    pub filename: String,
+    pub body: Result<Vec<ASTNode>, Vec<CompilerError>>,
+}
+
+
+#[derive(Debug)]
+pub enum ASTNode {
+    Statement(Statement),
+    Expression(Expression),
+    Function(Function),
 }
 
 #[derive(Debug)]
-pub enum Node {
-    Type(DataType),
-    LiteralExpr(Literal),
-    BinaryExpr {
-        left: Box<Node>,
-        op: BinOp,
-        right: Box<Node>,
-    },
-    UnaryExpr {
-        op: UnOp,
-        right: Box<Node>,
-    },
-    VariableDeclaration {
-        name: String,
-        ty: DataType,
-        value: Option<Box<Node>>,
-    },
-    FunctionDeclaration {
-        name: String,
-        params: Vec<Node>,
-        body: Box<Node>,
-    },
-    FunctionCall {
-        name: String,
-        args: Vec<Node>,
-    },
-    Block {
-        statements: Vec<Node>,
-    },
+pub enum Statement {
+    VariableDeclaration(VariableDeclaration),
+    Block(Vec<ASTNode>),
+    Return(Expression),
+}
+
+#[derive(Debug, new)]
+pub struct VariableDeclaration {
+    pub name: String,
+    pub ty: DataType,
+}
+
+#[derive(Debug, new)]
+pub enum Expression {
+    Variable(String),
+    Literal(Literal),
+    Binary(BinaryExpression),
+    Unary(UnaryExpression),
+    FunctionCall(FunctionCall),
+}
+
+#[derive(Debug, new)]
+pub struct UnaryExpression {
+    op: UnOp,
+    right: Box<Expression>,
+}
+
+#[derive(Debug, new)]
+pub struct BinaryExpression {
+    left: Box<Expression>,
+    op: BinOp,
+    right: Box<Expression>,
+}
+
+
+#[derive(Debug, new)]
+pub struct Function {
+    pub name: String,
+    pub params: Vec<VariableDeclaration>,
+    pub body: Box<Vec<ASTNode>>,
+}
+
+#[derive(Debug, new)]
+pub struct FunctionCall {
+    pub name: String,
+    pub args: Vec<ASTNode>,
 }
 
 #[derive(Debug)]
