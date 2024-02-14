@@ -9,6 +9,8 @@ pub enum TokenProblem {
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("{0}")] 
     ParseFloatError(#[from] std::num::ParseFloatError),
+    #[error("{0} is an invalid hex Literal")]
+    InvalidHexLiteral(String),
     #[error("Invalid character.")]
     InvalidCharacter,
 }
@@ -31,8 +33,13 @@ pub enum TokenKind {
     #[default]
     BadToken,
 
+    Identifier(String),
     Integer(u64),
     FloatLiteral(f64),
+
+    IntKeyword,
+    DoubleKeyword,
+
 
     Plus,
     Minus,

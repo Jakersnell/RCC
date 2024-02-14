@@ -163,6 +163,7 @@ impl Lexer {
         let character = self
             .current
             .expect("Method eat_symbol called on an empty input.");
+        self.next_char();
         symbol.push(character);
 
         macro_rules! push_if_matches {
@@ -170,7 +171,8 @@ impl Lexer {
                 {
                     let matches = matches!(self.next, Some(x) if $(x == $pattern)||+);
                     if  matches {
-                        symbol.push(self.next_char().unwrap());
+                        symbol.push(self.next.unwrap());
+                        self.next_char();
                     }
                     matches
                 }
