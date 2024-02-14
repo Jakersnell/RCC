@@ -12,6 +12,8 @@ use std::{
 };
 use thiserror::Error;
 
+
+
 pub struct Lexer {
     position: usize,
     source: ArcStr,
