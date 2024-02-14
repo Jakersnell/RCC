@@ -4,9 +4,8 @@ A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 
 ### Roadmap
 <pre>
-[ ] Integer arithmetic lexing / parsing 
-[ ] Boolean algebra lexing / parsing
-[ ] Basic types
+[X] Integer arithmetic lexing / parsing 
+[X] Basic types
 [ ] Variables
 [ ] Scope
 [ ] Function declarations
