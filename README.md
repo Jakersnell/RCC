@@ -1,4 +1,5 @@
 # microc
+This project is currently a work in progress.
 A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 
 
