@@ -1,12 +1,16 @@
 #![allow(unused)]
 
-use std::arch::aarch64::int16x4_t;
+use std::{
+    collections::{hash_map::DefaultHasher, HashSet},
+    hash::{BuildHasherDefault, Hasher},
+    sync::Arc,
+};
 
-use arcstr::ArcStr;
-use lex::Lexer;
 mod ast;
-mod lex;
-mod tokens;
 mod error;
+mod lex;
+mod str_intern;
+mod tokens;
 
-fn main() {}
+fn main() {
+}

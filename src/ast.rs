@@ -125,6 +125,7 @@ impl BinOp {
             _ => panic!("Invalid precedence for {:?}", self),
         }
     }
+
 }
 
 impl TryFrom<Symbol> for BinOp {

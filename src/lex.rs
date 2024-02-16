@@ -22,7 +22,6 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    #[inline(always)]
     pub fn new(source: String) -> Self {
         let source = ArcStr::from(source);
         let mut chars = source.chars();
