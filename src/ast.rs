@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use derive_new::new;
 
 use crate::{error::CompilerError, tokens::{Literal, Symbol}};
@@ -36,6 +38,7 @@ pub enum Expression {
     Binary(BinaryExpression),
     Unary(UnaryExpression),
     FunctionCall(FunctionCall),
+    SizeOf(TypeOrIdentifier)
 }
 
 #[derive(Debug, new)]
@@ -162,7 +165,6 @@ pub enum UnOp {
     Negate,
     LogicalNot,
     BitwiseNot,
-    Sizeof,
 }
 
 impl TryFrom<Symbol> for UnOp {
@@ -173,12 +175,17 @@ impl TryFrom<Symbol> for UnOp {
             Symbol::Minus => Ok(UnOp::Negate),
             Symbol::Bang => Ok(UnOp::LogicalNot),
             Symbol::Tilde => Ok(UnOp::BitwiseNot),
-            Symbol::Sizeof => Ok(UnOp::Sizeof),
-
             _ => Err(()),
         }
     }
 }
+
+#[derive(Debug)]
+pub enum TypeOrIdentifier {
+    Type(DataType),
+    Identifier(Arc<String>),
+}
+
 
 #[derive(Debug)]
 pub enum DataType {
