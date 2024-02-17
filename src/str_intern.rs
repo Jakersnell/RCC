@@ -43,6 +43,7 @@ impl Entry {
 }
 
 // really just a hashmap with some custom implementation
+// for O(1) lookups and O(1) insertions, and learning purposes
 struct Interner<H: BuildHasher> {
     hash_builder: H,
     table: Box<[Option<Box<Entry>>]>,
@@ -154,10 +155,11 @@ fn test_interner_string_can_be_allocated_and_retrieved() {
 }
 
 #[test]
-fn test_interning_the_same_string_twice_doesnt_duplicate() {
+fn test_interning_the_same_string_doesnt_duplicate() {
     let string = "hello";
     let mut interner = Interner::default();
-    let arcstr1 = interner.intern(string);
-    let arcstr2 = interner.intern(string);
+    interner.intern(string);
+    interner.intern(string);
+    interner.intern(string);
     assert!(interner.num_entries == 1);
 }
