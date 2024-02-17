@@ -47,31 +47,55 @@ impl Lexer {
         self.current
     }
 
-    /// This will consume the next identifier like token
-    /// Such tokens include Identifiers, Keywords, and Special Symbols like "sizeof"
-    fn eat_ident_like(&mut self) -> Option<Token> {
+    fn consume_alphanumeric_text(&mut self) -> Option<String> {
         if !self.current.is_some_and(|c| c.is_alphabetic() || c == '_') {
             return None;
         }
-        let mut ident = String::new();
+        let mut text = String::new();
         while let Some(current) = self.current {
             if current.is_alphanumeric() || current == '_' {
-                ident.push(current);
+                text.push(current);
             } else {
                 break;
             }
             self.next_char();
         }
-        Some(match ident.as_str() {
-            "int" => Token::Keyword(Keyword::Int),
-            "double" => Token::Keyword(Keyword::Double),
-            "return" => Token::Keyword(Keyword::Return),
-            "sizeof" => Token::Symbol(Symbol::Sizeof),
-            _ => Token::Identifier(ident),
-        })
+        if text.is_empty() {
+            None
+        } else {
+            Some(text)
+        }
+    }
+
+    /// This will consume the next identifier like token
+    /// Such tokens include Identifiers, Keywords, and Special Symbols like "sizeof"
+    fn eat_ident_like(&mut self) -> Option<Token> {
+        self.consume_alphanumeric_text()
+            .map(|text| match text.as_str() {
+                "int" => Token::Keyword(Keyword::Int),
+                "double" => Token::Keyword(Keyword::Double),
+                "return" => Token::Keyword(Keyword::Return),
+                "sizeof" => Token::Symbol(Symbol::Sizeof),
+                _ => Token::Identifier(text),
+            })
     }
 
     fn eat_number(&mut self) -> Option<Token> {
+        macro_rules! consume_suffix {
+            ($invoker:ident, $($pattern:literal)|+, $errortype:expr) => {
+                $invoker.consume_alphanumeric_text().map(|text| {
+                    let lowercased = text.to_lowercase();
+                    match lowercased.as_str() {
+                        $($pattern)|+ => Some(lowercased),
+                        _ => {
+                            $invoker.problems.push($errortype(text));
+                            None
+                        }
+                    }
+                }).flatten()
+            };
+        }
+
         if !self.current.is_some_and(|c| c.is_digit(16)) {
             return None;
         }
@@ -128,7 +152,15 @@ impl Lexer {
                 },
                 State::Hex => match current {
                     /// Include a-z to catch erroneous hex numbers
-                    '0'..='9' | 'a'..='z' | 'A'..='Z' => number.push(current),
+                    '0'..='9'
+                    | 'a'..='e' // skip f, l & u because they are suffixes
+                    | 'h'..='k' // ex: 0xff3ul for unsigned long
+                    | 'm'..='t'
+                    | 'v'..='z'
+                    | 'A'..='E'
+                    | 'H'..='K'
+                    | 'M'..='T'
+                    | 'V'..='Z' => number.push(current),
                     _ => break,
                 },
                 State::Binary => match current {
@@ -168,21 +200,28 @@ impl Lexer {
 
         let literal = match state {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
-                let result = u64::from_str_radix(&number, base);
+                let result = u128::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
                     /// I would like to improve this error message
                     self.problems.push(CompilerError::from(error));
                     0
                 });
-                Literal::Integer(value)
+                let suffix = consume_suffix!(
+                    self,
+                    "u" | "l" | "ul" | "lu" | "llu" | "ll",
+                    CompilerError::InvalidIntegerSuffix
+                );
+                Literal::Integer { value, suffix }
             }
+
             State::Float => {
                 let result = number.parse();
                 let value = result.unwrap_or_else(|error| {
                     self.problems.push(CompilerError::from(error));
                     0.0
                 });
-                Literal::Float(value)
+                let suffix = consume_suffix!(self, "f" | "l", CompilerError::InvalidFloatSuffix);
+                Literal::Float { value, suffix }
             }
             _ => unreachable!(),
         };
@@ -191,7 +230,6 @@ impl Lexer {
     }
 
     fn eat_symbol(&mut self) -> Option<Token> {
-        /// I hate this and im sorry
         self.current
             .map(|current| {
                 use Symbol::*;
@@ -429,7 +467,7 @@ impl Iterator for Lexer {
             .unwrap_or(Token::BadSymbol(self.current.unwrap()));
             let end = self.position;
             let location = Span::new(start, end);
-            if (self.problems.is_empty()) {
+            if self.problems.is_empty() {
                 Ok(Locatable::new(location, kind))
             } else {
                 Err(Locatable::new(location, mem::take(&mut self.problems)))
@@ -522,7 +560,13 @@ fn test_parse_number_works_for_valid_int() {
     let test = "344";
     let mut lexer = Lexer::new(test.to_string());
     let kind = lexer.eat_number();
-    assert_eq!(kind, Some(Token::Literal(Literal::Integer(344))));
+    assert_eq!(
+        kind,
+        Some(Token::Literal(Literal::Integer {
+            value: 344,
+            suffix: None
+        }))
+    );
 }
 
 #[test]
@@ -530,7 +574,13 @@ fn test_eat_number_for_float_number() {
     let test = "3.14";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(Token::Literal(Literal::Float(3.14))));
+    assert_eq!(
+        token,
+        Some(Token::Literal(Literal::Float {
+            value: 3.14,
+            suffix: None
+        }))
+    );
 }
 
 #[test]
@@ -538,7 +588,13 @@ fn test_eat_number_leading_zeros_are_still_float() {
     let test = "003.44";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(Token::Literal(Literal::Float(3.44))));
+    assert_eq!(
+        token,
+        Some(Token::Literal(Literal::Float {
+            value: 3.44,
+            suffix: None
+        }))
+    );
 }
 
 #[test]
@@ -546,7 +602,13 @@ fn test_eat_number_decimal_number() {
     let test = "123";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(Token::Literal(Literal::Integer(123))));
+    assert_eq!(
+        token,
+        Some(Token::Literal(Literal::Integer {
+            value: 123,
+            suffix: None
+        }))
+    );
 }
 
 #[test]
@@ -554,5 +616,84 @@ fn test_eat_number_for_hex_number() {
     let test = "0x1A";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
-    assert_eq!(token, Some(Token::Literal(Literal::Integer(0x1A))));
+    assert_eq!(
+        token,
+        Some(Token::Literal(Literal::Integer {
+            value: 26,
+            suffix: None
+        }))
+    );
+}
+
+#[test]
+fn test_eat_number_parses_integer_suffixes_properly() {
+    let tests = [
+        ("123u", "u"),
+        ("123U", "u"),
+        ("123l", "l"),
+        ("123L", "l"),
+        ("123ul", "ul"),
+        ("123UL", "ul"),
+        ("123lu", "lu"),
+        ("123LU", "lu"),
+        ("123LU", "lu"),
+        ("123llu", "llu"),
+        ("123LLu", "llu"),
+        ("123llU", "llu"),
+        ("123LLu", "llu"),
+        ("123ll", "ll"),
+        ("123LL", "ll"),
+    ];
+
+    for (test, control) in tests {
+        let mut lexer = Lexer::new(test.to_string());
+        let token = lexer.eat_number().expect("Expected token");
+        assert_eq!(
+            token,
+            Token::Literal(Literal::Integer {
+                value: 123,
+                suffix: Some(control.to_string())
+            })
+        );
+    }
+}
+
+#[test]
+fn test_eat_number_properly_catches_problematic_integer_suffix() {
+    let tests = [
+        "123z", "123Z", "123h", "123H", "123m", "123M", "123t", "123T", "123v", "123V",
+    ];
+    for test in tests {
+        let mut lexer = Lexer::new(test.to_string());
+        let token = lexer.eat_number().expect("Expected token");
+        assert_eq!(
+            token,
+            Token::Literal(Literal::Integer {
+                value: 123,
+                suffix: None
+            })
+        );
+        assert!(!lexer.problems.is_empty());
+    }
+}
+
+#[test]
+fn test_eat_number_properly_consumes_float_suffix() {
+    let tests = [
+        ("123.4f", "f"),
+        ("123.4F", "f"),
+        ("123.4l", "l"),
+        ("123.4L", "l"),
+    ];
+    for (test, control) in tests {
+        let mut lexer = Lexer::new(test.to_string());
+        let token = lexer.eat_number().expect("Expected token");
+        assert_eq!(
+            token,
+            Token::Literal(Literal::Float {
+                value: 123.4,
+                suffix: Some(control.to_string())
+            })
+        );
+    }
 }

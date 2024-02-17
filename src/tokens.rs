@@ -17,7 +17,6 @@ pub struct Span {
     end: usize,
 }
 
-
 #[derive(Debug, PartialEq)]
 pub enum Token {
     BadSymbol(char),
@@ -78,13 +77,13 @@ pub enum Token {
     CloseParen,
     Semicolon,
 
-    Sizeof
+    Sizeof,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Literal {
-    Integer(u64),
-    Float(f64),
+    Integer { value: u128, suffix: Option<String> },
+    Float { value: f64, suffix: Option<String> },
 }
 
 #[derive(Debug, PartialEq)]
