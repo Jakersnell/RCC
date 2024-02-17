@@ -1,3 +1,4 @@
+use clap::error;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -7,6 +8,12 @@ pub enum CompilerError {
 
     #[error("{0}")]
     ParseFloatError(#[from] std::num::ParseFloatError),
+
+    #[error("Invalid integer suffix: {0}")]
+    InvalidIntegerSuffix(String),
+
+    #[error("Invalid float suffix: {0}")]
+    InvalidFloatSuffix(String),
 
     #[error("Invalid symbol: {0}")]
     InvalidSymbol(String),
@@ -62,3 +69,4 @@ pub enum CompilerError {
     #[error("Curly has no opening.")]
     BlockHasNoOpening,
 }
+
