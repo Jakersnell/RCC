@@ -1,18 +1,21 @@
-use std::{
-    collections::hash_map::DefaultHasher, hash::{BuildHasher, BuildHasherDefault, Hasher}, path::Iter, process::ExitStatus, string, sync::{Arc, Mutex}
-};
 use lazy_static::lazy_static;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{BuildHasher, BuildHasherDefault, Hasher},
+    path::Iter,
+    process::ExitStatus,
+    string,
+    sync::{Arc, Mutex},
+};
 
-// This is a simple implementation of a string interner. 
-// It is a data structure that stores a single copy of each distinct string, allowing strings to be compared by reference instead of by value. 
-// This can be useful in a variety of situations, such as when parsing a file and needing to compare identifiers, 
-// or when working with a large number of strings that are known to be distinct.
+// This is a simple implementation of a string interner.
 // You might be asking why I implemented one myself rather than using a crate like lasso.
-// The answer is, I wanted to learn how to implement a string interner and I wanted to have a simple implementation that I can understand and modify.
-// I would never do something like this in the real world, I just wanted to test out some ideas.
+// The answer is, I wanted to learn how to implement a string interner myself, and I had a few ideas I wanted to test out.
+// I dont know if this is the best implementation, it was more just a creative exercise for me.
 
 lazy_static! {
-    static ref INTERNER: Mutex<Interner<BuildHasherDefault<DefaultHasher>>> = Mutex::new(Interner::default());
+    static ref INTERNER: Mutex<Interner<BuildHasherDefault<DefaultHasher>>> =
+        Mutex::new(Interner::default());
 }
 
 pub fn intern<S: AsRef<str>>(string: S) -> Arc<String> {
@@ -42,7 +45,7 @@ impl Entry {
     }
 }
 
-// really just a hashmap with some custom implementation
+// really just a hashmap with some custom implementation that I couldnt do with the standard hashmap
 // for O(1) lookups and O(1) insertions, and learning purposes
 struct Interner<H: BuildHasher> {
     hash_builder: H,
@@ -74,10 +77,8 @@ impl<H: BuildHasher> Interner<H> {
     }
 
     fn maybe_realloc(&mut self) {
-        if ((self.size as f32 * self.load_factor) as usize) < self.num_entries {
+        if ((self.size as f32 * self.load_factor) as usize) <= self.num_entries {
             self.size *= 2;
-        } else if self.num_entries < (self.size as f32 * self.shrink_factor) as usize {
-            self.size /= 2;
         } else {
             return;
         }
@@ -123,12 +124,13 @@ impl<H: BuildHasher> Interner<H> {
     }
 
     pub fn get<S: AsRef<str>>(&self, string: S) -> Option<Arc<String>> {
-        self.get_entry(string.as_ref()).map(|entry| entry.value.clone())
+        self.get_entry(string.as_ref())
+            .map(|entry| entry.value.clone())
     }
 
-    pub fn intern<S:AsRef<str>>(&mut self, string: S) -> Arc<String> {
+    pub fn intern<S: AsRef<str>>(&mut self, string: S) -> Arc<String> {
         let string = string.as_ref();
-        self.get(string).unwrap_or_else(||{
+        self.get(string).unwrap_or_else(|| {
             let hash = self.hash(string) as usize;
             let arcstr = Arc::new(string.to_string());
             let entry = Box::new(Entry {
@@ -142,9 +144,7 @@ impl<H: BuildHasher> Interner<H> {
             arcstr
         })
     }
-
 }
-
 
 #[test]
 fn test_interner_string_can_be_allocated_and_retrieved() {
@@ -162,4 +162,16 @@ fn test_interning_the_same_string_doesnt_duplicate() {
     interner.intern(string);
     interner.intern(string);
     assert!(interner.num_entries == 1);
+}
+
+#[test]
+fn test_reallocation_is_correct() {
+    let mut interner = Interner::default();
+    for i in 0..11 {
+        let string = format!("hello world {}", i);
+        interner.intern(string);
+    }
+    assert_eq!(interner.size, 16);
+    interner.intern("one more string");
+    assert_eq!(interner.size, 32);
 }
