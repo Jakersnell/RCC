@@ -10,9 +10,8 @@ use crate::{
 };
 
 pub struct Parser {
-    errors: Vec<String>,
-    tokens: Vec<Token>,
-    position: usize,
+    lexer: Iterator<Item = Locatable<Token>>,
+    errors: Vec<CompilerError>,
 }
 
 /// made multiple helper functions #[inline] for slight performance increase
