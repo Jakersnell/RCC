@@ -69,4 +69,3 @@ pub enum CompilerError {
     #[error("Curly has no opening.")]
     BlockHasNoOpening,
 }
-
