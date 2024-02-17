@@ -15,6 +15,8 @@ use thiserror::Error;
 
 pub struct Lexer {
     position: usize,
+    row: usize,
+    col: usize,
     source: ArcStr,
     problems: Vec<CompilerError>,
     current: Option<char>,
@@ -27,13 +29,12 @@ impl Lexer {
         let mut chars = source.chars();
         let current = chars.next();
         let next = chars.next();
-        let problems = Vec::new();
-        let position = 0;
-        let chars = chars;
         Self {
-            position,
+            position: 0,
+            col: 0,
+            row: 0,
             source,
-            problems,
+            problems: Vec::new(),
             current,
             next,
         }
@@ -41,6 +42,12 @@ impl Lexer {
 
     #[inline(always)]
     fn next_char(&mut self) -> Option<char> {
+        if self.current.is_some_and(|c| c == '\n') {
+            self.row += 1;
+            self.col = 0;
+        } else {
+            self.col += 1;
+        }
         self.position += 1;
         self.current = self.next;
         self.next = self.source.chars().nth(self.position + 1);
@@ -202,7 +209,7 @@ impl Lexer {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
                 let result = u128::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
-                    /// I would like to improve this error message
+                    // I would like to improve this error message
                     self.problems.push(CompilerError::from(error));
                     0
                 });
