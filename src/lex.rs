@@ -15,14 +15,14 @@ use std::{
 };
 use thiserror::Error;
 
-pub type LexResult = Result<Locatable<Token>, Locatable<Vec<CompilerError>>>;
+pub type LexResult = Result<Locatable<Token>, Vec<Locatable<CompilerError>>>;
 
 pub struct Lexer {
     position: usize,
     row: usize,
     col: usize,
     source: ArcStr,
-    problems: Vec<CompilerError>,
+    problems: Vec<Locatable<CompilerError>>,
     current: Option<char>,
     next: Option<char>,
 }
@@ -100,24 +100,33 @@ impl Lexer {
     }
 
     fn eat_number(&mut self) -> Option<Token> {
-        macro_rules! consume_suffix {
-            ($invoker:ident, $($pattern:literal)|+, $error_type:expr) => {
-                $invoker.consume_alphanumeric_text().map(|text| {
-                    let lowercased = text.to_lowercase();
-                    match lowercased.as_str() {
-                        $($pattern)|+ => Some(lowercased),
-                        _ => {
-                            $invoker.problems.push($error_type(text));
-                            None
-                        }
-                    }
-                }).flatten()
-            };
-        }
-
         if !self.current.is_some_and(|c| c.is_ascii_digit()) {
             return None;
         }
+
+        macro_rules! consume_suffix {
+            ($invoker:ident, $($pattern:literal)|+, $error_type:expr) => {
+                {
+                    let start = $invoker.position;
+                    $invoker.consume_alphanumeric_text().map(|text| {
+                        let lowercased = text.to_lowercase();
+                        match lowercased.as_str() {
+                            $($pattern)|+ => Some(lowercased),
+                            _ => {
+                                let end = $invoker.position;
+                                let span = Span::new(start, end);
+                                let error = Locatable::new(span, $error_type(text));
+                                $invoker.problems.push(error);
+                                None
+                            }
+                        }
+                    }).flatten()
+                }
+            };
+        }
+
+        let start = self.position;
+
         enum State {
             Start,
             Zero,
@@ -202,6 +211,9 @@ impl Lexer {
             self.next_char();
         }
 
+        let end = self.position;
+        let span = Span::new(start, end);
+
         let base = match state {
             State::Zero => 10,
             State::Decimal => 10,
@@ -221,8 +233,8 @@ impl Lexer {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
                 let result = u128::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
-                    // I would like to improve this error message
-                    self.problems.push(CompilerError::from(error));
+                    let error = Locatable::new(span, CompilerError::from(error));
+                    self.problems.push(error);
                     0
                 });
                 let suffix = consume_suffix!(
@@ -236,7 +248,8 @@ impl Lexer {
             State::Float => {
                 let result = number.parse();
                 let value = result.unwrap_or_else(|error| {
-                    self.problems.push(CompilerError::from(error));
+                    let error = Locatable::new(span, CompilerError::from(error));
+                    self.problems.push(error);
                     0.0
                 });
                 let suffix = consume_suffix!(self, "f" | "l", CompilerError::InvalidFloatSuffix);
@@ -245,7 +258,11 @@ impl Lexer {
             _ => unreachable!(),
         };
 
-        Some(Token::Literal(literal))
+        if self.problems.is_empty() {
+            Some(Token::Literal(literal))
+        } else {
+            None
+        }
     }
 
     fn eat_symbol(&mut self) -> Option<Token> {
@@ -480,15 +497,20 @@ impl Iterator for Lexer {
                     panic!("IDENTIFIER"); // this is a placeholder
                 }
 
-                c => self.eat_symbol(),
-            }
-            .unwrap_or(Token::BadSymbol(self.current.unwrap()));
+                c => {
+                    let result = self.eat_symbol();
+                    if result.is_none() {
+                        self.next_char();
+                    }
+                    result
+                }
+            };
             let end = self.position;
             let location = Span::new(start, end);
-            if self.problems.is_empty() {
+            if let Some(kind) = kind {
                 Ok(Locatable::new(location, kind))
             } else {
-                Err(Locatable::new(location, mem::take(&mut self.problems)))
+                Err(mem::take(&mut self.problems))
             }
         })
     }
@@ -683,14 +705,8 @@ fn test_eat_number_properly_catches_problematic_integer_suffix() {
     ];
     for test in tests {
         let mut lexer = Lexer::new(test.to_string());
-        let token = lexer.eat_number().expect("Expected token");
-        assert_eq!(
-            token,
-            Token::Literal(Literal::Integer {
-                value: 123,
-                suffix: None,
-            })
-        );
+        let token = lexer.eat_number();
+        assert!(token.is_none());
         assert!(!lexer.problems.is_empty());
     }
 }
