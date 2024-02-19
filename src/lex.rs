@@ -1,4 +1,4 @@
-use crate::file::{Locatable, Span};
+use crate::util::{Locatable, Span};
 use crate::{
     error::CompilerError,
     lex,
@@ -41,15 +41,19 @@ impl Default for Lexer {
     }
 }
 
-impl Lexer {
-    pub fn from_file(path: PathBuf) -> io::Result<Self> {
+impl TryFrom<PathBuf> for Lexer {
+    type Error = io::Error;
+
+    fn try_from(path: PathBuf) -> io::Result<Self> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
         let mut source = String::new();
         reader.read_to_string(&mut source)?;
         Ok(Self::new(source))
     }
+}
 
+impl Lexer {
     pub fn new(source: String) -> Self {
         let source = ArcStr::from(source);
         let mut chars = source.chars();
