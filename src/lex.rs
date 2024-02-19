@@ -27,6 +27,20 @@ pub struct Lexer {
     next: Option<char>,
 }
 
+impl Default for Lexer {
+    fn default() -> Self {
+        Self {
+            position: 0,
+            col: 0,
+            row: 0,
+            source: ArcStr::from(""),
+            problems: Vec::new(),
+            current: None,
+            next: None,
+        }
+    }
+}
+
 impl Lexer {
     pub fn from_file(path: PathBuf) -> io::Result<Self> {
         let file = File::open(path)?;
