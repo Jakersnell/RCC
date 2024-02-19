@@ -11,6 +11,7 @@ mod error;
 mod lex;
 mod str_intern;
 mod tokens;
+mod file;
 
 fn main() {
     let x = "sd";

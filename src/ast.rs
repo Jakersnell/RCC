@@ -26,12 +26,6 @@ pub enum Statement {
 }
 
 #[derive(Debug, new)]
-pub struct VariableDeclaration {
-    pub name: String,
-    pub ty: DataType,
-}
-
-#[derive(Debug, new)]
 pub enum Expression {
     Variable(String),
     Literal(Literal),
@@ -39,6 +33,12 @@ pub enum Expression {
     Unary(UnaryExpression),
     FunctionCall(FunctionCall),
     SizeOf(TypeOrIdentifier)
+}
+
+#[derive(Debug, new)]
+pub struct VariableDeclaration {
+    pub name: String,
+    pub ty: DataType,
 }
 
 #[derive(Debug, new)]
@@ -111,6 +111,26 @@ pub enum AssignOp {
     RightShift,
 }
 
+#[derive(Debug)]
+pub enum UnOp {
+    Negate,
+    LogicalNot,
+    BitwiseNot,
+}
+
+#[derive(Debug)]
+pub enum TypeOrIdentifier {
+    Type(DataType),
+    Identifier(Arc<String>),
+}
+
+#[derive(Debug)]
+pub enum DataType {
+    Int,
+    UnsignedInt,
+    Float,
+}
+
 impl BinOp {
     pub fn is_assignment(&self) -> bool {
         match self {
@@ -160,13 +180,6 @@ impl TryFrom<Symbol> for BinOp {
     }
 }
 
-#[derive(Debug)]
-pub enum UnOp {
-    Negate,
-    LogicalNot,
-    BitwiseNot,
-}
-
 impl TryFrom<Symbol> for UnOp {
     type Error = ();
 
@@ -178,18 +191,4 @@ impl TryFrom<Symbol> for UnOp {
             _ => Err(()),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum TypeOrIdentifier {
-    Type(DataType),
-    Identifier(Arc<String>),
-}
-
-
-#[derive(Debug)]
-pub enum DataType {
-    Int,
-    UnsignedInt,
-    Float,
 }

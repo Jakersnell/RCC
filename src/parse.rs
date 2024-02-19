@@ -12,9 +12,8 @@ use crate::{
 pub struct Parser {
     lexer: Iterator<Item = Locatable<Token>>,
     errors: Vec<CompilerError>,
-}
+} 
 
-/// made multiple helper functions #[inline] for slight performance increase
 impl Parser {
     pub fn parse(tokens: Vec<Token>) -> Result<SyntaxTree, Vec<String>> {
         let mut parser = Self::new(tokens);
