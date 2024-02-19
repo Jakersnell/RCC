@@ -8,10 +8,11 @@ use std::{
 
 mod ast;
 mod error;
+mod file;
 mod lex;
+mod parse;
 mod str_intern;
 mod tokens;
-mod file;
 
 fn main() {
     let x = "sd";

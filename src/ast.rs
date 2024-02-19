@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use derive_new::new;
 
-use crate::{error::CompilerError, tokens::{Literal, Symbol}};
+use crate::{
+    error::CompilerError,
+    tokens::{Literal, Symbol},
+};
 
 #[derive(Debug)]
 pub struct Program {
@@ -52,7 +55,6 @@ pub struct BinaryExpression {
     op: BinOp,
     right: Box<Expression>,
 }
-
 
 #[derive(Debug, new)]
 pub struct Function {

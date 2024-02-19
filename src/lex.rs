@@ -1,9 +1,11 @@
+use crate::file::{Locatable, Span};
 use crate::{
     error::CompilerError,
     lex,
     tokens::{Keyword, Literal, Symbol, Token},
 };
 use arcstr::{ArcStr, Substr};
+use std::path::PathBuf;
 use std::{
     fs::File,
     io::{self, BufReader, Read},
@@ -12,7 +14,8 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-use crate::file::{Locatable, Span};
+
+pub type LexResult = Result<Locatable<Token>, Locatable<Vec<CompilerError>>>;
 
 pub struct Lexer {
     position: usize,
@@ -25,6 +28,14 @@ pub struct Lexer {
 }
 
 impl Lexer {
+    pub fn from_file(path: PathBuf) -> io::Result<Self> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        let mut source = String::new();
+        reader.read_to_string(&mut source)?;
+        Ok(Self::new(source))
+    }
+
     pub fn new(source: String) -> Self {
         let source = ArcStr::from(source);
         let mut chars = source.chars();
@@ -447,7 +458,7 @@ impl Lexer {
 
 impl Iterator for Lexer {
     /// the only reason this is a Vec<CompilerError> is for strings with multiple invalid escapes.
-    type Item = Result<Locatable<Token>, Locatable<Vec<CompilerError>>>;
+    type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current.is_some_and(|c| c.is_whitespace()) {
