@@ -10,7 +10,6 @@ pub struct Program {
     pub body: Result<Vec<ASTNode>, Vec<CompilerError>>,
 }
 
-
 #[derive(Debug)]
 pub enum ASTNode {
     Statement(Statement),
@@ -32,7 +31,7 @@ pub enum Expression {
     Binary(BinaryExpression),
     Unary(UnaryExpression),
     FunctionCall(FunctionCall),
-    SizeOf(TypeOrIdentifier)
+    SizeOf(TypeOrIdentifier),
 }
 
 #[derive(Debug, new)]
@@ -59,7 +58,7 @@ pub struct BinaryExpression {
 pub struct Function {
     pub name: String,
     pub params: Vec<VariableDeclaration>,
-    pub body: Box<Vec<ASTNode>>,
+    pub body: Vec<ASTNode>,
 }
 
 #[derive(Debug, new)]
@@ -133,10 +132,7 @@ pub enum DataType {
 
 impl BinOp {
     pub fn is_assignment(&self) -> bool {
-        match self {
-            BinOp::Assign(_) => true,
-            _ => false,
-        }
+        matches!(self, BinOp::Assign(_))
     }
 
     pub fn precedence(&self) -> u8 {
@@ -148,7 +144,6 @@ impl BinOp {
             _ => panic!("Invalid precedence for {:?}", self),
         }
     }
-
 }
 
 impl TryFrom<Symbol> for BinOp {

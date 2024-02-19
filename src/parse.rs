@@ -10,9 +10,9 @@ use crate::{
 };
 
 pub struct Parser {
-    lexer: Iterator<Item = Locatable<Token>>,
+    lexer: Iterator<Item=Locatable<Token>>,
     errors: Vec<CompilerError>,
-} 
+}
 
 impl Parser {
     pub fn parse(tokens: Vec<Token>) -> Result<SyntaxTree, Vec<String>> {

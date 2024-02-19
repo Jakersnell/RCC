@@ -1,7 +1,7 @@
 use crate::{
     error::CompilerError,
     lex,
-    tokens::{Keyword, Literal, Locatable, Span, Symbol, Token},
+    tokens::{Keyword, Literal, Symbol, Token},
 };
 use arcstr::{ArcStr, Substr};
 use std::{
@@ -12,6 +12,7 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
+use crate::file::{Locatable, Span};
 
 pub struct Lexer {
     position: usize,

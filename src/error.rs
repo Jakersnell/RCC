@@ -48,8 +48,8 @@ pub enum CompilerError {
     #[error("Cannot assign {0} to type {1}")]
     CannotAssign(String, String),
 
-    #[error("Unknown identifer \"{0}\"")]
-    UknownIdentifier(String),
+    #[error("Unknown identifier \"{0}\"")]
+    UnknownIdentifier(String),
 
     #[error("Must return type {0} due to declared type")]
     MustReturn(String),
