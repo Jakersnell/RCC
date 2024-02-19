@@ -1,19 +1,15 @@
 use crate::ast::{ASTNode, Program};
-use crate::file::Span;
-use crate::lex::{LexResult, Lexer};
-use crate::{error::CompilerError, file::Locatable, tokens::Token as LexToken};
-use std::collections::btree_map::IterMut;
+use crate::lex::LexResult;
+use crate::util::{CompilerResult, Span, Token};
 use std::io;
 use std::path::PathBuf;
 
-type Token = Locatable<LexToken>;
-pub type ParseResult<T> = Result<T, Vec<Locatable<CompilerError>>>;
-
 pub struct Parser<L>
 where
-    L: Iterator<Item = LexResult> + Default,
+    L: Iterator<Item = LexResult> + Default + TryFrom<PathBuf, Error = io::Error>,
 {
     lexer: L,
+    program: Program,
     global: Vec<ASTNode>,
     current: Option<Token>,
     next: Option<Token>,
@@ -22,27 +18,39 @@ where
 
 impl<L> Parser<L>
 where
-    L: Iterator<Item = LexResult> + Default,
+    L: Iterator<Item = LexResult> + Default + TryFrom<PathBuf, Error = io::Error>,
 {
-    pub fn parse(lexer: L) -> ParseResult<Program> {
-        let mut parser = Self {
+    pub fn new(program: Program) -> io::Result<Self> {
+        let lexer = L::try_from(PathBuf::from(&program.file_name))?;
+        Ok(Self {
             lexer,
+            program,
             global: Vec::new(),
             current: None,
             next: None,
             span: Span::new(0, 0),
-        };
-        parser.advance()?;
-        parser.advance()?;
-
-        while parser.current.is_some() {
-            let global_declaration = parser.parse_function()?;
-            parser.global.push(global_declaration);
-        }
-        todo!()
+        })
     }
 
-    fn advance(&mut self) -> ParseResult<()> {
+    pub fn parse(mut self) -> Program {
+        let body = self.get_body();
+        let mut program = self.program;
+        program.body = Some(body);
+        program
+    }
+
+    fn get_body(&mut self) -> CompilerResult<Vec<ASTNode>> {
+        self.advance()?;
+        self.advance()?;
+
+        while self.current.is_some() {
+            let global_declaration = self.parse_global()?;
+            self.global.push(global_declaration);
+        }
+        Ok(std::mem::take(&mut self.global))
+    }
+
+    fn advance(&mut self) -> CompilerResult<()> {
         match self.lexer.next() {
             Some(Ok(token)) => {
                 self.current = self.next.take();
@@ -63,7 +71,7 @@ where
         }
     }
 
-    fn parse_function(&mut self) -> ParseResult<ASTNode> {
+    fn parse_global(&mut self) -> CompilerResult<ASTNode> {
         todo!()
     }
 }
