@@ -4,6 +4,9 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum CompilerError {
     #[error("{0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("{0}")]
     ParseIntError(#[from] std::num::ParseIntError),
 
     #[error("{0}")]
