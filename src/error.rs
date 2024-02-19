@@ -68,4 +68,31 @@ pub enum CompilerError {
 
     #[error("Curly has no opening.")]
     BlockHasNoOpening,
+
+    #[error("Unexpected end of file.")]
+    UnexpectedEOF,
+}
+
+#[derive(Error, Debug)]
+pub enum CompilerWarning {
+    #[error("Unused variable: {0}")]
+    UnusedVariable(String),
+
+    #[error("Unused function: {0}")]
+    UnusedFunction(String),
+
+    #[error("Unused parameter: {0}")]
+    UnusedParameter(String),
+
+    #[error("Unused constant: {0}")]
+    UnusedConstant(String),
+
+    #[error("Unused struct: {0}")]
+    UnusedStruct(String),
+
+    #[error("Unused enum: {0}")]
+    UnusedEnum(String),
+
+    #[error("Unused union: {0}")]
+    UnusedUnion(String),
 }
