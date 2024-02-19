@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use derive_new::new;
 
+use crate::error::CompilerWarning;
 use crate::{
     error::CompilerError,
     tokens::{Literal, Symbol},
@@ -9,8 +10,10 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Program {
-    pub filename: String,
+    // I plan on adding more fields to this struct later
     pub body: Result<Vec<ASTNode>, Vec<CompilerError>>,
+    pub warnings: Vec<CompilerWarning>,
+    pub file_name: String,
 }
 
 #[derive(Debug)]
