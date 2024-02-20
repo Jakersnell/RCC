@@ -2,36 +2,14 @@ use std::sync::Arc;
 
 use derive_new::new;
 
-use crate::error::CompilerWarning;
-use crate::util::CompilerResult;
-use crate::{
-    error::CompilerError,
-    tokens::{Literal, Symbol},
-};
-
-#[derive(Debug)]
-pub struct Program {
-    // I plan on adding more fields to this struct later
-    pub body: Option<CompilerResult<Vec<ASTNode>>>,
-    pub warnings: Vec<CompilerWarning>,
-    pub file_name: String,
-}
-
-impl Program {
-    pub fn new(file_name: String) -> Self {
-        Self {
-            body: None,
-            warnings: Vec::new(),
-            file_name,
-        }
-    }
-}
+use crate::tokens::{Literal, Symbol};
+use crate::util::{CompoundExpression, DeclarationNode, ExpressionNode, StatementNode};
 
 #[derive(Debug)]
 pub enum ASTNode {
-    Statement(Statement),
-    Expression(Expression),
-    Declaration(Declaration),
+    Statement(StatementNode),
+    Expression(ExpressionNode),
+    Declaration(DeclarationNode),
 }
 
 #[derive(Debug)]
@@ -76,20 +54,20 @@ pub struct FunctionDeclaration {
 #[derive(Debug, new)]
 pub struct UnaryExpression {
     op: UnOp,
-    right: Box<Expression>,
+    right: Box<ExpressionNode>,
 }
 
 #[derive(Debug, new)]
 pub struct BinaryExpression {
-    left: Box<Expression>,
+    left: Box<ExpressionNode>,
     op: BinOp,
-    right: Box<Expression>,
+    right: Box<ExpressionNode>,
 }
 
 #[derive(Debug, new)]
 pub struct FunctionCall {
     pub name: String,
-    pub args: Vec<ASTNode>,
+    pub args: CompoundExpression,
 }
 
 #[derive(Debug)]
