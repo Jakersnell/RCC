@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use derive_new::new;
 
-use crate::tokens::{Literal, Symbol};
+use crate::tokens::{Literal, Symbol, Token};
 use crate::util::{CompoundExpression, DeclarationNode, ExpressionNode, StatementNode};
 
 #[derive(Debug)]
@@ -113,6 +113,28 @@ pub enum AssignOp {
     RightShift,
 }
 
+impl TryFrom<Token> for AssignOp {
+    type Error = ();
+
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::Symbol(Symbol::Equal) => Ok(AssignOp::Assign),
+            Token::Symbol(Symbol::PlusEqual) => Ok(AssignOp::Plus),
+            Token::Symbol(Symbol::MinusEqual) => Ok(AssignOp::Minus),
+            Token::Symbol(Symbol::StarEqual) => Ok(AssignOp::Multiply),
+            Token::Symbol(Symbol::SlashEqual) => Ok(AssignOp::Divide),
+            Token::Symbol(Symbol::ModuloEqual) => Ok(AssignOp::Modulo),
+            Token::Symbol(Symbol::AmpersandEqual) => Ok(AssignOp::BitwiseAnd),
+            Token::Symbol(Symbol::PipeEqual) => Ok(AssignOp::BitwiseOr),
+            Token::Symbol(Symbol::CaretEqual) => Ok(AssignOp::BitwiseXor),
+            Token::Symbol(Symbol::LeftShiftEqual) => Ok(AssignOp::LeftShift),
+            Token::Symbol(Symbol::RightShiftEqual) => Ok(AssignOp::RightShift),
+
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum UnOp {
     Negate,
@@ -149,29 +171,29 @@ impl BinOp {
     }
 }
 
-impl TryFrom<Symbol> for BinOp {
+impl TryFrom<&Token> for BinOp {
     type Error = ();
 
-    fn try_from(value: Symbol) -> Result<Self, Self::Error> {
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
         match value {
-            Symbol::Plus => Ok(BinOp::Add),
-            Symbol::Minus => Ok(BinOp::Subtract),
-            Symbol::Star => Ok(BinOp::Multiply),
-            Symbol::Slash => Ok(BinOp::Divide),
-            Symbol::Modulo => Ok(BinOp::Modulo),
+            Token::Symbol(Symbol::Plus) => Ok(BinOp::Add),
+            Token::Symbol(Symbol::Minus) => Ok(BinOp::Subtract),
+            Token::Symbol(Symbol::Star) => Ok(BinOp::Multiply),
+            Token::Symbol(Symbol::Slash) => Ok(BinOp::Divide),
+            Token::Symbol(Symbol::Modulo) => Ok(BinOp::Modulo),
 
-            Symbol::EqualEqual => Ok(BinOp::Equal),
-            Symbol::BangEqual => Ok(BinOp::NotEqual),
-            Symbol::GreaterThan => Ok(BinOp::GreaterThan),
-            Symbol::GreaterThanEqual => Ok(BinOp::GreaterThanEqual),
-            Symbol::LessThan => Ok(BinOp::LessThan),
-            Symbol::LessThanEqual => Ok(BinOp::LessThanEqual),
+            Token::Symbol(Symbol::EqualEqual) => Ok(BinOp::Equal),
+            Token::Symbol(Symbol::BangEqual) => Ok(BinOp::NotEqual),
+            Token::Symbol(Symbol::GreaterThan) => Ok(BinOp::GreaterThan),
+            Token::Symbol(Symbol::GreaterThanEqual) => Ok(BinOp::GreaterThanEqual),
+            Token::Symbol(Symbol::LessThan) => Ok(BinOp::LessThan),
+            Token::Symbol(Symbol::LessThanEqual) => Ok(BinOp::LessThanEqual),
 
-            Symbol::Ampersand => Ok(BinOp::BitwiseAnd),
-            Symbol::Pipe => Ok(BinOp::BitwiseOr),
-            Symbol::Caret => Ok(BinOp::BitwiseXor),
-            Symbol::LeftShift => Ok(BinOp::LeftShift),
-            Symbol::RightShift => Ok(BinOp::RightShift),
+            Token::Symbol(Symbol::Ampersand) => Ok(BinOp::BitwiseAnd),
+            Token::Symbol(Symbol::Pipe) => Ok(BinOp::BitwiseOr),
+            Token::Symbol(Symbol::Caret) => Ok(BinOp::BitwiseXor),
+            Token::Symbol(Symbol::LeftShift) => Ok(BinOp::LeftShift),
+            Token::Symbol(Symbol::RightShift) => Ok(BinOp::RightShift),
 
             _ => Err(()),
         }
