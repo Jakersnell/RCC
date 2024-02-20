@@ -31,11 +31,12 @@ impl Program {
 pub enum ASTNode {
     Statement(Statement),
     Expression(Expression),
-    Function(Function),
+    Declaration(Declaration),
 }
 
 #[derive(Debug)]
 pub enum Statement {
+    Expression(Expression),
     VariableDeclaration(VariableDeclaration),
     Block(Vec<ASTNode>),
     Return(Expression),
@@ -51,10 +52,25 @@ pub enum Expression {
     SizeOf(TypeOrIdentifier),
 }
 
+#[derive(Debug)]
+pub enum Declaration {
+    Function(FunctionDeclaration),
+    Variable(VariableDeclaration),
+}
+
 #[derive(Debug, new)]
 pub struct VariableDeclaration {
     pub name: String,
     pub ty: DataType,
+}
+
+#[derive(Debug, new)]
+pub struct FunctionDeclaration {
+    pub name: String,
+    pub return_type: DataType,
+    pub params: Vec<VariableDeclaration>,
+    pub var_args: bool,
+    pub body: Option<Vec<ASTNode>>,
 }
 
 #[derive(Debug, new)]
@@ -68,13 +84,6 @@ pub struct BinaryExpression {
     left: Box<Expression>,
     op: BinOp,
     right: Box<Expression>,
-}
-
-#[derive(Debug, new)]
-pub struct Function {
-    pub name: String,
-    pub params: Vec<VariableDeclaration>,
-    pub body: Vec<ASTNode>,
 }
 
 #[derive(Debug, new)]
