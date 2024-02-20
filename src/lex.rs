@@ -112,7 +112,7 @@ impl Lexer {
                 "int" => Token::Keyword(Keyword::Int),
                 "double" => Token::Keyword(Keyword::Double),
                 "return" => Token::Keyword(Keyword::Return),
-                "sizeof" => Token::Symbol(Symbol::Sizeof),
+                "sizeof" => Token::Keyword(Keyword::Sizeof),
                 _ => Token::Identifier(text),
             })
     }
