@@ -98,4 +98,7 @@ pub enum CompilerWarning {
 
     #[error("Unused union: {0}")]
     UnusedUnion(String),
+
+    #[error("Unreachable code: {0}")]
+    UnreachableCode(String),
 }
