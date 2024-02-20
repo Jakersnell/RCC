@@ -19,7 +19,7 @@ pub struct Locatable<T> {
     pub value: T,
 }
 
-#[derive(Debug, PartialEq, new)]
+#[derive(Debug, PartialEq, new, Clone, Copy)]
 pub struct Span {
     start: usize,
     end: usize,

@@ -1,6 +1,8 @@
-use crate::ast::{ASTNode, Program};
+use crate::ast::ASTNode;
+use crate::error::CompilerError;
 use crate::lex::LexResult;
-use crate::util::{CompilerResult, Span, Token};
+use crate::tokens::Token;
+use crate::util::{CompilerResult, Locatable, LocatableToken, Node, Program, Span};
 use std::io;
 use std::path::PathBuf;
 
@@ -10,10 +12,16 @@ where
 {
     lexer: L,
     program: Program,
-    global: Vec<ASTNode>,
-    current: Option<Token>,
-    next: Option<Token>,
+    global: Vec<Node>,
+    current: Option<LocatableToken>,
+    next: Option<LocatableToken>,
     span: Span,
+}
+
+macro_rules! is {
+    ($invoker:ident, $current_or_next:ident,  $pattern:pat $(if $guard:expr)? $(,)?) => {
+        $invoker.$current_or_next.as_ref().is_some_and(|locatable| matches!(&locatable.value,$pattern $(if $guard)?))
+    };
 }
 
 impl<L> Parser<L>
@@ -39,7 +47,7 @@ where
         program
     }
 
-    fn get_body(&mut self) -> CompilerResult<Vec<ASTNode>> {
+    fn get_body(&mut self) -> CompilerResult<Vec<Node>> {
         self.advance()?;
         self.advance()?;
 
@@ -51,6 +59,11 @@ where
     }
 
     fn advance(&mut self) -> CompilerResult<()> {
+        if self.current.is_none() {
+            let mut errors = Vec::new();
+            self.get_all_errors(&mut errors);
+            return Err(errors);
+        }
         match self.lexer.next() {
             Some(Ok(token)) => {
                 self.current = self.next.take();
@@ -58,20 +71,42 @@ where
                 Ok(())
             }
             Some(Err(errors)) => {
-                let all_results = std::mem::take(&mut self.lexer).collect::<Vec<_>>();
-                let all_errors = all_results
-                    .into_iter()
-                    .filter_map(|r| if let Err(e) = r { Some(e) } else { None })
-                    .flatten();
                 let mut errors = errors;
-                errors.extend(all_errors);
+                self.get_all_errors(&mut errors);
                 Err(errors)
             }
             None => Ok(()),
         }
     }
 
-    fn parse_global(&mut self) -> CompilerResult<ASTNode> {
+    fn get_all_errors(&mut self, errors: &mut Vec<Locatable<CompilerError>>) {
+        let all_results = std::mem::take(&mut self.lexer).collect::<Vec<_>>();
+        let all_errors = all_results
+            .into_iter()
+            .filter_map(|r| if let Err(e) = r { Some(e) } else { None })
+            .flatten();
+        let mut errors = errors;
+        errors.extend(all_errors);
+    }
+
+    fn parse_global(&mut self) -> CompilerResult<Node> {
+        todo!()
+    }
+
+    fn parse_declaration(&mut self) -> CompilerResult<Node> {
+        if is!(self, current, Token::Keyword(x) if x.is_type()) {
+            self.advance()?;
+
+            if is!(self, next, Token::Identifier(_)) {
+                self.advance()?;
+                // could be function or variable declaration
+            } else {
+                // this is cause for an error.
+            }
+        } else {
+            // this is cause for an error.
+        }
+
         todo!()
     }
 }
