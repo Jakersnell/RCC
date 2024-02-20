@@ -11,18 +11,18 @@ use std::{
 // This is a simple implementation of a string interner.
 // You might be asking why I implemented one myself rather than using a crate like lasso.
 // The answer is, I wanted to learn how to implement a string interner myself, and I had a few ideas I wanted to test out.
-// I dont know if this is the best implementation, it was more just a creative exercise for me.
+// I don't know if this is the best implementation, it was more just a creative exercise for me.
 
 lazy_static! {
     static ref INTERNER: Mutex<Interner<BuildHasherDefault<DefaultHasher>>> =
         Mutex::new(Interner::default());
 }
 
-pub fn intern<S: AsRef<str>>(string: S) -> Arc<String> {
+pub fn intern<S: AsRef<str>>(string: S) -> Arc<str> {
     INTERNER.lock().unwrap().intern(string)
 }
 
-pub fn get<S: AsRef<str>>(string: S) -> Option<Arc<String>> {
+pub fn get<S: AsRef<str>>(string: S) -> Option<Arc<str>> {
     INTERNER.lock().unwrap().get(string)
 }
 
@@ -32,7 +32,7 @@ const DEFAULT_SHRINK_FACTOR: f32 = 0.35;
 
 struct Entry {
     hash: usize,
-    value: Arc<String>,
+    value: Arc<str>,
     next: Option<Box<Entry>>,
 }
 
@@ -45,7 +45,7 @@ impl Entry {
     }
 }
 
-// really just a hashmap with some custom implementation that I couldnt do with the standard hashmap
+// really just a hashmap with some custom implementation that I couldn't do with the standard hashmap
 // for O(1) lookups and O(1) insertions, and learning purposes
 struct Interner<H: BuildHasher> {
     hash_builder: H,
@@ -106,14 +106,15 @@ impl<H: BuildHasher> Interner<H> {
         }
     }
 
+    #[allow(clippy::borrowed_box)]
     fn get_entry(&self, string: &str) -> Option<&Box<Entry>> {
         let hash = self.hash(string) as usize;
-        let index = hash as usize % self.size;
+        let index = hash % self.size;
         let mut found_entry = None;
         let mut entry = &self.table[index];
         while entry.is_some() {
             let current_entry = entry.as_ref().unwrap();
-            if current_entry.hash == hash && &*current_entry.value == string {
+            if current_entry.hash == hash && *current_entry.value == *string {
                 found_entry = Some(current_entry);
                 break;
             } else {
@@ -123,25 +124,25 @@ impl<H: BuildHasher> Interner<H> {
         found_entry
     }
 
-    pub fn get<S: AsRef<str>>(&self, string: S) -> Option<Arc<String>> {
+    pub fn get<S: AsRef<str>>(&self, string: S) -> Option<Arc<str>> {
         self.get_entry(string.as_ref())
             .map(|entry| entry.value.clone())
     }
 
-    pub fn intern<S: AsRef<str>>(&mut self, string: S) -> Arc<String> {
+    pub fn intern<S: AsRef<str>>(&mut self, string: S) -> Arc<str> {
         let string = string.as_ref();
         self.get(string).unwrap_or_else(|| {
             let hash = self.hash(string) as usize;
-            let arcstr = Arc::new(string.to_string());
+            let arc_str: Arc<str> = Arc::from(string.to_string());
             let entry = Box::new(Entry {
                 hash,
-                value: arcstr.clone(),
+                value: arc_str.clone(),
                 next: None,
             });
             self.num_entries += 1;
             self.maybe_realloc();
             self.insert_entry(entry);
-            arcstr
+            arc_str
         })
     }
 }
@@ -161,7 +162,7 @@ fn test_interning_the_same_string_doesnt_duplicate() {
     interner.intern(string);
     interner.intern(string);
     interner.intern(string);
-    assert!(interner.num_entries == 1);
+    assert_eq!(interner.num_entries, 1);
 }
 
 #[test]

@@ -2,14 +2,30 @@ use std::sync::Arc;
 
 use derive_new::new;
 
-use crate::{error::CompilerError, tokens::{Literal, Symbol}};
+use crate::error::CompilerWarning;
+use crate::util::CompilerResult;
+use crate::{
+    error::CompilerError,
+    tokens::{Literal, Symbol},
+};
 
 #[derive(Debug)]
 pub struct Program {
-    pub filename: String,
-    pub body: Result<Vec<ASTNode>, Vec<CompilerError>>,
+    // I plan on adding more fields to this struct later
+    pub body: Option<CompilerResult<Vec<ASTNode>>>,
+    pub warnings: Vec<CompilerWarning>,
+    pub file_name: String,
 }
 
+impl Program {
+    pub fn new(file_name: String) -> Self {
+        Self {
+            body: None,
+            warnings: Vec::new(),
+            file_name,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum ASTNode {
@@ -32,7 +48,7 @@ pub enum Expression {
     Binary(BinaryExpression),
     Unary(UnaryExpression),
     FunctionCall(FunctionCall),
-    SizeOf(TypeOrIdentifier)
+    SizeOf(TypeOrIdentifier),
 }
 
 #[derive(Debug, new)]
@@ -54,12 +70,11 @@ pub struct BinaryExpression {
     right: Box<Expression>,
 }
 
-
 #[derive(Debug, new)]
 pub struct Function {
     pub name: String,
     pub params: Vec<VariableDeclaration>,
-    pub body: Box<Vec<ASTNode>>,
+    pub body: Vec<ASTNode>,
 }
 
 #[derive(Debug, new)]
@@ -133,10 +148,7 @@ pub enum DataType {
 
 impl BinOp {
     pub fn is_assignment(&self) -> bool {
-        match self {
-            BinOp::Assign(_) => true,
-            _ => false,
-        }
+        matches!(self, BinOp::Assign(_))
     }
 
     pub fn precedence(&self) -> u8 {
@@ -148,7 +160,6 @@ impl BinOp {
             _ => panic!("Invalid precedence for {:?}", self),
         }
     }
-
 }
 
 impl TryFrom<Symbol> for BinOp {

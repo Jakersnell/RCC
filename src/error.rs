@@ -4,6 +4,9 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum CompilerError {
     #[error("{0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("{0}")]
     ParseIntError(#[from] std::num::ParseIntError),
 
     #[error("{0}")]
@@ -48,8 +51,8 @@ pub enum CompilerError {
     #[error("Cannot assign {0} to type {1}")]
     CannotAssign(String, String),
 
-    #[error("Unknown identifer \"{0}\"")]
-    UknownIdentifier(String),
+    #[error("Unknown identifier \"{0}\"")]
+    UnknownIdentifier(String),
 
     #[error("Must return type {0} due to declared type")]
     MustReturn(String),
@@ -68,4 +71,34 @@ pub enum CompilerError {
 
     #[error("Curly has no opening.")]
     BlockHasNoOpening,
+
+    #[error("Unexpected end of file.")]
+    UnexpectedEOF,
+}
+
+#[derive(Error, Debug)]
+pub enum CompilerWarning {
+    #[error("Unused variable: {0}")]
+    UnusedVariable(String),
+
+    #[error("Unused function: {0}")]
+    UnusedFunction(String),
+
+    #[error("Unused parameter: {0}")]
+    UnusedParameter(String),
+
+    #[error("Unused constant: {0}")]
+    UnusedConstant(String),
+
+    #[error("Unused struct: {0}")]
+    UnusedStruct(String),
+
+    #[error("Unused enum: {0}")]
+    UnusedEnum(String),
+
+    #[error("Unused union: {0}")]
+    UnusedUnion(String),
+
+    #[error("Unreachable code: {0}")]
+    UnreachableCode(String),
 }

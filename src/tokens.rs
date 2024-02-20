@@ -1,22 +1,3 @@
-use arcstr::Substr;
-use derive_new::new;
-use std::{default, error, sync::Arc};
-use thiserror::Error as ErrorType;
-
-use crate::error::CompilerError;
-
-#[derive(Debug, PartialEq, new)]
-pub struct Locatable<T> {
-    pub location: Span,
-    pub value: T,
-}
-
-#[derive(Debug, PartialEq, new)]
-pub struct Span {
-    start: usize,
-    end: usize,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum Token {
     BadSymbol(char),

@@ -1,9 +1,11 @@
+use crate::util::{Locatable, Span};
 use crate::{
     error::CompilerError,
     lex,
-    tokens::{Keyword, Literal, Locatable, Span, Symbol, Token},
+    tokens::{Keyword, Literal, Symbol, Token},
 };
 use arcstr::{ArcStr, Substr};
+use std::path::PathBuf;
 use std::{
     fs::File,
     io::{self, BufReader, Read},
@@ -13,14 +15,42 @@ use std::{
 };
 use thiserror::Error;
 
+pub type LexResult = Result<Locatable<Token>, Vec<Locatable<CompilerError>>>;
+
 pub struct Lexer {
     position: usize,
     row: usize,
     col: usize,
     source: ArcStr,
-    problems: Vec<CompilerError>,
+    problems: Vec<Locatable<CompilerError>>,
     current: Option<char>,
     next: Option<char>,
+}
+
+impl Default for Lexer {
+    fn default() -> Self {
+        Self {
+            position: 0,
+            col: 0,
+            row: 0,
+            source: ArcStr::from(""),
+            problems: Vec::new(),
+            current: None,
+            next: None,
+        }
+    }
+}
+
+impl TryFrom<PathBuf> for Lexer {
+    type Error = io::Error;
+
+    fn try_from(path: PathBuf) -> io::Result<Self> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        let mut source = String::new();
+        reader.read_to_string(&mut source)?;
+        Ok(Self::new(source))
+    }
 }
 
 impl Lexer {
@@ -88,24 +118,33 @@ impl Lexer {
     }
 
     fn eat_number(&mut self) -> Option<Token> {
+        if !self.current.is_some_and(|c| c.is_ascii_digit()) {
+            return None;
+        }
+
         macro_rules! consume_suffix {
-            ($invoker:ident, $($pattern:literal)|+, $errortype:expr) => {
-                $invoker.consume_alphanumeric_text().map(|text| {
-                    let lowercased = text.to_lowercase();
-                    match lowercased.as_str() {
-                        $($pattern)|+ => Some(lowercased),
-                        _ => {
-                            $invoker.problems.push($errortype(text));
-                            None
+            ($invoker:ident, $($pattern:literal)|+, $error_type:expr) => {
+                {
+                    let start = $invoker.position;
+                    $invoker.consume_alphanumeric_text().map(|text| {
+                        let lowercased = text.to_lowercase();
+                        match lowercased.as_str() {
+                            $($pattern)|+ => Some(lowercased),
+                            _ => {
+                                let end = $invoker.position;
+                                let span = Span::new(start, end);
+                                let error = Locatable::new(span, $error_type(text));
+                                $invoker.problems.push(error);
+                                None
+                            }
                         }
-                    }
-                }).flatten()
+                    }).flatten()
+                }
             };
         }
 
-        if !self.current.is_some_and(|c| c.is_digit(16)) {
-            return None;
-        }
+        let start = self.position;
+
         enum State {
             Start,
             Zero,
@@ -190,6 +229,9 @@ impl Lexer {
             self.next_char();
         }
 
+        let end = self.position;
+        let span = Span::new(start, end);
+
         let base = match state {
             State::Zero => 10,
             State::Decimal => 10,
@@ -209,8 +251,8 @@ impl Lexer {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
                 let result = u128::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
-                    // I would like to improve this error message
-                    self.problems.push(CompilerError::from(error));
+                    let error = Locatable::new(span, CompilerError::from(error));
+                    self.problems.push(error);
                     0
                 });
                 let suffix = consume_suffix!(
@@ -224,7 +266,8 @@ impl Lexer {
             State::Float => {
                 let result = number.parse();
                 let value = result.unwrap_or_else(|error| {
-                    self.problems.push(CompilerError::from(error));
+                    let error = Locatable::new(span, CompilerError::from(error));
+                    self.problems.push(error);
                     0.0
                 });
                 let suffix = consume_suffix!(self, "f" | "l", CompilerError::InvalidFloatSuffix);
@@ -233,220 +276,223 @@ impl Lexer {
             _ => unreachable!(),
         };
 
-        Some(Token::Literal(literal))
+        if self.problems.is_empty() {
+            Some(Token::Literal(literal))
+        } else {
+            None
+        }
     }
 
     fn eat_symbol(&mut self) -> Option<Token> {
-        self.current
-            .map(|current| {
-                use Symbol::*;
-                macro_rules! single {
-                    ($kind:ident) => {
-                        Some({
-                            self.next_char();
-                            $kind
-                        })
-                    };
+        use Symbol::*;
+        macro_rules! single {
+            ($kind:ident) => {
+                Some({
+                    self.next_char();
+                    $kind
+                })
+            };
+        }
+
+        // I want to clean this up soon.
+        // But for now it's ok.
+        match self.current {
+            Some('+') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        PlusEqual
+                    }
+                    Some('+') => {
+                        self.next_char();
+                        Increment
+                    }
+                    _ => Plus,
                 }
-                match current {
-                    '+' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                PlusEqual
-                            }
-                            Some('+') => {
-                                self.next_char();
-                                Increment
-                            }
-                            _ => Plus,
-                        }
-                    }),
+            }),
 
-                    '-' => Some({
+            Some('-') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
                         self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                MinusEqual
-                            }
-                            Some('-') => {
-                                self.next_char();
-                                Decrement
-                            }
-                            Some('>') => {
-                                self.next_char();
-                                Arrow
-                            }
-                            _ => Minus,
-                        }
-                    }),
-
-                    '*' => Some({
+                        MinusEqual
+                    }
+                    Some('-') => {
                         self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                StarEqual
-                            }
-                            _ => Star,
-                        }
-                    }),
-
-                    '/' => Some({
+                        Decrement
+                    }
+                    Some('>') => {
                         self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                SlashEqual
-                            }
-                            Some('*' | '/') if cfg!(debug_assertions) => {
-                                panic!("Unhandled comment in input position: {}", self.position);
-                            }
-                            _ => Slash,
-                        }
-                    }),
-                    '%' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                ModuloEqual
-                            }
-                            _ => Modulo,
-                        }
-                    }),
-
-                    '=' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                EqualEqual
-                            }
-                            _ => Equal,
-                        }
-                    }),
-
-                    '!' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                BangEqual
-                            }
-                            _ => Bang,
-                        }
-                    }),
-
-                    '|' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                PipeEqual
-                            }
-                            Some('|') => {
-                                self.next_char();
-                                DoublePipe
-                            }
-                            _ => Pipe,
-                        }
-                    }),
-
-                    '&' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                AmpersandEqual
-                            }
-                            Some('&') => {
-                                self.next_char();
-                                DoubleAmpersand
-                            }
-                            _ => Ampersand,
-                        }
-                    }),
-
-                    '^' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                CaretEqual
-                            }
-                            _ => Caret,
-                        }
-                    }),
-
-                    '<' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                LessThanEqual
-                            }
-                            Some('<') => {
-                                self.next_char();
-                                match self.current {
-                                    Some('=') => {
-                                        self.next_char();
-                                        LeftShiftEqual
-                                    }
-                                    _ => LeftShift,
-                                }
-                            }
-                            _ => LessThan,
-                        }
-                    }),
-
-                    '>' => Some({
-                        self.next_char();
-                        match self.current {
-                            Some('=') => {
-                                self.next_char();
-                                GreaterThanEqual
-                            }
-                            Some('>') => {
-                                self.next_char();
-                                match self.current {
-                                    Some('=') => {
-                                        self.next_char();
-                                        RightShiftEqual
-                                    }
-                                    _ => RightShift,
-                                }
-                            }
-                            _ => GreaterThan,
-                        }
-                    }),
-
-                    '.' => single!(Dot),
-                    '?' => single!(QuestionMark),
-                    ':' => single!(Colon),
-                    '~' => single!(Tilde),
-                    ',' => single!(Comma),
-                    ';' => single!(Semicolon),
-                    '(' => single!(OpenParen),
-                    ')' => single!(CloseParen),
-                    '[' => single!(OpenSquare),
-                    ']' => single!(CloseSquare),
-                    '{' => single!(OpenCurly),
-                    '}' => single!(CloseCurly),
-
-                    _ => None,
+                        Arrow
+                    }
+                    _ => Minus,
                 }
-                .map(|symbol| Token::Symbol(symbol))
-            })
-            .flatten()
+            }),
+
+            Some('*') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        StarEqual
+                    }
+                    _ => Star,
+                }
+            }),
+
+            Some('/') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        SlashEqual
+                    }
+                    Some('*' | '/') if cfg!(debug_assertions) => {
+                        panic!("Unhandled comment in input position: {}", self.position);
+                    }
+                    _ => Slash,
+                }
+            }),
+            Some('%') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        ModuloEqual
+                    }
+                    _ => Modulo,
+                }
+            }),
+
+            Some('=') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        EqualEqual
+                    }
+                    _ => Equal,
+                }
+            }),
+
+            Some('!') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        BangEqual
+                    }
+                    _ => Bang,
+                }
+            }),
+
+            Some('|') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        PipeEqual
+                    }
+                    Some('|') => {
+                        self.next_char();
+                        DoublePipe
+                    }
+                    _ => Pipe,
+                }
+            }),
+
+            Some('&') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        AmpersandEqual
+                    }
+                    Some('&') => {
+                        self.next_char();
+                        DoubleAmpersand
+                    }
+                    _ => Ampersand,
+                }
+            }),
+
+            Some('^') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        CaretEqual
+                    }
+                    _ => Caret,
+                }
+            }),
+
+            Some('<') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        LessThanEqual
+                    }
+                    Some('<') => {
+                        self.next_char();
+                        match self.current {
+                            Some('=') => {
+                                self.next_char();
+                                LeftShiftEqual
+                            }
+                            _ => LeftShift,
+                        }
+                    }
+                    _ => LessThan,
+                }
+            }),
+
+            Some('>') => Some({
+                self.next_char();
+                match self.current {
+                    Some('=') => {
+                        self.next_char();
+                        GreaterThanEqual
+                    }
+                    Some('>') => {
+                        self.next_char();
+                        match self.current {
+                            Some('=') => {
+                                self.next_char();
+                                RightShiftEqual
+                            }
+                            _ => RightShift,
+                        }
+                    }
+                    _ => GreaterThan,
+                }
+            }),
+
+            Some('.') => single!(Dot),
+            Some('?') => single!(QuestionMark),
+            Some(':') => single!(Colon),
+            Some('~') => single!(Tilde),
+            Some(',') => single!(Comma),
+            Some(';') => single!(Semicolon),
+            Some('(') => single!(OpenParen),
+            Some(')') => single!(CloseParen),
+            Some('[') => single!(OpenSquare),
+            Some(']') => single!(CloseSquare),
+            Some('{') => single!(OpenCurly),
+            Some('}') => single!(CloseCurly),
+
+            _ => None,
+        }
+        .map(Token::Symbol)
     }
 }
 
 impl Iterator for Lexer {
     /// the only reason this is a Vec<CompilerError> is for strings with multiple invalid escapes.
-    type Item = Result<Locatable<Token>, Locatable<Vec<CompilerError>>>;
+    type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current.is_some_and(|c| c.is_whitespace()) {
@@ -469,15 +515,20 @@ impl Iterator for Lexer {
                     panic!("IDENTIFIER"); // this is a placeholder
                 }
 
-                c => self.eat_symbol(),
-            }
-            .unwrap_or(Token::BadSymbol(self.current.unwrap()));
+                c => {
+                    let result = self.eat_symbol();
+                    if result.is_none() {
+                        self.next_char();
+                    }
+                    result
+                }
+            };
             let end = self.position;
             let location = Span::new(start, end);
-            if self.problems.is_empty() {
+            if let Some(kind) = kind {
                 Ok(Locatable::new(location, kind))
             } else {
-                Err(Locatable::new(location, mem::take(&mut self.problems)))
+                Err(mem::take(&mut self.problems))
             }
         })
     }
@@ -571,21 +622,21 @@ fn test_parse_number_works_for_valid_int() {
         kind,
         Some(Token::Literal(Literal::Integer {
             value: 344,
-            suffix: None
+            suffix: None,
         }))
     );
 }
 
 #[test]
 fn test_eat_number_for_float_number() {
-    let test = "3.14";
+    let test = "3.16";
     let mut lexer = Lexer::new(test.to_string());
     let token = lexer.eat_number();
     assert_eq!(
         token,
         Some(Token::Literal(Literal::Float {
-            value: 3.14,
-            suffix: None
+            value: 3.16,
+            suffix: None,
         }))
     );
 }
@@ -599,7 +650,7 @@ fn test_eat_number_leading_zeros_are_still_float() {
         token,
         Some(Token::Literal(Literal::Float {
             value: 3.44,
-            suffix: None
+            suffix: None,
         }))
     );
 }
@@ -613,7 +664,7 @@ fn test_eat_number_decimal_number() {
         token,
         Some(Token::Literal(Literal::Integer {
             value: 123,
-            suffix: None
+            suffix: None,
         }))
     );
 }
@@ -627,7 +678,7 @@ fn test_eat_number_for_hex_number() {
         token,
         Some(Token::Literal(Literal::Integer {
             value: 26,
-            suffix: None
+            suffix: None,
         }))
     );
 }
@@ -659,7 +710,7 @@ fn test_eat_number_parses_integer_suffixes_properly() {
             token,
             Token::Literal(Literal::Integer {
                 value: 123,
-                suffix: Some(control.to_string())
+                suffix: Some(control.to_string()),
             })
         );
     }
@@ -672,14 +723,8 @@ fn test_eat_number_properly_catches_problematic_integer_suffix() {
     ];
     for test in tests {
         let mut lexer = Lexer::new(test.to_string());
-        let token = lexer.eat_number().expect("Expected token");
-        assert_eq!(
-            token,
-            Token::Literal(Literal::Integer {
-                value: 123,
-                suffix: None
-            })
-        );
+        let token = lexer.eat_number();
+        assert!(token.is_none());
         assert!(!lexer.problems.is_empty());
     }
 }
@@ -699,7 +744,7 @@ fn test_eat_number_properly_consumes_float_suffix() {
             token,
             Token::Literal(Literal::Float {
                 value: 123.4,
-                suffix: Some(control.to_string())
+                suffix: Some(control.to_string()),
             })
         );
     }
