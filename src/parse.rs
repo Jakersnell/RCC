@@ -1,12 +1,17 @@
-use crate::ast::{ASTNode, BinOp, BinaryExpression, Expression, UnOp, UnaryExpression};
-use crate::error::CompilerError;
-use crate::lex::LexResult;
-use crate::tokens::Literal;
-use crate::tokens::Symbol;
-use crate::tokens::Token;
-use crate::util::{CompilerResult, ExpressionNode, Locatable, LocatableToken, Program, Span};
 use std::io;
 use std::path::PathBuf;
+
+use crate::ast::{
+    ASTNode, AssignOp, BinOp, BinaryExpression, Expression, UnOp, UnaryExpression,
+    VariableDeclaration,
+};
+use crate::error::CompilerError;
+use crate::lex::LexResult;
+use crate::str_intern::InternedStr;
+use crate::tokens::Symbol;
+use crate::tokens::Token;
+use crate::tokens::{Keyword, Literal};
+use crate::util::{CompilerResult, ExpressionNode, Locatable, LocatableToken, Program, Span};
 
 pub struct Parser<L>
 where
@@ -18,6 +23,7 @@ where
     current: Option<LocatableToken>,
     next: Option<LocatableToken>,
     span: Span,
+    is_global: bool,
 }
 
 macro_rules! is {
@@ -27,18 +33,38 @@ macro_rules! is {
 }
 
 macro_rules! confirm {
-    ($invoker:ident, $pattern:pat, $expected_str:literal) => {
+        (
+        $invoker:ident,
+        $closure:expr,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+        $if_err:literal
+    ) => {{
         let locatable = $invoker.consume()?;
-        match locatable.value {
-            $pattern => (),
-            token => {
-                $invoker.span.end = locatable.location.end;
-                let string = format!(
-                    "Expected one of the following tokens:\n{}\nFound {:#?}\n",
-                    $expected_str, token
-                );
-            }
-        };
+        let formatted = format!("{:#?}", locatable.value);
+        #[allow(clippy::redundant_closure_call)]
+        match $closure(locatable.value) {
+            $pattern $(if $guard)? => Ok($if_ok),
+            _ => Err(vec![Locatable::new(
+                locatable.location,
+                CompilerError::ExpectedVariety($if_err.to_string(), formatted)
+            )])
+        }
+    }};
+
+    (
+        $invoker:ident,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+        $if_err:literal
+    ) => {
+        confirm!( $invoker, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
+    };
+
+    (
+        $invoker:ident,
+        $pattern:pat $(if $guard:expr)?,
+        $if_err:literal
+    ) => {
+        confirm!( $invoker, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
 }
 
@@ -59,6 +85,7 @@ where
             current: None,
             next: None,
             span: Span::new(0, 0),
+            is_global: true,
         }
     }
 
@@ -103,6 +130,26 @@ where
         Ok(locatable)
     }
 
+    fn confirm_identifier(&mut self) -> CompilerResult<InternedStr> {
+        confirm!(self, Token::Identifier(arc_str) => arc_str, "<identifier>")
+    }
+
+    fn confirm_literal(&mut self) -> CompilerResult<Literal> {
+        confirm!(self, Token::Literal(literal) => literal,  "<literal>")
+    }
+
+    fn confirm_binary_op(&mut self) -> CompilerResult<BinOp> {
+        confirm!(self, |x| {BinOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
+    }
+
+    fn confirm_unary_op(&mut self) -> CompilerResult<UnOp> {
+        confirm!(self, |x| {UnOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
+    }
+
+    fn confirm_type(&mut self) -> CompilerResult<Keyword> {
+        confirm!(self, Token::Keyword(x) if x.is_type() => x, "int, long, char, float, double")
+    }
+
     /// Advances the lexer without checking for EOF
     fn advance(&mut self) -> CompilerResult<()> {
         self.current = self.next.take();
@@ -131,7 +178,7 @@ where
     fn parse_global(&mut self) -> CompilerResult<ASTNode> {
         self.span.start = self.span.end;
         let expr = self.parse_binary_expression(None)?;
-        confirm!(self, Token::Symbol(Symbol::Semicolon), ";");
+        confirm!(self, Token::Symbol(Symbol::Semicolon) => (), ";")?;
         Ok(ASTNode::Expression(expr))
     }
 
@@ -140,8 +187,7 @@ where
             self.advance()?;
 
             if is!(self, next, Token::Identifier(_)) {
-                self.advance()?;
-                // could be function or variable declaration
+                panic!("VARIABLE DECLARATION NOT IMPLEMENTED");
             } else {
                 // this is cause for an error.
             }
@@ -152,6 +198,14 @@ where
         todo!()
     }
 
+    fn parse_variable_assignment(&mut self) -> CompilerResult<VariableDeclaration> {
+        // if current is an identifier and the next is an assignment operator we know this is an assignment
+        if let Ok(op) = AssignOp::try_from(&self.next.as_ref().unwrap().value) {
+            let identifier = confirm!(self, Token::Identifier(ident) => ident, "<identifier>")?;
+            panic!("VARIABLE ASSIGNMENT NOT IMPLEMENTED");
+        }
+        todo!()
+    }
     fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<ExpressionNode> {
         let lp = lp.unwrap_or(0);
         let mut left = self.parse_unary_expression()?;
@@ -222,7 +276,7 @@ where
         if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
             self.advance()?;
             let expr = self.parse_binary_expression(None)?;
-            confirm!(self, Token::Symbol(Symbol::CloseParen), "\t)");
+            confirm!(self, Token::Symbol(Symbol::CloseParen) => (), "\t)");
             return Ok(expr);
         }
 

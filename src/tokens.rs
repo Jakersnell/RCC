@@ -1,9 +1,11 @@
+use crate::str_intern::InternedStr;
 use std::fmt::Display;
+use std::sync::Arc;
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
     BadSymbol(char),
-    Identifier(String),
+    Identifier(InternedStr),
     Literal(Literal),
     Keyword(Keyword),
     Symbol(Symbol),

@@ -13,6 +13,8 @@ use std::{
 // The answer is, I wanted to learn how to implement a string interner myself, and I had a few ideas I wanted to test out.
 // I don't know if this is the best implementation, it was more just a creative exercise for me.
 
+pub type InternedStr = Arc<String>;
+
 lazy_static! {
     static ref INTERNER: Mutex<Interner<BuildHasherDefault<DefaultHasher>>> =
         Mutex::new(Interner::default());
