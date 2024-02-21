@@ -21,10 +21,10 @@ pub enum CompilerError {
     #[error("Invalid symbol: {0}")]
     InvalidSymbol(String),
 
-    #[error("Found {0} but expected one of the following: \n{1}\n")]
+    #[error("Found `{0}` but expected one of the following: \n\t{1}\n")]
     ExpectedVariety(String, String),
 
-    #[error("Expected {0} but found {1}")]
+    #[error("Expected `{0}` but found {1}")]
     ExpectedButFound(String, String),
 
     #[error("Invalid hex literal: {0}")]
