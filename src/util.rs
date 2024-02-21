@@ -5,7 +5,6 @@ use derive_new::new;
 
 pub type LocatableToken = Locatable<LexToken>;
 pub type CompilerResult<T> = Result<T, Vec<Locatable<CompilerError>>>;
-pub type Node = Locatable<ASTNode>;
 pub type StatementNode = Locatable<Statement>;
 pub type ExpressionNode = Locatable<Expression>;
 pub type DeclarationNode = Locatable<Declaration>;
@@ -21,14 +20,14 @@ pub struct Locatable<T> {
 
 #[derive(Debug, PartialEq, new, Clone, Copy)]
 pub struct Span {
-    start: usize,
-    end: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
 #[derive(Debug)]
 pub struct Program {
     // I plan on adding more fields to this struct later
-    pub body: Option<CompilerResult<Vec<Node>>>,
+    pub body: Option<CompilerResult<Vec<ASTNode>>>,
     pub warnings: Vec<CompilerWarning>,
     pub file_name: String,
 }
