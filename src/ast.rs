@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+use crate::str_intern::InternedStr;
 use derive_new::new;
 use thiserror::__private::AsDisplay;
 
@@ -44,7 +45,7 @@ pub enum Statement {
 
 #[derive(Debug, new)]
 pub enum Expression {
-    Variable(String),
+    Variable(InternedStr),
     Literal(Literal),
     Binary(BinaryExpression),
     Unary(UnaryExpression),
@@ -103,7 +104,7 @@ pub struct VariableDeclaration {
 
 #[derive(Debug, new)]
 pub struct FunctionDeclaration {
-    pub name: String,
+    pub ident: InternedStr,
     pub return_type: DataType,
     pub params: Vec<VariableDeclaration>,
     pub var_args: bool,
