@@ -106,7 +106,7 @@ impl Lexer {
 
     /// This will consume the next identifier like token
     /// Such tokens include Identifiers, Keywords, and Special Symbols like "sizeof"
-    fn eat_ident_like(&mut self) -> Option<Token> {
+    fn eat_ident_or_keyword(&mut self) -> Option<Token> {
         self.consume_alphanumeric_text()
             .map(|text| match text.as_str() {
                 "int" => Token::Keyword(Keyword::Int),
@@ -511,9 +511,7 @@ impl Iterator for Lexer {
 
                 '0'..='9' => self.eat_number(),
 
-                '_' | 'a'..='z' | 'A'..='Z' => {
-                    panic!("IDENTIFIER"); // this is a placeholder
-                }
+                '_' | 'a'..='z' | 'A'..='Z' => self.eat_ident_or_keyword(),
 
                 c => {
                     let result = self.eat_symbol();
