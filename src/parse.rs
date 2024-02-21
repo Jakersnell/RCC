@@ -150,6 +150,16 @@ where
         confirm!(self, Token::Keyword(x) if x.is_type() => x, "int, long, char, float, double")
     }
 
+    fn check_for_eof(&mut self, expected: &'static str) -> CompilerResult<()> {
+        if self.current.is_none() {
+            return Err(self.unexpected_eof(format!(
+                "Expected one of the following {}, Found EOF",
+                expected
+            )));
+        }
+        Ok(())
+    }
+
     /// Advances the lexer without checking for EOF
     fn advance(&mut self) -> CompilerResult<()> {
         self.current = self.next.take();
@@ -202,10 +212,9 @@ where
         let lp = lp.unwrap_or(0);
         let mut left = self.parse_unary_expression()?;
         loop {
-            if self.current.is_none() {
-                return Err(self.unexpected_eof(
-                    "Expected one of the following tokens:\n\t+\n\t-\n\t*\n\t/\n\t%\n\t&\n\t|\n\t^\n Found EOF".to_string(),
-                ));
+            self.check_for_eof("+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")?;
+            if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+                break;
             }
             let token = self.current.as_ref().unwrap();
             let bin_op_result = BinOp::try_from(&token.value);
@@ -286,7 +295,7 @@ where
             Err(vec![Locatable::new(
                 self.span,
                 CompilerError::ExpectedVariety(
-                    "int, long, long long, char, float, or double".to_string(),
+                    "int, long, char, float, or double".to_string(),
                     format!("{:#?}", locatable.value),
                 ),
             )])

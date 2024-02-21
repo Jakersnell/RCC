@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{format, Display, Formatter};
 use std::sync::Arc;
 
 use crate::str_intern::InternedStr;
@@ -59,6 +59,7 @@ impl Expression {
         let mut padding = padding;
         padding += if last { "   " } else { "│  " };
         let child_output = match self {
+            Expression::Variable(ident) => format!(" {}\n", ident),
             Expression::Literal(literal) => {
                 let value = match literal {
                     Literal::Integer { value, suffix } => value.to_string(),
@@ -75,7 +76,7 @@ impl Expression {
                 unary.right.value.pretty_print(padding.clone(), true);
                 format!(" {}\n", unary.op)
             }
-            _ => unimplemented!(),
+            val => unimplemented!("{:#?}", val),
         };
 
         output + &child_output
@@ -280,6 +281,18 @@ impl TryFrom<&Token> for BinOp {
             Token::Symbol(Symbol::Caret) => Ok(BinOp::BitwiseXor),
             Token::Symbol(Symbol::LeftShift) => Ok(BinOp::LeftShift),
             Token::Symbol(Symbol::RightShift) => Ok(BinOp::RightShift),
+
+            Token::Symbol(Symbol::Equal) => Ok(BinOp::Assign(AssignOp::Assign)),
+            Token::Symbol(Symbol::PlusEqual) => Ok(BinOp::Assign(AssignOp::Plus)),
+            Token::Symbol(Symbol::MinusEqual) => Ok(BinOp::Assign(AssignOp::Minus)),
+            Token::Symbol(Symbol::StarEqual) => Ok(BinOp::Assign(AssignOp::Multiply)),
+            Token::Symbol(Symbol::SlashEqual) => Ok(BinOp::Assign(AssignOp::Divide)),
+            Token::Symbol(Symbol::ModuloEqual) => Ok(BinOp::Assign(AssignOp::Modulo)),
+            Token::Symbol(Symbol::AmpersandEqual) => Ok(BinOp::Assign(AssignOp::BitwiseAnd)),
+            Token::Symbol(Symbol::PipeEqual) => Ok(BinOp::Assign(AssignOp::BitwiseOr)),
+            Token::Symbol(Symbol::CaretEqual) => Ok(BinOp::Assign(AssignOp::BitwiseXor)),
+            Token::Symbol(Symbol::LeftShiftEqual) => Ok(BinOp::Assign(AssignOp::LeftShift)),
+            Token::Symbol(Symbol::RightShiftEqual) => Ok(BinOp::Assign(AssignOp::RightShift)),
 
             _ => Err(()),
         }
