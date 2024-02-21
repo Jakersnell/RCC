@@ -96,6 +96,7 @@ pub enum Declaration {
 
 #[derive(Debug, new)]
 pub struct VariableDeclaration {
+    pub qualifiers: Vec<TypeQualifier>,
     pub name: String,
     pub ty: DataType,
 }
@@ -190,6 +191,14 @@ pub enum DataType {
     Int,
     UnsignedInt,
     Float,
+}
+
+#[derive(Debug)]
+pub enum TypeQualifier {
+    Const,
+    Volatile,
+    Restrict,
+    Unsigned,
 }
 
 impl BinOp {
@@ -316,10 +325,10 @@ impl Display for UnOp {
     }
 }
 
-impl TryFrom<Token> for AssignOp {
+impl TryFrom<&Token> for AssignOp {
     type Error = ();
 
-    fn try_from(value: Token) -> Result<Self, Self::Error> {
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
         match value {
             Token::Symbol(Symbol::Equal) => Ok(AssignOp::Assign),
             Token::Symbol(Symbol::PlusEqual) => Ok(AssignOp::Plus),
