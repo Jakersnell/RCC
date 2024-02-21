@@ -198,14 +198,6 @@ where
         todo!()
     }
 
-    fn parse_variable_assignment(&mut self) -> CompilerResult<VariableDeclaration> {
-        // if current is an identifier and the next is an assignment operator we know this is an assignment
-        if let Ok(op) = AssignOp::try_from(&self.next.as_ref().unwrap().value) {
-            let identifier = confirm!(self, Token::Identifier(ident) => ident, "<identifier>")?;
-            panic!("VARIABLE ASSIGNMENT NOT IMPLEMENTED");
-        }
-        todo!()
-    }
     fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<ExpressionNode> {
         let lp = lp.unwrap_or(0);
         let mut left = self.parse_unary_expression()?;
