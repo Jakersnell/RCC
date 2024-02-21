@@ -1,41 +1,22 @@
+use std::fmt::Display;
 use std::sync::Arc;
 
 use derive_new::new;
+use thiserror::__private::AsDisplay;
 
-use crate::error::CompilerWarning;
-use crate::util::CompilerResult;
-use crate::{
-    error::CompilerError,
-    tokens::{Literal, Symbol},
-};
-
-#[derive(Debug)]
-pub struct Program {
-    // I plan on adding more fields to this struct later
-    pub body: Option<CompilerResult<Vec<ASTNode>>>,
-    pub warnings: Vec<CompilerWarning>,
-    pub file_name: String,
-}
-
-impl Program {
-    pub fn new(file_name: String) -> Self {
-        Self {
-            body: None,
-            warnings: Vec::new(),
-            file_name,
-        }
-    }
-}
+use crate::tokens::{Literal, Symbol, Token};
+use crate::util::{CompoundExpression, DeclarationNode, ExpressionNode, StatementNode};
 
 #[derive(Debug)]
 pub enum ASTNode {
-    Statement(Statement),
-    Expression(Expression),
-    Function(Function),
+    Statement(StatementNode),
+    Expression(ExpressionNode),
+    Declaration(DeclarationNode),
 }
 
 #[derive(Debug)]
 pub enum Statement {
+    Expression(Expression),
     VariableDeclaration(VariableDeclaration),
     Block(Vec<ASTNode>),
     Return(Expression),
@@ -51,6 +32,12 @@ pub enum Expression {
     SizeOf(TypeOrIdentifier),
 }
 
+#[derive(Debug)]
+pub enum Declaration {
+    Function(FunctionDeclaration),
+    Variable(VariableDeclaration),
+}
+
 #[derive(Debug, new)]
 pub struct VariableDeclaration {
     pub name: String,
@@ -58,29 +45,31 @@ pub struct VariableDeclaration {
 }
 
 #[derive(Debug, new)]
+pub struct FunctionDeclaration {
+    pub name: String,
+    pub return_type: DataType,
+    pub params: Vec<VariableDeclaration>,
+    pub var_args: bool,
+    pub body: Option<Vec<ASTNode>>,
+}
+
+#[derive(Debug, new)]
 pub struct UnaryExpression {
-    op: UnOp,
-    right: Box<Expression>,
+    pub op: UnOp,
+    pub right: Box<ExpressionNode>,
 }
 
 #[derive(Debug, new)]
 pub struct BinaryExpression {
-    left: Box<Expression>,
-    op: BinOp,
-    right: Box<Expression>,
-}
-
-#[derive(Debug, new)]
-pub struct Function {
-    pub name: String,
-    pub params: Vec<VariableDeclaration>,
-    pub body: Vec<ASTNode>,
+    pub left: Box<ExpressionNode>,
+    pub op: BinOp,
+    pub right: Box<ExpressionNode>,
 }
 
 #[derive(Debug, new)]
 pub struct FunctionCall {
     pub name: String,
-    pub args: Vec<ASTNode>,
+    pub args: CompoundExpression,
 }
 
 #[derive(Debug)]
@@ -128,6 +117,7 @@ pub enum AssignOp {
 
 #[derive(Debug)]
 pub enum UnOp {
+    Plus,
     Negate,
     LogicalNot,
     BitwiseNot,
@@ -162,44 +152,153 @@ impl BinOp {
     }
 }
 
-impl TryFrom<Symbol> for BinOp {
+impl Display for BinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use BinOp::*;
+        let str = match self {
+            Add => "+",
+            Subtract => "-",
+            Multiply => "*",
+            Divide => "/",
+            Modulo => "%",
+            Equal => "==",
+            NotEqual => "!=",
+            GreaterThan => ">",
+            GreaterThanEqual => ">=",
+            LessThan => "<",
+            LessThanEqual => "<=",
+            LogicalAnd => "&&",
+            LogicalOr => "||",
+            BitwiseAnd => "&",
+            BitwiseOr => "|",
+            BitwiseXor => "^",
+            LeftShift => "<<",
+            RightShift => ">>",
+            Assign(AssignOp::Assign) => "=",
+            Assign(AssignOp::Plus) => "+=",
+            Assign(AssignOp::Minus) => "-=",
+            Assign(AssignOp::Multiply) => "*=",
+            Assign(AssignOp::Divide) => "/=",
+            Assign(AssignOp::Modulo) => "%=",
+            Assign(AssignOp::BitwiseAnd) => "&=",
+            Assign(AssignOp::BitwiseOr) => "|=",
+            Assign(AssignOp::BitwiseXor) => "^=",
+            Assign(AssignOp::LeftShift) => "<<=",
+            Assign(AssignOp::RightShift) => ">>=",
+        }
+        .to_string();
+        write!(f, "{}", str)
+    }
+}
+
+impl TryFrom<&Token> for BinOp {
     type Error = ();
 
-    fn try_from(value: Symbol) -> Result<Self, Self::Error> {
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
         match value {
-            Symbol::Plus => Ok(BinOp::Add),
-            Symbol::Minus => Ok(BinOp::Subtract),
-            Symbol::Star => Ok(BinOp::Multiply),
-            Symbol::Slash => Ok(BinOp::Divide),
-            Symbol::Modulo => Ok(BinOp::Modulo),
+            Token::Symbol(Symbol::Plus) => Ok(BinOp::Add),
+            Token::Symbol(Symbol::Minus) => Ok(BinOp::Subtract),
+            Token::Symbol(Symbol::Star) => Ok(BinOp::Multiply),
+            Token::Symbol(Symbol::Slash) => Ok(BinOp::Divide),
+            Token::Symbol(Symbol::Modulo) => Ok(BinOp::Modulo),
 
-            Symbol::EqualEqual => Ok(BinOp::Equal),
-            Symbol::BangEqual => Ok(BinOp::NotEqual),
-            Symbol::GreaterThan => Ok(BinOp::GreaterThan),
-            Symbol::GreaterThanEqual => Ok(BinOp::GreaterThanEqual),
-            Symbol::LessThan => Ok(BinOp::LessThan),
-            Symbol::LessThanEqual => Ok(BinOp::LessThanEqual),
+            Token::Symbol(Symbol::EqualEqual) => Ok(BinOp::Equal),
+            Token::Symbol(Symbol::BangEqual) => Ok(BinOp::NotEqual),
+            Token::Symbol(Symbol::GreaterThan) => Ok(BinOp::GreaterThan),
+            Token::Symbol(Symbol::GreaterThanEqual) => Ok(BinOp::GreaterThanEqual),
+            Token::Symbol(Symbol::LessThan) => Ok(BinOp::LessThan),
+            Token::Symbol(Symbol::LessThanEqual) => Ok(BinOp::LessThanEqual),
 
-            Symbol::Ampersand => Ok(BinOp::BitwiseAnd),
-            Symbol::Pipe => Ok(BinOp::BitwiseOr),
-            Symbol::Caret => Ok(BinOp::BitwiseXor),
-            Symbol::LeftShift => Ok(BinOp::LeftShift),
-            Symbol::RightShift => Ok(BinOp::RightShift),
+            Token::Symbol(Symbol::Ampersand) => Ok(BinOp::BitwiseAnd),
+            Token::Symbol(Symbol::Pipe) => Ok(BinOp::BitwiseOr),
+            Token::Symbol(Symbol::Caret) => Ok(BinOp::BitwiseXor),
+            Token::Symbol(Symbol::LeftShift) => Ok(BinOp::LeftShift),
+            Token::Symbol(Symbol::RightShift) => Ok(BinOp::RightShift),
 
             _ => Err(()),
         }
     }
 }
 
-impl TryFrom<Symbol> for UnOp {
+impl UnOp {
+    pub fn precedence(&self) -> u8 {
+        use UnOp::*;
+        match self {
+            Plus => 4,
+            Negate => 4,
+            LogicalNot => 4,
+            BitwiseNot => 4,
+        }
+    }
+}
+
+impl TryFrom<&Token> for UnOp {
     type Error = ();
 
-    fn try_from(value: Symbol) -> Result<Self, Self::Error> {
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
         match value {
-            Symbol::Minus => Ok(UnOp::Negate),
-            Symbol::Bang => Ok(UnOp::LogicalNot),
-            Symbol::Tilde => Ok(UnOp::BitwiseNot),
+            Token::Symbol(Symbol::Plus) => Ok(UnOp::Plus),
+            Token::Symbol(Symbol::Minus) => Ok(UnOp::Negate),
+            Token::Symbol(Symbol::Bang) => Ok(UnOp::LogicalNot),
+            Token::Symbol(Symbol::Tilde) => Ok(UnOp::BitwiseNot),
             _ => Err(()),
         }
+    }
+}
+
+impl Display for UnOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use UnOp::*;
+        let str = match self {
+            Plus => "+",
+            Negate => "-",
+            LogicalNot => "!",
+            BitwiseNot => "~",
+        }
+        .to_string();
+        write!(f, "{}", str)
+    }
+}
+
+impl TryFrom<Token> for AssignOp {
+    type Error = ();
+
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::Symbol(Symbol::Equal) => Ok(AssignOp::Assign),
+            Token::Symbol(Symbol::PlusEqual) => Ok(AssignOp::Plus),
+            Token::Symbol(Symbol::MinusEqual) => Ok(AssignOp::Minus),
+            Token::Symbol(Symbol::StarEqual) => Ok(AssignOp::Multiply),
+            Token::Symbol(Symbol::SlashEqual) => Ok(AssignOp::Divide),
+            Token::Symbol(Symbol::ModuloEqual) => Ok(AssignOp::Modulo),
+            Token::Symbol(Symbol::AmpersandEqual) => Ok(AssignOp::BitwiseAnd),
+            Token::Symbol(Symbol::PipeEqual) => Ok(AssignOp::BitwiseOr),
+            Token::Symbol(Symbol::CaretEqual) => Ok(AssignOp::BitwiseXor),
+            Token::Symbol(Symbol::LeftShiftEqual) => Ok(AssignOp::LeftShift),
+            Token::Symbol(Symbol::RightShiftEqual) => Ok(AssignOp::RightShift),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl Display for AssignOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AssignOp::*;
+        let str = match self {
+            Assign => "=",
+            Plus => "+=",
+            Minus => "-=",
+            Multiply => "*=",
+            Divide => "/=",
+            Modulo => "%=",
+            BitwiseAnd => "&=",
+            BitwiseOr => "|=",
+            BitwiseXor => "^=",
+            LeftShift => "<<=",
+            RightShift => ">>=",
+        }
+        .to_string();
+        write!(f, "{}", str)
     }
 }
