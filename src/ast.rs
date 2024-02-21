@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use derive_new::new;
@@ -7,11 +7,31 @@ use thiserror::__private::AsDisplay;
 use crate::tokens::{Literal, Symbol, Token};
 use crate::util::{CompoundExpression, DeclarationNode, ExpressionNode, StatementNode};
 
+pub struct ASTRoot(pub Vec<ASTNode>);
+
+impl Display for ASTRoot {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for node in &self.0 {
+            write!(f, "{}", node)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub enum ASTNode {
     Statement(StatementNode),
     Expression(ExpressionNode),
     Declaration(DeclarationNode),
+}
+
+impl Display for ASTNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ASTNode::Expression(expression) => write!(f, "{}", expression.value),
+            _ => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -30,6 +50,42 @@ pub enum Expression {
     Unary(UnaryExpression),
     FunctionCall(FunctionCall),
     SizeOf(TypeOrIdentifier),
+}
+
+impl Expression {
+    fn pretty_print(&self, padding: String, last: bool) -> String {
+        let output = format!("{}{}", padding, if last { "└──" } else { "├──" });
+        let mut padding = padding;
+        padding += if last { "   " } else { "│  " };
+        let child_output = match self {
+            Expression::Literal(literal) => {
+                let value = match literal {
+                    Literal::Integer { value, suffix } => value.to_string(),
+                    Literal::Float { value, suffix } => value.to_string(),
+                };
+                format!(" {}\n", value)
+            }
+            Expression::Binary(binary) => {
+                let left = binary.left.value.pretty_print(padding.clone(), false);
+                let right = binary.right.value.pretty_print(padding.clone(), true);
+                format!(" {}\n{}{}", binary.op, left, right)
+            }
+            Expression::Unary(unary) => {
+                unary.right.value.pretty_print(padding.clone(), true);
+                format!(" {}\n", unary.op)
+            }
+            _ => unimplemented!(),
+        };
+
+        output + &child_output
+    }
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let output = self.pretty_print("".to_string(), true);
+        write!(f, "{}", output)
+    }
 }
 
 #[derive(Debug)]
@@ -153,7 +209,7 @@ impl BinOp {
 }
 
 impl Display for BinOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use BinOp::*;
         let str = match self {
             Add => "+",
@@ -247,7 +303,7 @@ impl TryFrom<&Token> for UnOp {
 }
 
 impl Display for UnOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use UnOp::*;
         let str = match self {
             Plus => "+",
@@ -283,7 +339,7 @@ impl TryFrom<Token> for AssignOp {
 }
 
 impl Display for AssignOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use AssignOp::*;
         let str = match self {
             Assign => "=",

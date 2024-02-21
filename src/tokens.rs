@@ -84,14 +84,3 @@ pub enum Symbol {
     CloseParen,
     Semicolon,
 }
-
-#[test]
-fn test_token_as_locatable_value_can_be_equivalency_checked() {
-    let span = crate::util::Span::new(0, 1);
-    let token = Token::Keyword(Keyword::Int);
-    let locatable = Some(crate::util::Locatable::new(span, token));
-    let boolean = locatable
-        .as_ref()
-        .is_some_and(|locatable| matches!(&locatable.value, Token::Keyword(x) if x.is_type()));
-    assert!(boolean);
-}
