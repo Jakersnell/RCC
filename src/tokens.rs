@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, PartialEq)]
 pub enum Token {
     BadSymbol(char),
@@ -6,6 +8,7 @@ pub enum Token {
     Keyword(Keyword),
     Symbol(Symbol),
 }
+
 #[derive(Debug, PartialEq)]
 pub enum Literal {
     Integer { value: u128, suffix: Option<String> },
@@ -17,7 +20,6 @@ pub enum Keyword {
     Int,
     Double,
     Return,
-    Sizeof,
 }
 
 impl Keyword {
@@ -28,6 +30,8 @@ impl Keyword {
 
 #[derive(Debug, PartialEq)]
 pub enum Symbol {
+    Sizeof, // It's really convenient to have this as a symbol
+
     Plus,
     Minus,
     Star,
