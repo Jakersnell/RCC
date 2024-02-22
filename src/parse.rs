@@ -34,82 +34,88 @@ macro_rules! is {
     };
 }
 
-macro_rules! match_token {
-
+macro_rules! match_body {
     (
-        $invoker:ident,
-        $current_or_next:ident,
+        $value:ident,
+        $location:ident,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
         $if_err:literal
     ) => {{
-        $invoker.check_for_eof($if_err)?;
-        let locatable = $invoker.$current_or_next.as_ref().unwrap();
-        let formatted = format!("{:#?}", locatable.value);
+        let formatted = format!("{:#?}", $value);
         #[allow(clippy::redundant_closure_call)]
-        match $closure(&locatable.value) {
-            $pattern $(if $guard)? => Ok(Locatable::new(locatable.location, $if_ok)),
-            _ => Err(vec![Locatable::new(
-                locatable.location,
-                CompilerError::ExpectedVariety($if_err.to_string(), formatted)
-            )])
+        match $closure($value) {
+            $pattern $(if $guard)? => Ok(Locatable::new($location, $if_ok)),
+            _ => Err(vec![Locatable{
+                location:$location,
+                value:CompilerError::ExpectedVariety($if_err.to_string(), formatted)
+            }])
         }
     }};
-
-    (
-        $invoker:ident,
-        $current_or_next:ident,
-        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
-    ) => {
-        match_token!( $invoker, $current_or_next, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
-    };
-
-
-    (
-        $invoker:ident,
-        $current_or_next:ident,
-        $pattern:pat $(if $guard:expr)?,
-        $if_err:literal
-    ) => {
-        match_token!( $invoker, $current_or_next, |x| {x}, $pattern $(if $guard)? => (), $if_err)
-    };
 }
 
 macro_rules! confirm {
+
     (
         $invoker:ident,
+        consume,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
         $if_err:literal
     ) => {{
         let locatable = $invoker.consume()?;
-        let formatted = format!("{:#?}", locatable.value);
         let location = locatable.location;
-        #[allow(clippy::redundant_closure_call)]
-        match $closure(locatable.value) {
-            $pattern $(if $guard)? => Ok(Locatable::new(location, $if_ok)),
-            _ => Err(vec![Locatable::new(
-                locatable.location,
-                CompilerError::ExpectedVariety($if_err.to_string(), formatted)
-            )])
-        }
+        let value = locatable.value;
+        match_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
     (
         $invoker:ident,
+        consume,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
         $if_err:literal
     ) => {
-        confirm!( $invoker, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm!( $invoker, consume, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
     };
 
     (
         $invoker:ident,
+        consume,
         $pattern:pat $(if $guard:expr)?,
         $if_err:literal
     ) => {
-        confirm!( $invoker, |x| {x}, $pattern $(if $guard)? => (), $if_err)
+        confirm!( $invoker, consume, |x| {x}, $pattern $(if $guard)? => (), $if_err)
+    };
+
+    (
+        $invoker:ident,
+        borrow,
+        $closure:expr,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+        $if_err:literal
+    ) => {{
+        let locatable = &$invoker.current.as_ref().unwrap();
+        let value = &locatable.value;
+        let location = locatable.location;
+        match_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+    }};
+
+        (
+        $invoker:ident,
+        borrow,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+        $if_err:literal
+    ) => {
+        confirm!( $invoker, borrow, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
+    };
+
+    (
+        $invoker:ident,
+        borrow,
+        $pattern:pat $(if $guard:expr)?,
+        $if_err:literal
+    ) => {
+        confirm!( $invoker, borrow, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
 }
 
@@ -179,27 +185,27 @@ where
     }
 
     fn confirm_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
-        confirm!(self, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
+        confirm!(self, consume, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
 
     fn confirm_literal(&mut self) -> CompilerResult<Locatable<Literal>> {
-        confirm!(self, Token::Literal(literal) => literal,  "<literal>")
+        confirm!(self, consume, Token::Literal(literal) => literal,  "<literal>")
     }
 
     fn confirm_binary_op(&mut self) -> CompilerResult<Locatable<BinaryOp>> {
-        confirm!(self, |x| {BinaryOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
+        confirm!(self, consume, |x| {BinaryOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
     }
 
     fn confirm_unary_op(&mut self) -> CompilerResult<Locatable<UnaryOp>> {
-        confirm!(self, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
+        confirm!(self, consume, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
     }
 
     fn confirm_type(&mut self) -> CompilerResult<Locatable<DataType>> {
-        confirm!(self, |x| {DataType::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
+        confirm!(self, consume, |x| {DataType::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
     }
 
     fn match_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
-        match_token!(self, current, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
+        confirm!(self, borrow, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
 
     #[inline(always)]
@@ -245,7 +251,7 @@ where
     fn parse_global(&mut self) -> CompilerResult<InitDeclaration> {
         self.span.start = self.span.end;
         let expr = self.parse_binary_expression(None)?;
-        confirm!(self, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+        confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
         todo!("parse init declaration") // eg: int x = 5; or int func(int x) { return x; }
     }
 
@@ -280,7 +286,7 @@ where
             let expr = self.parse_binary_expression(None)?;
         };
 
-        confirm!(self, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+        confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
         todo!()
     }
     fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<Expression> {
@@ -328,7 +334,7 @@ where
         if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
             self.advance()?;
             let expr = self.parse_binary_expression(None)?;
-            confirm!(self, Token::Symbol(Symbol::CloseParen) => (), "\t)");
+            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
             return Ok(expr);
         }
 
