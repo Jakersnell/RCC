@@ -20,7 +20,6 @@ where
     current: Option<LocatableToken>,
     next: Option<LocatableToken>,
     span: Span,
-    is_global: bool,
 }
 
 macro_rules! is {
@@ -112,7 +111,6 @@ where
             current: None,
             next: None,
             span: Span::new(0, 0),
-            is_global: true,
         }
     }
 
