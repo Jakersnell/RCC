@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::sync::Arc;
+
 mod ast;
 mod error;
 mod lex;
