@@ -1,17 +1,14 @@
 use std::io;
 use std::path::PathBuf;
 
-use crate::ast::{
-    ASTNode, AssignOp, BinOp, BinaryExpression, Expression, UnOp, UnaryExpression,
-    VariableDeclaration,
-};
+use crate::ast::{AssignOp, BinaryOp, Expression, InitDeclaration, Statement, UnaryOp};
 use crate::error::CompilerError;
 use crate::lex::LexResult;
 use crate::str_intern::InternedStr;
 use crate::tokens::Symbol;
 use crate::tokens::Token;
 use crate::tokens::{Keyword, Literal};
-use crate::util::{CompilerResult, ExpressionNode, Locatable, LocatableToken, Program, Span};
+use crate::util::{CompilerResult, Locatable, LocatableToken, Program, Span};
 
 pub struct Parser<L>
 where
@@ -19,7 +16,7 @@ where
 {
     lexer: L,
     program: Program,
-    global: Vec<ASTNode>,
+    global: Vec<InitDeclaration>,
     current: Option<LocatableToken>,
     next: Option<LocatableToken>,
     span: Span,
@@ -32,8 +29,38 @@ macro_rules! is {
     };
 }
 
+macro_rules! match_token {
+    (
+        $invoker:ident,
+        $closure:expr,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+    ) => {
+        #[allow(clippy::redundant_closure_call)]
+        &$invoker.current.as_ref().map(|current| {
+            match $closure(current) {
+                Some($pattern) $(if $guard)? => Some($if_ok),
+                _ => None
+            }
+        }).flatten()
+    };
+
+    (
+        $invoker:ident,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+    ) => {
+        match_token!( $invoker, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
+    };
+
+    (
+        $invoker:ident,
+        $pattern:pat $(if $guard:expr)?,
+    ) => {
+        match_token!( $invoker, |x| {x}, $pattern $(if $guard)? => (), $if_err)
+    };
+}
+
 macro_rules! confirm {
-        (
+    (
         $invoker:ident,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
@@ -97,12 +124,13 @@ where
     }
 
     fn prime(&mut self) -> CompilerResult<()> {
-        self.advance()?;
-        self.advance()?;
+        for _ in 0..3 {
+            self.advance()?;
+        }
         Ok(())
     }
 
-    fn get_body(&mut self) -> CompilerResult<Vec<ASTNode>> {
+    fn get_body(&mut self) -> CompilerResult<Vec<InitDeclaration>> {
         self.prime();
 
         while self.current.is_some() {
@@ -138,12 +166,12 @@ where
         confirm!(self, Token::Literal(literal) => literal,  "<literal>")
     }
 
-    fn confirm_binary_op(&mut self) -> CompilerResult<BinOp> {
-        confirm!(self, |x| {BinOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
+    fn confirm_binary_op(&mut self) -> CompilerResult<BinaryOp> {
+        confirm!(self, |x| {BinaryOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
     }
 
-    fn confirm_unary_op(&mut self) -> CompilerResult<UnOp> {
-        confirm!(self, |x| {UnOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
+    fn confirm_unary_op(&mut self) -> CompilerResult<UnaryOp> {
+        confirm!(self, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
     }
 
     fn confirm_type(&mut self) -> CompilerResult<Keyword> {
@@ -152,10 +180,7 @@ where
 
     fn check_for_eof(&mut self, expected: &'static str) -> CompilerResult<()> {
         if self.current.is_none() {
-            return Err(self.unexpected_eof(format!(
-                "Expected one of the following {}, Found EOF",
-                expected
-            )));
+            return Err(self.unexpected_eof(format!("{}, Found EOF", expected)));
         }
         Ok(())
     }
@@ -175,6 +200,7 @@ where
         Ok(())
     }
 
+    // Collects all errors from the lexer and appends them to the errors vector
     fn get_all_errors(&mut self, errors: &mut Vec<Locatable<CompilerError>>) {
         let all_results = std::mem::take(&mut self.lexer).collect::<Vec<_>>();
         let all_errors = all_results
@@ -185,30 +211,42 @@ where
         errors.extend(all_errors);
     }
 
-    fn parse_global(&mut self) -> CompilerResult<ASTNode> {
+    fn parse_global(&mut self) -> CompilerResult<InitDeclaration> {
         self.span.start = self.span.end;
         let expr = self.parse_binary_expression(None)?;
         confirm!(self, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-        Ok(ASTNode::Expression(expr))
+        todo!("parse init declaration") // eg: int x = 5; or int func(int x) { return x; }
     }
 
-    fn parse_declaration(&mut self) -> CompilerResult<ASTNode> {
-        if is!(self, current, Token::Keyword(x) if x.is_type()) {
+    fn parse_declaration(&mut self) -> CompilerResult<InitDeclaration> {
+        while is!(self, current, Token::Symbol(Symbol::Semicolon)) {
             self.advance()?;
-
-            if is!(self, next, Token::Identifier(_)) {
-                panic!("VARIABLE DECLARATION NOT IMPLEMENTED");
-            } else {
-                // this is cause for an error.
-            }
-        } else {
-            // this is cause for an error.
         }
+        // cases:
+        // 1. declaration with or without initialization
+        // 2. function declaration
+        // right now we won't deal with struct declaration
 
         todo!()
     }
 
-    fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<ExpressionNode> {
+    /*
+        case keyword -> this is a statement
+        case { -> this is a block
+        case ; -> skip empty statement
+        case _ -> this is an expression
+    */
+    #[allow(clippy::all)]
+    fn parse_statement(&mut self) -> CompilerResult<InitDeclaration> {
+        let stmt = if is!(self, current, Token::Keyword(_)) {
+        } else {
+            let expr = self.parse_binary_expression(None)?;
+        };
+
+        confirm!(self, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+        todo!()
+    }
+    fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<Expression> {
         let lp = lp.unwrap_or(0);
         let mut left = self.parse_unary_expression()?;
         loop {
@@ -217,7 +255,7 @@ where
                 break;
             }
             let token = self.current.as_ref().unwrap();
-            let bin_op_result = BinOp::try_from(&token.value);
+            let bin_op_result = BinaryOp::try_from(&token.value);
             if bin_op_result.is_err() {
                 break;
             }
@@ -229,19 +267,12 @@ where
             self.span.end = token.location.end;
             self.advance()?;
             let right = self.parse_binary_expression(Some(rp))?;
-            left = Locatable::new(
-                self.span,
-                Expression::Binary(BinaryExpression {
-                    left: Box::new(left),
-                    op: bin_op,
-                    right: Box::new(right),
-                }),
-            );
+            left = Expression::Binary(bin_op, Box::new(left), Box::new(right));
         }
         Ok(left)
     }
 
-    fn parse_unary_expression(&mut self) -> CompilerResult<ExpressionNode> {
+    fn parse_unary_expression(&mut self) -> CompilerResult<Expression> {
         if self.current.is_none() {
             return Err(self.unexpected_eof(
                 "Expected one of the following tokens:+\n\t-\n\t!\n\t~\n\t*\n\t&\n\tsizeof\n\t<identifier>\n\tliteral\n\t(\n Found EOF".to_string(),
@@ -249,7 +280,7 @@ where
         }
         let mut node;
         let token = self.current.as_ref().unwrap();
-        let un_op_result = UnOp::try_from(&token.value);
+        let un_op_result = UnaryOp::try_from(&token.value);
 
         if un_op_result
             .as_ref()
@@ -259,13 +290,7 @@ where
             self.span.end = token.location.end;
             self.advance()?;
             let expr = self.parse_unary_expression()?;
-            node = Ok(Locatable::new(
-                self.span,
-                Expression::Unary(UnaryExpression {
-                    op: un_op,
-                    right: Box::new(expr),
-                }),
-            ));
+            node = Ok(Expression::Unary(un_op, Box::new(expr)));
         } else {
             node = self.parse_primary_expression();
         }
@@ -273,7 +298,7 @@ where
         node
     }
 
-    fn parse_primary_expression(&mut self) -> CompilerResult<ExpressionNode> {
+    fn parse_primary_expression(&mut self) -> CompilerResult<Expression> {
         if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
             self.advance()?;
             let expr = self.parse_binary_expression(None)?;
@@ -284,12 +309,12 @@ where
         self.parse_literal_or_variable()
     }
 
-    fn parse_literal_or_variable(&mut self) -> CompilerResult<ExpressionNode> {
+    fn parse_literal_or_variable(&mut self) -> CompilerResult<Expression> {
         let locatable = self.consume()?;
         if let Token::Literal(literal) = locatable.value {
-            Ok(Locatable::new(self.span, Expression::Literal(literal)))
+            Ok(Expression::Literal(literal))
         } else if let Token::Identifier(identifier) = locatable.value {
-            Ok(Locatable::new(self.span, Expression::Variable(identifier)))
+            Ok(Expression::Variable(identifier))
         } else {
             self.span.end = locatable.location.end;
             Err(vec![Locatable::new(
