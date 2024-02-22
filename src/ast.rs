@@ -10,11 +10,11 @@ pub struct Block(pub Vec<Statement>);
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{\n")?;
+        writeln!(f, "{{")?;
         for statement in &self.0 {
             write!(f, "{}", statement)?;
         }
-        write!(f, "}}\n")
+        writeln!(f, "}}")
     }
 }
 
@@ -38,7 +38,6 @@ impl Display for InitDeclaration {
 #[derive(Debug)]
 pub struct FunctionDeclaration {
     pub declaration: Declaration,
-    pub identifier: Arc<str>,
     pub parameters: Vec<Declaration>,
     pub varargs: bool, // varargs == true means the last element is of type parameters[parameters.len()-1]
     pub body: Option<Block>,
@@ -46,35 +45,43 @@ pub struct FunctionDeclaration {
 
 impl Display for FunctionDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}(", self.declaration.ty, self.identifier)?;
+        write!(f, "{}(", self.declaration)?;
         for (i, param) in self.parameters.iter().enumerate() {
-            if i != 0 {
+            write!(f, "{} ", param)?;
+            if i != self.parameters.len() - 1 || self.varargs {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", param)?;
         }
+
         if self.varargs {
-            write!(f, ", ...")?;
+            write!(f, "...")?;
         }
+
         write!(f, ")")?;
+
         if let Some(body) = &self.body {
             write!(f, " {}", body)?;
         } else {
             write!(f, ";")?;
         }
+
         Ok(())
     }
 }
 
 #[derive(Debug)]
 pub struct Declaration {
-    pub name: Arc<str>,
+    pub name: Option<Arc<str>>,
     pub ty: DeclarationType,
 }
 
 impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.ty, self.name)
+        let name = match &self.name {
+            Some(name) => name.as_ref(),
+            None => "<anon function>",
+        };
+        write!(f, "{} {}", self.ty, name)
     }
 }
 
@@ -86,10 +93,6 @@ pub enum DeclarationType {
     Array {
         of: Box<DeclarationType>,
         size: Option<usize>,
-    },
-    Function {
-        return_type: Box<DeclarationType>,
-        parameters: Vec<DeclarationType>,
     },
     Type {
         specifiers: Vec<Specifier>,
@@ -106,19 +109,6 @@ impl Display for DeclarationType {
                 Some(size) => write!(f, "{}[{}]", of, size),
                 None => write!(f, "{}[]", of),
             },
-            Function {
-                return_type,
-                parameters,
-            } => {
-                write!(f, "{}(", return_type)?;
-                for (i, param) in parameters.iter().enumerate() {
-                    if i != 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", param)?;
-                }
-                write!(f, ")")
-            }
             Type { specifiers, ty } => {
                 for specifier in specifiers {
                     write!(f, "{} ", specifier)?;
@@ -189,11 +179,11 @@ impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Statement::*;
         match self {
-            Expression(expr) => write!(f, "{};\n", expr),
-            Declaration(decl) => write!(f, "{};\n", decl),
+            Expression(expr) => writeln!(f, "{};", expr),
+            Declaration(decl) => writeln!(f, "{};", decl),
             Return(expr) => match expr {
-                Some(expr) => write!(f, "return {};\n", expr),
-                None => write!(f, "return;\n"),
+                Some(expr) => writeln!(f, "return {};", expr),
+                None => writeln!(f, "return;"),
             },
             Block(block) => write!(f, "{}", block),
         }
