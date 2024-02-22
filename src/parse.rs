@@ -1,7 +1,9 @@
 use std::io;
 use std::path::PathBuf;
 
-use crate::ast::{AssignOp, BinaryOp, Expression, InitDeclaration, Statement, UnaryOp};
+use crate::ast::{
+    AssignOp, BinaryOp, DataType, Declaration, Expression, InitDeclaration, Statement, UnaryOp,
+};
 use crate::error::CompilerError;
 use crate::lex::LexResult;
 use crate::str_intern::InternedStr;
@@ -9,6 +11,10 @@ use crate::tokens::Symbol;
 use crate::tokens::Token;
 use crate::tokens::{Keyword, Literal};
 use crate::util::{CompilerResult, Locatable, LocatableToken, Program, Span};
+
+static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof";
+static EXPECTED_BINARY: &str = "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||";
+static EXPECTED_TYPE: &str = "int, long, char, float, double";
 
 pub struct Parser<L>
 where
@@ -29,32 +35,44 @@ macro_rules! is {
 }
 
 macro_rules! match_token {
+
     (
         $invoker:ident,
+        $current_or_next:ident,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-    ) => {
+        $if_err:literal
+    ) => {{
+        $invoker.check_for_eof($if_err)?;
+        let locatable = $invoker.$current_or_next.as_ref().unwrap();
+        let formatted = format!("{:#?}", locatable.value);
         #[allow(clippy::redundant_closure_call)]
-        &$invoker.current.as_ref().map(|current| {
-            match $closure(current) {
-                Some($pattern) $(if $guard)? => Some($if_ok),
-                _ => None
-            }
-        }).flatten()
-    };
+        match $closure(&locatable.value) {
+            $pattern $(if $guard)? => Ok(Locatable::new(locatable.location, $if_ok)),
+            _ => Err(vec![Locatable::new(
+                locatable.location,
+                CompilerError::ExpectedVariety($if_err.to_string(), formatted)
+            )])
+        }
+    }};
 
     (
         $invoker:ident,
+        $current_or_next:ident,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+        $if_err:literal
     ) => {
-        match_token!( $invoker, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
+        match_token!( $invoker, $current_or_next, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
     };
+
 
     (
         $invoker:ident,
+        $current_or_next:ident,
         $pattern:pat $(if $guard:expr)?,
+        $if_err:literal
     ) => {
-        match_token!( $invoker, |x| {x}, $pattern $(if $guard)? => (), $if_err)
+        match_token!( $invoker, $current_or_next, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
 }
 
@@ -67,9 +85,10 @@ macro_rules! confirm {
     ) => {{
         let locatable = $invoker.consume()?;
         let formatted = format!("{:#?}", locatable.value);
+        let location = locatable.location;
         #[allow(clippy::redundant_closure_call)]
         match $closure(locatable.value) {
-            $pattern $(if $guard)? => Ok($if_ok),
+            $pattern $(if $guard)? => Ok(Locatable::new(location, $if_ok)),
             _ => Err(vec![Locatable::new(
                 locatable.location,
                 CompilerError::ExpectedVariety($if_err.to_string(), formatted)
@@ -115,14 +134,17 @@ where
     }
 
     pub fn parse(mut self) -> Program {
-        let body = self.get_body();
+        let body = self.get_body().map_err(|mut errors| {
+            self.get_all_errors(&mut errors);
+            errors
+        });
         let mut program = self.program;
         program.body = Some(body);
         program
     }
 
     fn prime(&mut self) -> CompilerResult<()> {
-        for _ in 0..3 {
+        for _ in 0..2 {
             self.advance()?;
         }
         Ok(())
@@ -156,26 +178,39 @@ where
         Ok(locatable)
     }
 
-    fn confirm_identifier(&mut self) -> CompilerResult<InternedStr> {
-        confirm!(self, Token::Identifier(arc_str) => arc_str, "<identifier>")
+    fn confirm_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
+        confirm!(self, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
 
-    fn confirm_literal(&mut self) -> CompilerResult<Literal> {
+    fn confirm_literal(&mut self) -> CompilerResult<Locatable<Literal>> {
         confirm!(self, Token::Literal(literal) => literal,  "<literal>")
     }
 
-    fn confirm_binary_op(&mut self) -> CompilerResult<BinaryOp> {
+    fn confirm_binary_op(&mut self) -> CompilerResult<Locatable<BinaryOp>> {
         confirm!(self, |x| {BinaryOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
     }
 
-    fn confirm_unary_op(&mut self) -> CompilerResult<UnaryOp> {
+    fn confirm_unary_op(&mut self) -> CompilerResult<Locatable<UnaryOp>> {
         confirm!(self, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
     }
 
-    fn confirm_type(&mut self) -> CompilerResult<Keyword> {
-        confirm!(self, Token::Keyword(x) if x.is_type() => x, "int, long, char, float, double")
+    fn confirm_type(&mut self) -> CompilerResult<Locatable<DataType>> {
+        confirm!(self, |x| {DataType::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
     }
 
+    fn match_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
+        match_token!(self, current, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
+    }
+
+    #[inline(always)]
+    fn skip_empty_statements(&mut self) -> CompilerResult<()> {
+        while is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+            self.advance()?;
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
     fn check_for_eof(&mut self, expected: &'static str) -> CompilerResult<()> {
         if self.current.is_none() {
             return Err(self.unexpected_eof(format!("{}, Found EOF", expected)));
@@ -189,8 +224,6 @@ where
         self.next = match self.lexer.next() {
             Some(Ok(token)) => Some(token),
             Some(Err(errors)) => {
-                let mut errors = errors;
-                self.get_all_errors(&mut errors);
                 return Err(errors);
             }
             None => None,
@@ -217,25 +250,31 @@ where
     }
 
     fn parse_declaration(&mut self) -> CompilerResult<InitDeclaration> {
-        while is!(self, current, Token::Symbol(Symbol::Semicolon)) {
-            self.advance()?;
-        }
         // cases:
         // 1. declaration with or without initialization
         // 2. function declaration
         // right now we won't deal with struct declaration
+        self.skip_empty_statements()?;
+        let keyword = self.confirm_type()?;
+        let identifier = self.match_identifier();
+        match &self.current.as_ref().unwrap().value {
+            Token::Symbol(Symbol::Semicolon) => {}
+            Token::Symbol(Symbol::OpenParen) => {}
+            _ => Err(vec![Locatable::new(
+                self.span,
+                CompilerError::ExpectedButFound(
+                    "function or variable declaration".to_string(),
+                    format!("{:#?}", self.current.as_ref().unwrap().value),
+                ),
+            )])?,
+        };
 
         todo!()
     }
 
-    /*
-        case keyword -> this is a statement
-        case { -> this is a block
-        case ; -> skip empty statement
-        case _ -> this is an expression
-    */
     #[allow(clippy::all)]
     fn parse_statement(&mut self) -> CompilerResult<InitDeclaration> {
+        self.skip_empty_statements()?;
         let stmt = if is!(self, current, Token::Keyword(_)) {
         } else {
             let expr = self.parse_binary_expression(None)?;
@@ -248,34 +287,23 @@ where
         let lp = lp.unwrap_or(0);
         let mut left = self.parse_unary_expression()?;
         loop {
-            self.check_for_eof("+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")?;
             if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
                 break;
             }
-            let token = self.current.as_ref().unwrap();
-            let bin_op_result = BinaryOp::try_from(&token.value);
-            if bin_op_result.is_err() {
-                break;
-            }
-            let bin_op = bin_op_result.unwrap();
-            let rp = bin_op.precedence();
+            let bin_op = self.confirm_binary_op()?;
+            let rp = bin_op.value.precedence();
             if rp == 0 || rp < lp {
                 break;
             }
-            self.span.end = token.location.end;
-            self.advance()?;
+            self.confirm_binary_op()?;
             let right = self.parse_binary_expression(Some(rp))?;
-            left = Expression::Binary(bin_op, Box::new(left), Box::new(right));
+            left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
         }
         Ok(left)
     }
 
     fn parse_unary_expression(&mut self) -> CompilerResult<Expression> {
-        if self.current.is_none() {
-            return Err(self.unexpected_eof(
-                "Expected one of the following tokens:+\n\t-\n\t!\n\t~\n\t*\n\t&\n\tsizeof\n\t<identifier>\n\tliteral\n\t(\n Found EOF".to_string(),
-            ));
-        }
+        self.check_for_eof(EXPECTED_UNARY)?;
         let mut node;
         let token = self.current.as_ref().unwrap();
         let un_op_result = UnaryOp::try_from(&token.value);
@@ -286,7 +314,7 @@ where
         {
             let un_op = un_op_result.unwrap();
             self.span.end = token.location.end;
-            self.advance()?;
+            self.confirm_unary_op()?;
             let expr = self.parse_unary_expression()?;
             node = Ok(Expression::Unary(un_op, Box::new(expr)));
         } else {

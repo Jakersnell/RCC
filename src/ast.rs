@@ -71,8 +71,8 @@ impl Display for FunctionDeclaration {
 
 #[derive(Debug)]
 pub struct Declaration {
-    pub name: Option<Arc<str>>,
     pub ty: DeclarationType,
+    pub name: Option<Arc<str>>,
 }
 
 impl Display for Declaration {
@@ -129,6 +129,22 @@ pub enum DataType {
     LongLong,
     Float,
     Double,
+}
+
+impl TryFrom<&Token> for DataType {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use DataType::*;
+        match value {
+            Token::Keyword(keyword) => match keyword {
+                crate::tokens::Keyword::Int => Ok(Int),
+                crate::tokens::Keyword::Double => Ok(Double),
+                _ => Err(()),
+            },
+            _ => Err(()),
+        }
+    }
 }
 
 impl Display for DataType {
@@ -330,26 +346,7 @@ pub enum BinaryOp {
     Assign(AssignOp),
 }
 
-#[derive(Debug)]
-pub enum AssignOp {
-    Assign,
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Modulo,
-    BitwiseAnd,
-    BitwiseOr,
-    BitwiseXor,
-    LeftShift,
-    RightShift,
-}
-
 impl BinaryOp {
-    pub fn is_assignment(&self) -> bool {
-        matches!(self, BinaryOp::Assign(_))
-    }
-
     pub fn precedence(&self) -> u8 {
         use BinaryOp::*;
         match self {
@@ -437,6 +434,42 @@ impl TryFrom<&Token> for BinaryOp {
             Token::Symbol(Symbol::LeftShiftEqual) => Ok(Assign(AssignOp::LeftShift)),
             Token::Symbol(Symbol::RightShiftEqual) => Ok(Assign(AssignOp::RightShift)),
 
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum AssignOp {
+    Assign,
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Modulo,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    LeftShift,
+    RightShift,
+}
+impl TryFrom<&Token> for AssignOp {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use AssignOp::*;
+        match value {
+            Token::Symbol(Symbol::Equal) => Ok(Assign),
+            Token::Symbol(Symbol::PlusEqual) => Ok(Plus),
+            Token::Symbol(Symbol::MinusEqual) => Ok(Minus),
+            Token::Symbol(Symbol::StarEqual) => Ok(Multiply),
+            Token::Symbol(Symbol::SlashEqual) => Ok(Divide),
+            Token::Symbol(Symbol::ModuloEqual) => Ok(Modulo),
+            Token::Symbol(Symbol::AmpersandEqual) => Ok(BitwiseAnd),
+            Token::Symbol(Symbol::PipeEqual) => Ok(BitwiseOr),
+            Token::Symbol(Symbol::CaretEqual) => Ok(BitwiseXor),
+            Token::Symbol(Symbol::LeftShiftEqual) => Ok(LeftShift),
+            Token::Symbol(Symbol::RightShiftEqual) => Ok(RightShift),
             _ => Err(()),
         }
     }
