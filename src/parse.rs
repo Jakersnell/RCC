@@ -34,7 +34,7 @@ macro_rules! is {
     };
 }
 
-macro_rules! match_body {
+macro_rules! confirm_body {
     (
         $value:ident,
         $location:ident,
@@ -66,7 +66,7 @@ macro_rules! confirm {
         let locatable = $invoker.consume()?;
         let location = locatable.location;
         let value = locatable.value;
-        match_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
     (
@@ -97,7 +97,7 @@ macro_rules! confirm {
         let locatable = &$invoker.current.as_ref().unwrap();
         let value = &locatable.value;
         let location = locatable.location;
-        match_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
         (
@@ -169,42 +169,50 @@ where
     }
 
     #[inline(always)]
-    fn unexpected_eof(&self, message: String) -> Vec<Locatable<CompilerError>> {
-        vec![Locatable::new(self.span, CompilerError::UnexpectedEOF)]
+    fn check_for_eof(&mut self, expected: &'static str) -> CompilerResult<()> {
+        if self.current.is_none() {
+            return Err(vec![Locatable::new(
+                self.span,
+                CompilerError::UnexpectedEOF,
+            )]);
+        }
+        Ok(())
     }
 
     fn consume(&mut self) -> CompilerResult<LocatableToken> {
-        if self.current.is_none() {
-            let mut errors = Vec::new();
-            self.get_all_errors(&mut errors);
-            return Err(errors);
-        }
+        self.check_for_eof("token")?;
         let locatable = self.current.take();
         self.advance()?;
         let locatable = locatable.unwrap();
         Ok(locatable)
     }
 
+    #[inline(always)]
     fn confirm_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
         confirm!(self, consume, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
 
+    #[inline(always)]
     fn confirm_literal(&mut self) -> CompilerResult<Locatable<Literal>> {
         confirm!(self, consume, Token::Literal(literal) => literal,  "<literal>")
     }
 
+    #[inline(always)]
     fn confirm_binary_op(&mut self) -> CompilerResult<Locatable<BinaryOp>> {
         confirm!(self, consume, |x| {BinaryOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
     }
 
+    #[inline(always)]
     fn confirm_unary_op(&mut self) -> CompilerResult<Locatable<UnaryOp>> {
         confirm!(self, consume, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
     }
 
+    #[inline(always)]
     fn confirm_type(&mut self) -> CompilerResult<Locatable<DataType>> {
         confirm!(self, consume, |x| {DataType::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
     }
 
+    #[inline(always)]
     fn match_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
         confirm!(self, borrow, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
@@ -213,14 +221,6 @@ where
     fn skip_empty_statements(&mut self) -> CompilerResult<()> {
         while is!(self, current, Token::Symbol(Symbol::Semicolon)) {
             self.advance()?;
-        }
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn check_for_eof(&mut self, expected: &'static str) -> CompilerResult<()> {
-        if self.current.is_none() {
-            return Err(self.unexpected_eof(format!("{}, Found EOF", expected)));
         }
         Ok(())
     }
@@ -302,7 +302,6 @@ where
             if rp == 0 || rp < lp {
                 break;
             }
-            self.confirm_binary_op()?;
             let right = self.parse_binary_expression(Some(rp))?;
             left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
         }
@@ -310,7 +309,6 @@ where
     }
 
     fn parse_unary_expression(&mut self) -> CompilerResult<Expression> {
-        self.check_for_eof(EXPECTED_UNARY)?;
         let mut node;
         let token = self.current.as_ref().unwrap();
         let un_op_result = UnaryOp::try_from(&token.value);
@@ -321,7 +319,7 @@ where
         {
             let un_op = un_op_result.unwrap();
             self.span.end = token.location.end;
-            self.confirm_unary_op()?;
+            self.advance()?;
             let expr = self.parse_unary_expression()?;
             node = Ok(Expression::Unary(un_op, Box::new(expr)));
         } else {
@@ -338,7 +336,6 @@ where
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
             return Ok(expr);
         }
-
         self.parse_literal_or_variable()
     }
 
@@ -352,8 +349,8 @@ where
             self.span.end = locatable.location.end;
             Err(vec![Locatable::new(
                 self.span,
-                CompilerError::ExpectedVariety(
-                    "int, long, char, float, or double".to_string(),
+                CompilerError::ExpectedButFound(
+                    "Literal or Expression".to_string(),
                     format!("{:#?}", locatable.value),
                 ),
             )])
