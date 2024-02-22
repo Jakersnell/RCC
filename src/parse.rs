@@ -149,13 +149,6 @@ where
         program
     }
 
-    fn prime(&mut self) -> CompilerResult<()> {
-        for _ in 0..2 {
-            self.advance()?;
-        }
-        Ok(())
-    }
-
     fn get_body(&mut self) -> CompilerResult<Vec<InitDeclaration>> {
         self.prime();
 
@@ -165,6 +158,14 @@ where
         }
 
         Ok(std::mem::take(&mut self.global))
+    }
+
+    #[inline(always)]
+    fn prime(&mut self) -> CompilerResult<()> {
+        for _ in 0..2 {
+            self.advance()?;
+        }
+        Ok(())
     }
 
     #[inline(always)]
