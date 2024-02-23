@@ -3,10 +3,15 @@ use crate::tokens::Literal;
 use std::fmt::{Display, Formatter};
 
 // good util for pretty printing the ast
-pub fn indent_string(string: String, indentation: usize) -> String {
+pub fn indent_string(string: String, start_line: usize, indentation: usize) -> String {
     let mut output = String::new();
-    for line in string.lines() {
-        output.push_str(&format!("{}{}\n", "    ".repeat(indentation), line));
+    for (num, line) in string.lines().enumerate() {
+        if (start_line <= num) {
+            output.push_str(&format!("{}{}\n", " ".repeat(indentation), line));
+        } else {
+            output.push_str(line);
+            output.push('\n');
+        }
     }
     output
 }
@@ -22,7 +27,7 @@ impl Expression {
             padding += if last { "   " } else { "│  " };
         };
         let child_output = match self {
-            Expression::Variable(ident) => format!("{}\n", ident),
+            Expression::Variable(ident) => format!("{}{}", ident, if is_root { "" } else { "\n" }),
             Expression::Literal(literal) => {
                 let value = match literal {
                     Literal::Integer { value, suffix } => value.to_string(),
@@ -32,8 +37,8 @@ impl Expression {
             }
             Expression::Binary(op, left, right) => {
                 if let BinaryOp::Assign(_) = op {
-                    let right = right.pretty_print(padding.clone(), true, false);
-                    format!("{}{}\n{}", left, op, right)
+                    let right = right.pretty_print(padding.clone(), true, true);
+                    format!("{} {} (\n{})", left, op, indent_string(right, 0, 4))
                 } else {
                     let left = left.pretty_print(padding.clone(), false, false);
                     let right = right.pretty_print(padding.clone(), true, false);
@@ -62,7 +67,7 @@ impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{{")?;
         for statement in &self.0 {
-            write!(f, "{}", indent_string(format!("{}", statement), 1))?;
+            write!(f, "{}", indent_string(format!("{}", statement), 0, 4))?;
         }
         writeln!(f, "}}")
     }
@@ -172,7 +177,7 @@ impl Display for Statement {
             Expression(expr) => write!(f, "{}", expr),
             Declaration(decl) => write!(f, "{}", decl),
             Return(expr) => match expr {
-                Some(expr) => write!(f, "return {}", indent_string(format!("{}", expr), 1)),
+                Some(expr) => write!(f, "return\n{}", indent_string(format!("└─ {}", expr), 0, 4)),
                 None => writeln!(f, "return"),
             },
             Block(block) => write!(f, "{}", block),
@@ -249,9 +254,9 @@ impl Display for VariableDeclaration {
         match &self.initializer {
             Some(expr) => write!(
                 f,
-                "{} = \n{}",
+                "{} = (\n{})",
                 self.declaration,
-                indent_string(format!("{}", expr), 1)
+                indent_string(format!("{}", expr), 0, 4)
             ),
             None => write!(f, "{}", self.declaration),
         }
