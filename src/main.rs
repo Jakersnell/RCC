@@ -17,6 +17,7 @@ mod validation;
 /// This will be last to be completed because it's just a CLI and
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't a compiler.
+
 fn main() {
     let source = "
 // int x = 1 + 4 / 2 + y * 20;
