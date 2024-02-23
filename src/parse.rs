@@ -5,12 +5,12 @@ use crate::ast::{
     AssignOp, BinaryOp, Block, DataType, Declaration, DeclarationType, Expression,
     FunctionDeclaration, InitDeclaration, Statement, UnaryOp, VariableDeclaration,
 };
-use crate::error::CompilerError;
 use crate::lex::LexResult;
 use crate::str_intern::InternedStr;
 use crate::tokens::Symbol;
 use crate::tokens::Token;
 use crate::tokens::{Keyword, Literal};
+use crate::util::CompilerError;
 use crate::util::{CompilerResult, Locatable, LocatableToken, Program, Span};
 
 static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof";
@@ -380,7 +380,7 @@ where
             }
             Token::Keyword(Keyword::Return) => {
                 self.advance()?;
-                if is!(self, next, Token::Symbol(Symbol::Semicolon)) {
+                if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
                     Ok(Statement::Return(None))
                 } else {
                     let expr = self.parse_binary_expression(None)?;
@@ -434,6 +434,16 @@ where
         }
 
         node
+    }
+
+    fn parse_postfix_expression(&mut self, primary_expr: Expression) -> CompilerResult<Expression> {
+        if self.current.is_none() {
+            return Ok(primary_expr);
+        }
+        match &self.current.as_ref().unwrap().value {
+            
+        }
+        todo!()
     }
 
     fn parse_primary_expression(&mut self) -> CompilerResult<Expression> {
