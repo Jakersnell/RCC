@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::ast::{
     AssignOp, BinaryOp, Block, DataType, Declaration, DeclarationType, Expression,
-    FunctionDeclaration, InitDeclaration, Statement, UnaryOp,
+    FunctionDeclaration, InitDeclaration, Statement, UnaryOp, VariableDeclaration,
 };
 use crate::error::CompilerError;
 use crate::lex::LexResult;
@@ -153,9 +153,8 @@ where
     /// this seemed like the only way to avoid returning a result in the constructor
     #[inline(always)]
     fn prime(&mut self) -> CompilerResult<()> {
-        for _ in 0..2 {
-            self.advance()?;
-        }
+        self.advance()?;
+        self.advance()?;
         Ok(())
     }
 
@@ -214,6 +213,11 @@ where
     }
 
     #[inline(always)]
+    fn match_assign(&mut self) -> CompilerResult<Locatable<AssignOp>> {
+        confirm!(self, borrow, |x| {AssignOp::try_from(x)}, Ok(op) => op, "=, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=")
+    }
+
+    #[inline(always)]
     fn skip_empty_statements(&mut self) -> CompilerResult<()> {
         while is!(self, current, Token::Symbol(Symbol::Semicolon)) {
             self.advance()?;
@@ -258,67 +262,35 @@ where
 
     fn parse_init_declaration(&mut self) -> CompilerResult<InitDeclaration> {
         self.skip_empty_statements()?;
-        let declaration = self.parse_declaration(false)?;
-        let init_declaration = match &self.next.as_ref().unwrap().value {
-            Token::Symbol(Symbol::Semicolon) => {
-                self.advance()?;
-                InitDeclaration::Declaration(declaration, None)
-            }
-            symbol if AssignOp::try_from(symbol).is_ok() => {
-                let expr = self.parse_binary_expression(None)?;
-                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-                InitDeclaration::Declaration(declaration, Some(expr))
-            }
-            Token::Symbol(Symbol::OpenParen) => {
-                self.advance()?;
-                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
-                let mut parameters = Vec::new();
-                while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
-                    let param = self.parse_declaration(true)?;
-                    parameters.push(param);
-                    if is!(self, current, Token::Symbol(Symbol::Comma)) {
-                        self.advance()?;
-                    } else {
-                        break;
-                    }
-                }
-                // note to self: parse varargs here
-                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
-                let body = if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
-                    Some(self.parse_compound_statement()?)
-                } else {
-                    confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-                    None
-                };
+        let dec = self.parse_declaration()?;
 
-                let function = FunctionDeclaration {
-                    declaration,
-                    parameters,
-                    varargs: false,
-                    body,
-                };
-
-                InitDeclaration::Function(function)
-            }
-            _ => Err(vec![Locatable::new(
+        if is!(
+            self,
+            current,
+            Token::Symbol(Symbol::Semicolon) | Token::Symbol(Symbol::Comma)
+        ) || is!(self, current, token if token.is_assign_op() )
+        {
+            let variable_declaration = self.parse_variable_declaration(dec)?;
+            confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";")?;
+            Ok(InitDeclaration::Declaration(variable_declaration))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
+            let function = self.parse_function_declaration(dec)?;
+            Ok(InitDeclaration::Function(function))
+        } else {
+            Err(vec![Locatable::new(
                 self.span,
                 CompilerError::ExpectedButFound(
                     "function or variable declaration".to_string(),
                     format!("{:#?}", self.current.as_ref().unwrap().value),
                 ),
-            )])?,
-        };
-
-        Ok(init_declaration)
+            )])?
+        }
     }
 
-    fn parse_declaration(&mut self, consume_ident: bool) -> CompilerResult<Declaration> {
+    fn parse_declaration(&mut self) -> CompilerResult<Declaration> {
+        // parse qualifiers / specifiers here
         let keyword = self.confirm_type()?;
-        let identifier = self.match_identifier()?;
-
-        if consume_ident {
-            self.advance()?;
-        }
+        let identifier = self.confirm_identifier()?;
 
         // currently we only have unit types so this is hardcoded as DC::Type
         let dec_type = DeclarationType::Type {
@@ -326,12 +298,60 @@ where
             ty: keyword.value,
         };
 
-        let declaration = Declaration {
+        Ok(Declaration {
             ty: dec_type,
             name: Some(identifier.value),
+        })
+    }
+
+    fn parse_function_declaration(
+        &mut self,
+        declaration: Declaration,
+    ) -> CompilerResult<FunctionDeclaration> {
+        confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+        let mut parameters = Vec::new();
+        while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
+            let param = self.parse_declaration()?;
+            parameters.push(param);
+            if is!(self, current, Token::Symbol(Symbol::Comma)) {
+                self.advance()?;
+            } else {
+                break;
+            }
+        }
+        // note to self: parse varargs here
+        confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+        let body = if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
+            Some(self.parse_compound_statement()?)
+        } else {
+            confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+            None
         };
 
-        Ok(declaration)
+        Ok(FunctionDeclaration {
+            declaration,
+            parameters,
+            varargs: false,
+            body,
+        })
+    }
+
+    fn parse_variable_declaration(
+        &mut self,
+        declaration: Declaration,
+    ) -> CompilerResult<VariableDeclaration> {
+        debug_assert!(declaration.name.is_some());
+        let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
+            self.advance()?;
+            Some(self.parse_binary_expression(None)?)
+        } else {
+            None
+        };
+
+        Ok(VariableDeclaration {
+            declaration,
+            initializer,
+        })
     }
 
     fn parse_compound_statement(&mut self) -> CompilerResult<Block> {
@@ -353,12 +373,10 @@ where
                 Ok(Statement::Block(block))
             }
             Token::Keyword(keyword) if keyword.is_type() => {
-                self.advance()?;
-                let dec = self.parse_declaration(false)?;
-                if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
-                    self.advance()?;
-                }
-                Ok(Statement::Declaration(dec))
+                let dec = self.parse_declaration()?;
+                let variable_declaration = self.parse_variable_declaration(dec)?;
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                Ok(Statement::Declaration(variable_declaration))
             }
             Token::Keyword(Keyword::Return) => {
                 self.advance()?;

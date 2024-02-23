@@ -11,6 +11,25 @@ pub enum Token {
     Symbol(Symbol),
 }
 
+impl Token {
+    pub fn is_assign_op(&self) -> bool {
+        matches!(
+            self,
+            Token::Symbol(Symbol::Equal)
+                | Token::Symbol(Symbol::PlusEqual)
+                | Token::Symbol(Symbol::MinusEqual)
+                | Token::Symbol(Symbol::StarEqual)
+                | Token::Symbol(Symbol::SlashEqual)
+                | Token::Symbol(Symbol::ModuloEqual)
+                | Token::Symbol(Symbol::AmpersandEqual)
+                | Token::Symbol(Symbol::PipeEqual)
+                | Token::Symbol(Symbol::CaretEqual)
+                | Token::Symbol(Symbol::LeftShiftEqual)
+                | Token::Symbol(Symbol::RightShiftEqual)
+        )
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Literal {
     Integer { value: u128, suffix: Option<String> },
