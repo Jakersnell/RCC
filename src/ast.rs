@@ -7,7 +7,7 @@ pub(crate) struct Block(pub(crate) Vec<Statement>);
 
 #[derive(Debug)]
 pub(crate) enum InitDeclaration {
-    Declaration(Declaration, Option<Expression>), // (declaration,  initializer)
+    Declaration(VariableDeclaration), // (declaration,  initializer)
     Function(FunctionDeclaration),
 }
 
@@ -17,6 +17,13 @@ pub(crate) struct FunctionDeclaration {
     pub(crate) parameters: Vec<Declaration>,
     pub(crate) varargs: bool, // varargs == true means the last element is of type parameters[parameters.len()-1]
     pub(crate) body: Option<Block>,
+}
+
+#[derive(Debug)]
+pub struct VariableDeclaration {
+    pub(crate) declaration: Declaration,
+    // this will only ever be a binary expression because assignment is a binary operator
+    pub(crate) initializer: Option<Expression>,
 }
 
 #[derive(Debug)]
@@ -77,7 +84,7 @@ pub(crate) enum Specifier {
 #[derive(Debug)]
 pub(crate) enum Statement {
     Expression(Expression),
-    Declaration(Declaration),
+    Declaration(VariableDeclaration),
     Return(Option<Expression>),
     Block(Block),
 }
@@ -90,36 +97,6 @@ pub(crate) enum Expression {
     Unary(UnaryOp, Box<Expression>),
     Binary(BinaryOp, Box<Expression>, Box<Expression>),
     FunctionCall(Arc<str>, Vec<Expression>),
-}
-
-impl Expression {
-    pub(crate) fn pretty_print(&self, padding: String, last: bool) -> String {
-        let output = format!("{}{}", padding, if last { "└──" } else { "├──" });
-        let mut padding = padding;
-        padding += if last { "   " } else { "│  " };
-        let child_output = match self {
-            Expression::Variable(ident) => format!(" {}\n", ident),
-            Expression::Literal(literal) => {
-                let value = match literal {
-                    Literal::Integer { value, suffix } => value.to_string(),
-                    Literal::Float { value, suffix } => value.to_string(),
-                };
-                format!(" {}\n", value)
-            }
-            Expression::Binary(op, left, right) => {
-                let left = left.pretty_print(padding.clone(), false);
-                let right = right.pretty_print(padding.clone(), true);
-                format!(" {}\n{}{}", op, left, right)
-            }
-            Expression::Unary(op, right) => {
-                right.pretty_print(padding.clone(), true);
-                format!(" {}\n", op)
-            }
-            val => unimplemented!("{:#?}", val),
-        };
-
-        output + &child_output
-    }
 }
 
 #[derive(Debug)]
