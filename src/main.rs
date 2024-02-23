@@ -3,12 +3,15 @@
 use std::sync::Arc;
 
 mod ast;
+mod codegen;
 mod error;
 mod lex;
+mod lowering;
 mod parse;
 mod str_intern;
 mod tokens;
 mod util;
+mod validation;
 
 /// The main entry point for the program.
 /// This will be the last to be completed as all the other components of the program
