@@ -1,3 +1,4 @@
+use crate::ast::UnaryOp::Plus;
 use crate::ast::*;
 use crate::tokens::Literal;
 use std::fmt::{Display, Formatter};
@@ -48,6 +49,18 @@ impl Expression {
             Expression::Unary(op, right) => {
                 right.pretty_print(padding.clone(), true, false);
                 format!("{}\n", op)
+            }
+            Expression::PreDecrement(ident) => {
+                format!("-- {}\n", ident)
+            }
+            Expression::PreIncrement(ident) => {
+                format!("++ {}\n", ident)
+            }
+            Expression::PostDecrement(ident) => {
+                format!("{} --\n", ident)
+            }
+            Expression::PostIncrement(ident) => {
+                format!("{} ++\n", ident)
             }
             val => unimplemented!("{:#?}", val),
         };

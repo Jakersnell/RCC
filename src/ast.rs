@@ -96,7 +96,7 @@ pub(crate) enum Expression {
     Literal(Literal),
     Variable(InternedStr),
     Sizeof(TypeOrIdentifier),
-    PreDecrement(InternedStr),
+    PreDecrement(InternedStr), // decided to do these different because they operate on idents only
     PreIncrement(InternedStr),
     PostDecrement(InternedStr),
     PostIncrement(InternedStr),
