@@ -18,7 +18,14 @@ mod validation;
 /// need to function for the main to be usable.
 /// Cant compile a program if you don't have a lexer or parser.
 fn main() {
-    let source = "int x = 1 + 4 / 2 + y * 20;"; // test string
+    let source = "
+int x = 1 + 4 / 2 + y * 20;
+double y = 2.3434;
+
+double take_and_return_double(double d) {
+    return d;
+}
+"; // test string
     let lexer = lex::Lexer::new(source.to_string());
     let program = util::Program::new("test".to_string());
     let parser = parse::Parser::from_lexer(program, lexer);

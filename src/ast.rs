@@ -3,7 +3,14 @@ use std::fmt::{Display, Formatter};
 use std::ptr::write;
 use std::sync::Arc;
 
-//
+// good util for pretty printing the ast
+fn indent_string(string: String) -> String {
+    let mut output = String::new();
+    for line in string.lines() {
+        output.push_str(&format!("    {}\n", line));
+    }
+    output
+}
 
 #[derive(Debug)]
 pub struct Block(pub Vec<Statement>);
@@ -47,7 +54,7 @@ impl Display for FunctionDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.declaration)?;
         for (i, param) in self.parameters.iter().enumerate() {
-            write!(f, "{} ", param)?;
+            write!(f, "{}", param)?;
             if i != self.parameters.len() - 1 || self.varargs {
                 write!(f, ", ")?;
             }
@@ -60,7 +67,7 @@ impl Display for FunctionDeclaration {
         write!(f, ")")?;
 
         if let Some(body) = &self.body {
-            write!(f, " {}", body)?;
+            write!(f, " {}", indent_string(format!("{}", body)))?;
         } else {
             write!(f, ";")?;
         }
@@ -197,11 +204,11 @@ impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Statement::*;
         match self {
-            Expression(expr) => writeln!(f, "{};", expr),
-            Declaration(decl) => writeln!(f, "{};", decl),
+            Expression(expr) => write!(f, "{}", expr),
+            Declaration(decl) => write!(f, "{}", decl),
             Return(expr) => match expr {
-                Some(expr) => writeln!(f, "return {};", expr),
-                None => writeln!(f, "return;"),
+                Some(expr) => write!(f, "return {}", indent_string(format!("{}", expr))),
+                None => writeln!(f, "return"),
             },
             Block(block) => write!(f, "{}", block),
         }

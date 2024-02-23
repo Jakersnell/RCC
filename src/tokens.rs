@@ -17,8 +17,9 @@ pub enum Literal {
     Float { value: f64, suffix: Option<String> },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Keyword {
+    Void,
     Int,
     Double,
     Return,
@@ -26,11 +27,11 @@ pub enum Keyword {
 
 impl Keyword {
     pub fn is_type(&self) -> bool {
-        matches!(self, Keyword::Int | Keyword::Double)
+        matches!(self, Keyword::Int | Keyword::Double | Keyword::Void)
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Symbol {
     Sizeof, // It's really convenient to have this as a symbol
 
