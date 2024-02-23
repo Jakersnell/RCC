@@ -1,99 +1,32 @@
 use crate::tokens::{Literal, Symbol, Token};
-use std::fmt::{Display, Formatter};
-use std::ptr::write;
+use std::fmt::Display;
 use std::sync::Arc;
 
-// good util for pretty printing the ast
-fn indent_string(string: String) -> String {
-    let mut output = String::new();
-    for line in string.lines() {
-        output.push_str(&format!("    {}\n", line));
-    }
-    output
-}
+#[derive(Debug)]
+pub(crate) struct Block(pub(crate) Vec<Statement>);
 
 #[derive(Debug)]
-pub struct Block(pub Vec<Statement>);
-
-impl Display for Block {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{{")?;
-        for statement in &self.0 {
-            write!(f, "{}", statement)?;
-        }
-        writeln!(f, "}}")
-    }
-}
-
-#[derive(Debug)]
-pub enum InitDeclaration {
+pub(crate) enum InitDeclaration {
     Declaration(Declaration, Option<Expression>), // (declaration,  initializer)
     Function(FunctionDeclaration),
 }
 
-impl Display for InitDeclaration {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use InitDeclaration::*;
-        match self {
-            Declaration(decl, Some(expr)) => write!(f, "{}\n{}", decl, expr),
-            Declaration(decl, None) => write!(f, "{};", decl),
-            Function(func) => write!(f, "{}", func),
-        }
-    }
+#[derive(Debug)]
+pub(crate) struct FunctionDeclaration {
+    pub(crate) declaration: Declaration,
+    pub(crate) parameters: Vec<Declaration>,
+    pub(crate) varargs: bool, // varargs == true means the last element is of type parameters[parameters.len()-1]
+    pub(crate) body: Option<Block>,
 }
 
 #[derive(Debug)]
-pub struct FunctionDeclaration {
-    pub declaration: Declaration,
-    pub parameters: Vec<Declaration>,
-    pub varargs: bool, // varargs == true means the last element is of type parameters[parameters.len()-1]
-    pub body: Option<Block>,
-}
-
-impl Display for FunctionDeclaration {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}(", self.declaration)?;
-        for (i, param) in self.parameters.iter().enumerate() {
-            write!(f, "{}", param)?;
-            if i != self.parameters.len() - 1 || self.varargs {
-                write!(f, ", ")?;
-            }
-        }
-
-        if self.varargs {
-            write!(f, "...")?;
-        }
-
-        write!(f, ")")?;
-
-        if let Some(body) = &self.body {
-            write!(f, " {}", indent_string(format!("{}", body)))?;
-        } else {
-            write!(f, ";")?;
-        }
-
-        Ok(())
-    }
+pub(crate) struct Declaration {
+    pub(crate) ty: DeclarationType,
+    pub(crate) name: Option<Arc<str>>,
 }
 
 #[derive(Debug)]
-pub struct Declaration {
-    pub ty: DeclarationType,
-    pub name: Option<Arc<str>>,
-}
-
-impl Display for Declaration {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let name = match &self.name {
-            Some(name) => name.as_ref(),
-            None => "<anon function>",
-        };
-        write!(f, "{} {}", self.ty, name)
-    }
-}
-
-#[derive(Debug)]
-pub enum DeclarationType {
+pub(crate) enum DeclarationType {
     Pointer {
         to: Box<DeclarationType>,
     },
@@ -107,29 +40,8 @@ pub enum DeclarationType {
     },
 }
 
-impl Display for DeclarationType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use DeclarationType::*;
-        match self {
-            Pointer { to } => write!(f, "*{}", to),
-            Array { of, size } => match size {
-                Some(size) => write!(f, "{}[{}]", of, size),
-                None => write!(f, "{}[]", of),
-            },
-            Type { specifiers, ty } => {
-                if let Some(specifiers) = specifiers {
-                    for specifier in specifiers {
-                        write!(f, "{} ", specifier)?;
-                    }
-                }
-                write!(f, "{}", ty)
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
-pub enum DataType {
+pub(crate) enum DataType {
     Void,
     Char,
     Short,
@@ -156,67 +68,22 @@ impl TryFrom<&Token> for DataType {
     }
 }
 
-impl Display for DataType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use DataType::*;
-        let str = match self {
-            Void => "void",
-            Char => "char",
-            Short => "short",
-            Int => "int",
-            Long => "long",
-            LongLong => "long long",
-            Float => "float",
-            Double => "double",
-        }
-        .to_string();
-        write!(f, "{}", str)
-    }
-}
-
 #[derive(Debug)]
-pub enum Specifier {
+pub(crate) enum Specifier {
     Const,
     Unsigned,
 }
 
-impl Display for Specifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Specifier::*;
-        let str = match self {
-            Const => "const",
-            Unsigned => "unsigned",
-        }
-        .to_string();
-        write!(f, "{}", str)
-    }
-}
-
 #[derive(Debug)]
-pub enum Statement {
+pub(crate) enum Statement {
     Expression(Expression),
     Declaration(Declaration),
     Return(Option<Expression>),
     Block(Block),
 }
 
-impl Display for Statement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Statement::*;
-        match self {
-            Expression(expr) => write!(f, "{}", expr),
-            Declaration(decl) => write!(f, "{}", decl),
-            Return(expr) => match expr {
-                Some(expr) => write!(f, "return {}", indent_string(format!("{}", expr))),
-                None => writeln!(f, "return"),
-            },
-            Block(block) => write!(f, "{}", block),
-        }
-    }
-}
-
 #[derive(Debug)]
-pub enum Expression {
+pub(crate) enum Expression {
     Literal(Literal),
     Variable(Arc<str>),
     Sizeof(TypeOrIdentifier),
@@ -226,7 +93,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    fn pretty_print(&self, padding: String, last: bool) -> String {
+    pub(crate) fn pretty_print(&self, padding: String, last: bool) -> String {
         let output = format!("{}{}", padding, if last { "└──" } else { "├──" });
         let mut padding = padding;
         padding += if last { "   " } else { "│  " };
@@ -255,31 +122,14 @@ impl Expression {
     }
 }
 
-impl Display for Expression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let output = self.pretty_print("".to_string(), true);
-        write!(f, "{}", output)
-    }
-}
-
 #[derive(Debug)]
-pub enum TypeOrIdentifier {
+pub(crate) enum TypeOrIdentifier {
     Type(DataType),
     Identifier(Arc<str>),
 }
 
-impl Display for TypeOrIdentifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use TypeOrIdentifier::*;
-        match self {
-            Type(ty) => write!(f, "{}", ty),
-            Identifier(id) => write!(f, "{}", id),
-        }
-    }
-}
-
 #[derive(Debug)]
-pub enum UnaryOp {
+pub(crate) enum UnaryOp {
     Plus,
     Negate,
     LogicalNot,
@@ -287,7 +137,7 @@ pub enum UnaryOp {
 }
 
 impl UnaryOp {
-    pub fn precedence(&self) -> u8 {
+    pub(crate) fn precedence(&self) -> u8 {
         use UnaryOp::*;
         match self {
             Plus => 4,
@@ -313,22 +163,8 @@ impl TryFrom<&Token> for UnaryOp {
     }
 }
 
-impl Display for UnaryOp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use UnaryOp::*;
-        let str = match self {
-            Plus => "+",
-            Negate => "-",
-            LogicalNot => "!",
-            BitwiseNot => "~",
-        }
-        .to_string();
-        write!(f, "{}", str)
-    }
-}
-
 #[derive(Debug)]
-pub enum BinaryOp {
+pub(crate) enum BinaryOp {
     Add,
     Subtract,
     Multiply,
@@ -356,7 +192,7 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
-    pub fn precedence(&self) -> u8 {
+    pub(crate) fn precedence(&self) -> u8 {
         use BinaryOp::*;
         match self {
             Multiply | Divide | Modulo => 3,
@@ -364,45 +200,6 @@ impl BinaryOp {
             Assign(_) => 1,
             _ => 0,
         }
-    }
-}
-
-impl Display for BinaryOp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use BinaryOp::*;
-        let str = match self {
-            Add => "+",
-            Subtract => "-",
-            Multiply => "*",
-            Divide => "/",
-            Modulo => "%",
-            Equal => "==",
-            NotEqual => "!=",
-            GreaterThan => ">",
-            GreaterThanEqual => ">=",
-            LessThan => "<",
-            LessThanEqual => "<=",
-            LogicalAnd => "&&",
-            LogicalOr => "||",
-            BitwiseAnd => "&",
-            BitwiseOr => "|",
-            BitwiseXor => "^",
-            LeftShift => "<<",
-            RightShift => ">>",
-            Assign(AssignOp::Assign) => "=",
-            Assign(AssignOp::Plus) => "+=",
-            Assign(AssignOp::Minus) => "-=",
-            Assign(AssignOp::Multiply) => "*=",
-            Assign(AssignOp::Divide) => "/=",
-            Assign(AssignOp::Modulo) => "%=",
-            Assign(AssignOp::BitwiseAnd) => "&=",
-            Assign(AssignOp::BitwiseOr) => "|=",
-            Assign(AssignOp::BitwiseXor) => "^=",
-            Assign(AssignOp::LeftShift) => "<<=",
-            Assign(AssignOp::RightShift) => ">>=",
-        }
-        .to_string();
-        write!(f, "{}", str)
     }
 }
 
@@ -449,7 +246,7 @@ impl TryFrom<&Token> for BinaryOp {
 }
 
 #[derive(Debug)]
-pub enum AssignOp {
+pub(crate) enum AssignOp {
     Assign,
     Plus,
     Minus,

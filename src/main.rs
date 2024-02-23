@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 mod ast;
+mod ast_pretty_print;
 mod codegen;
 mod error;
 mod lex;
