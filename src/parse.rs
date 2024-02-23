@@ -440,9 +440,15 @@ where
         if self.current.is_none() {
             return Ok(primary_expr);
         }
-        match &self.current.as_ref().unwrap().value {
-            
-        }
+        let expr = match &self.current.as_ref().unwrap().value {
+            Token::Symbol(Symbol::OpenParen) => {
+                todo!("function call!")
+            }
+            Token::Symbol(Symbol::Increment) => {
+                todo!("post increment!")
+            }
+            _ => primary_expr,
+        };
         todo!()
     }
 
