@@ -1,23 +1,68 @@
-use crate::ast::{
-    BinaryOp, Block, DataType, Declaration, DeclarationType, Expression, FunctionDeclaration,
-    InitDeclaration, Specifier, Statement, TypeOrIdentifier, UnaryOp,
-};
+use crate::ast::*;
+use crate::tokens::Literal;
 use std::fmt::{Display, Formatter};
 
 // good util for pretty printing the ast
-pub fn indent_string(string: String) -> String {
+pub fn indent_string(string: String, indentation: usize) -> String {
     let mut output = String::new();
     for line in string.lines() {
-        output.push_str(&format!("    {}\n", line));
+        output.push_str(&format!("{}{}\n", "    ".repeat(indentation), line));
     }
     output
+}
+
+impl Expression {
+    pub(crate) fn pretty_print(&self, padding: String, last: bool, is_root: bool) -> String {
+        let mut padding = padding;
+        let mut output;
+        if is_root {
+            output = "".to_string();
+        } else {
+            output = format!("{}{}", padding, if last { "└─ " } else { "├─ " });
+            padding += if last { "   " } else { "│  " };
+        };
+        let child_output = match self {
+            Expression::Variable(ident) => format!("{}\n", ident),
+            Expression::Literal(literal) => {
+                let value = match literal {
+                    Literal::Integer { value, suffix } => value.to_string(),
+                    Literal::Float { value, suffix } => value.to_string(),
+                };
+                format!("{}\n", value)
+            }
+            Expression::Binary(op, left, right) => {
+                if let BinaryOp::Assign(_) = op {
+                    let right = right.pretty_print(padding.clone(), true, false);
+                    format!("{}{}\n{}", left, op, right)
+                } else {
+                    let left = left.pretty_print(padding.clone(), false, false);
+                    let right = right.pretty_print(padding.clone(), true, false);
+                    format!("{}\n{}{}", op, left, right)
+                }
+            }
+            Expression::Unary(op, right) => {
+                right.pretty_print(padding.clone(), true, false);
+                format!("{}\n", op)
+            }
+            val => unimplemented!("{:#?}", val),
+        };
+
+        output + &child_output
+    }
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let output = self.pretty_print("".to_string(), true, true);
+        write!(f, "{}", output)
+    }
 }
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{{")?;
         for statement in &self.0 {
-            write!(f, "{}", statement)?;
+            write!(f, "{}", indent_string(format!("{}", statement), 1))?;
         }
         writeln!(f, "}}")
     }
@@ -27,9 +72,8 @@ impl Display for InitDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::InitDeclaration::*;
         match self {
-            Declaration(decl, Some(expr)) => write!(f, "{}\n{}", decl, expr),
-            Declaration(decl, None) => write!(f, "{};", decl),
-            Function(func) => write!(f, "{}", func),
+            Declaration(variable) => write!(f, "{}", variable),
+            Function(function) => write!(f, "{}", function),
         }
     }
 }
@@ -51,7 +95,7 @@ impl Display for FunctionDeclaration {
         write!(f, ")")?;
 
         if let Some(body) = &self.body {
-            write!(f, " {}", indent_string(format!("{}", body)))?;
+            write!(f, " {}", body)?;
         } else {
             write!(f, ";")?;
         }
@@ -128,18 +172,11 @@ impl Display for Statement {
             Expression(expr) => write!(f, "{}", expr),
             Declaration(decl) => write!(f, "{}", decl),
             Return(expr) => match expr {
-                Some(expr) => write!(f, "return {}", indent_string(format!("{}", expr))),
+                Some(expr) => write!(f, "return {}", indent_string(format!("{}", expr), 1)),
                 None => writeln!(f, "return"),
             },
             Block(block) => write!(f, "{}", block),
         }
-    }
-}
-
-impl Display for Expression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let output = self.pretty_print("".to_string(), true);
-        write!(f, "{}", output)
     }
 }
 
@@ -204,5 +241,19 @@ impl Display for BinaryOp {
         }
         .to_string();
         write!(f, "{}", str)
+    }
+}
+
+impl Display for VariableDeclaration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.initializer {
+            Some(expr) => write!(
+                f,
+                "{} = \n{}",
+                self.declaration,
+                indent_string(format!("{}", expr), 1)
+            ),
+            None => write!(f, "{}", self.declaration),
+        }
     }
 }
