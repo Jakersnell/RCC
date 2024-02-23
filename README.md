@@ -7,9 +7,9 @@ A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 <pre>
 [X] Integer arithmetic lexing / parsing 
 [X] Basic types
-[ ] Variables
-[ ] Scope
-[ ] Function declarations
+[X] Variables
+[X] Scope
+[X] Function declarations
 [ ] "int main" entry point
 [ ] First codegen with cranelift
 [ ] Temp Buildin of printf function
