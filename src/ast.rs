@@ -28,7 +28,7 @@ impl Display for InitDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use InitDeclaration::*;
         match self {
-            Declaration(decl, Some(expr)) => write!(f, "{} = {};", decl, expr),
+            Declaration(decl, Some(expr)) => write!(f, "{}\n{}", decl, expr),
             Declaration(decl, None) => write!(f, "{};", decl),
             Function(func) => write!(f, "{}", func),
         }
@@ -95,7 +95,7 @@ pub enum DeclarationType {
         size: Option<usize>,
     },
     Type {
-        specifiers: Vec<Specifier>,
+        specifiers: Option<Vec<Specifier>>,
         ty: DataType,
     },
 }
@@ -110,8 +110,10 @@ impl Display for DeclarationType {
                 None => write!(f, "{}[]", of),
             },
             Type { specifiers, ty } => {
-                for specifier in specifiers {
-                    write!(f, "{} ", specifier)?;
+                if let Some(specifiers) = specifiers {
+                    for specifier in specifiers {
+                        write!(f, "{} ", specifier)?;
+                    }
                 }
                 write!(f, "{}", ty)
             }
@@ -353,7 +355,7 @@ impl BinaryOp {
             Multiply | Divide | Modulo => 3,
             Add | Subtract => 2,
             Assign(_) => 1,
-            _ => panic!("Invalid precedence for {:?}", self),
+            _ => 0,
         }
     }
 }

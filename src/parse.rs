@@ -2,7 +2,8 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::ast::{
-    AssignOp, BinaryOp, DataType, Declaration, Expression, InitDeclaration, Statement, UnaryOp,
+    AssignOp, BinaryOp, DataType, Declaration, DeclarationType, Expression, InitDeclaration,
+    Statement, UnaryOp,
 };
 use crate::error::CompilerError;
 use crate::lex::LexResult;
@@ -153,7 +154,7 @@ where
         self.prime();
 
         while self.current.is_some() {
-            let global_declaration = self.parse_global()?;
+            let global_declaration = self.parse_init_declaration()?;
             self.global.push(global_declaration);
         }
 
@@ -198,8 +199,8 @@ where
     }
 
     #[inline(always)]
-    fn confirm_binary_op(&mut self) -> CompilerResult<Locatable<BinaryOp>> {
-        confirm!(self, consume, |x| {BinaryOp::try_from(&x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
+    fn match_binary_op(&mut self) -> CompilerResult<Locatable<BinaryOp>> {
+        confirm!(self, borrow, |x| {BinaryOp::try_from(x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
     }
 
     #[inline(always)]
@@ -249,24 +250,35 @@ where
         errors.extend(all_errors);
     }
 
-    fn parse_global(&mut self) -> CompilerResult<InitDeclaration> {
-        self.span.start = self.span.end;
-        let expr = self.parse_binary_expression(None)?;
-        confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-        todo!("parse init declaration") // eg: int x = 5; or int func(int x) { return x; }
-    }
-
-    fn parse_declaration(&mut self) -> CompilerResult<InitDeclaration> {
-        // cases:
-        // 1. declaration with or without initialization
-        // 2. function declaration
-        // right now we won't deal with struct declaration
+    fn parse_init_declaration(&mut self) -> CompilerResult<InitDeclaration> {
         self.skip_empty_statements()?;
         let keyword = self.confirm_type()?;
-        let identifier = self.match_identifier();
-        match &self.current.as_ref().unwrap().value {
-            Token::Symbol(Symbol::Semicolon) => {}
-            Token::Symbol(Symbol::OpenParen) => {}
+        let identifier = self.match_identifier()?;
+
+        // currently we only have unit types so this is hardcoded as DC::Type
+        let dec_type = DeclarationType::Type {
+            specifiers: None,
+            ty: keyword.value,
+        };
+
+        let declaration = Declaration {
+            ty: dec_type,
+            name: Some(identifier.value),
+        };
+
+        let init_declaration = match &self.next.as_ref().unwrap().value {
+            Token::Symbol(Symbol::Semicolon) => {
+                self.advance()?;
+                InitDeclaration::Declaration(declaration, None)
+            }
+            symbol if AssignOp::try_from(symbol).is_ok() => {
+                let expr = self.parse_binary_expression(None)?;
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                InitDeclaration::Declaration(declaration, Some(expr))
+            }
+            Token::Symbol(Symbol::OpenParen) => {
+                todo!("parse function declaration")
+            }
             _ => Err(vec![Locatable::new(
                 self.span,
                 CompilerError::ExpectedButFound(
@@ -276,19 +288,7 @@ where
             )])?,
         };
 
-        todo!()
-    }
-
-    #[allow(clippy::all)]
-    fn parse_statement(&mut self) -> CompilerResult<InitDeclaration> {
-        self.skip_empty_statements()?;
-        let stmt = if is!(self, current, Token::Keyword(_)) {
-        } else {
-            let expr = self.parse_binary_expression(None)?;
-        };
-
-        confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-        todo!()
+        Ok(init_declaration)
     }
     fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<Expression> {
         let lp = lp.unwrap_or(0);
@@ -297,11 +297,16 @@ where
             if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
                 break;
             }
-            let bin_op = self.confirm_binary_op()?;
-            let rp = bin_op.value.precedence();
-            if rp == 0 || rp < lp {
+            let bin_op = self.match_binary_op();
+            if bin_op.is_err() {
                 break;
             }
+            let bin_op = bin_op.unwrap();
+            let rp = bin_op.value.precedence();
+            if rp == 0 || rp <= lp {
+                break;
+            }
+            self.advance()?;
             let right = self.parse_binary_expression(Some(rp))?;
             left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
         }
@@ -311,13 +316,8 @@ where
     fn parse_unary_expression(&mut self) -> CompilerResult<Expression> {
         let mut node;
         let token = self.current.as_ref().unwrap();
-        let un_op_result = UnaryOp::try_from(&token.value);
 
-        if un_op_result
-            .as_ref()
-            .is_ok_and(|un_op| 0 < un_op.precedence())
-        {
-            let un_op = un_op_result.unwrap();
+        if let Ok(un_op) = UnaryOp::try_from(&token.value) {
             self.span.end = token.location.end;
             self.advance()?;
             let expr = self.parse_unary_expression()?;
