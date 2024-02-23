@@ -1,4 +1,6 @@
+use crate::str_intern::InternedStr;
 use crate::tokens::{Literal, Symbol, Token};
+use crate::util::CompilerResult;
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -29,7 +31,7 @@ pub struct VariableDeclaration {
 #[derive(Debug)]
 pub(crate) struct Declaration {
     pub(crate) ty: DeclarationType,
-    pub(crate) name: Option<Arc<str>>,
+    pub(crate) name: Option<InternedStr>,
 }
 
 #[derive(Debug)]
@@ -92,17 +94,21 @@ pub(crate) enum Statement {
 #[derive(Debug)]
 pub(crate) enum Expression {
     Literal(Literal),
-    Variable(Arc<str>),
+    Variable(InternedStr),
     Sizeof(TypeOrIdentifier),
+    PreDecrement(InternedStr),
+    PreIncrement(InternedStr),
+    PostDecrement(InternedStr),
+    PostIncrement(InternedStr),
     Unary(UnaryOp, Box<Expression>),
     Binary(BinaryOp, Box<Expression>, Box<Expression>),
-    FunctionCall(Arc<str>, Vec<Expression>),
+    FunctionCall(InternedStr, Vec<Expression>),
 }
 
 #[derive(Debug)]
 pub(crate) enum TypeOrIdentifier {
     Type(DataType),
-    Identifier(Arc<str>),
+    Identifier(InternedStr),
 }
 
 #[derive(Debug)]
