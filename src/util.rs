@@ -12,6 +12,13 @@ pub struct Locatable<T> {
     pub value: T,
 }
 
+impl<T> Locatable<T> {
+    #[inline]
+    pub fn map<U>(self, mapper: fn(T) -> U) -> Locatable<U> {
+        Locatable::new(self.location, mapper(self.value))
+    }
+}
+
 #[derive(Debug, PartialEq, new, Clone, Copy)]
 pub struct Span {
     pub start: usize,
