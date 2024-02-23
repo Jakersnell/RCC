@@ -1,6 +1,5 @@
-use crate::util::{Locatable, Span};
+use crate::util::{CompilerError, Locatable, Span};
 use crate::{
-    error::CompilerError,
     lex,
     tokens::{Keyword, Literal, Symbol, Token},
 };
@@ -496,7 +495,7 @@ impl Lexer {
             if state != TriviaState::Start {
                 self.next_char();
             }
-            if state == TriviaState::CommentEnd {
+            if state == TriviaState::BlockCommentEnd {
                 self.next_char();
             }
             state = self.get_current_trivia(state);
@@ -507,26 +506,21 @@ impl Lexer {
     }
 
     fn get_current_trivia(&self, state: TriviaState) -> TriviaState {
+        use TriviaState::*;
         match (state, self.current, self.next) {
-            (TriviaState::WhiteSpace | TriviaState::CommentEnd, Some(current), _) => {
-                TriviaState::Start
-            }
+            (WhiteSpace | BlockCommentEnd, Some(current), _) => Start,
 
-            (TriviaState::Start, Some(current), _) if current.is_whitespace() => {
-                TriviaState::WhiteSpace
-            }
+            (Start, Some(current), _) if current.is_whitespace() => WhiteSpace,
 
-            (TriviaState::BlockComment, Some('*'), Some('/')) => TriviaState::CommentEnd,
+            (BlockComment, Some('*'), Some('/')) => BlockCommentEnd,
 
-            (TriviaState::Start, Some('/'), Some('*'))
-            | (TriviaState::BlockComment, Some(_), _) => TriviaState::BlockComment,
+            (Start, Some('/'), Some('*')) | (BlockComment, Some(_), _) => BlockComment,
 
-            (TriviaState::InlineComment, Some('\n'), _) => TriviaState::Start,
+            (InlineComment, Some('\n'), _) => Start,
 
-            (TriviaState::Start, Some('/'), Some('/'))
-            | (TriviaState::InlineComment, Some(_), _) => TriviaState::InlineComment,
+            (Start, Some('/'), Some('/')) | (InlineComment, Some(_), _) => InlineComment,
 
-            _ => TriviaState::End,
+            _ => End,
         }
     }
 }
@@ -537,7 +531,7 @@ enum TriviaState {
     InlineComment,
     WhiteSpace,
     BlockComment,
-    CommentEnd,
+    BlockCommentEnd,
     End,
 }
 
