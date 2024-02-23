@@ -20,12 +20,8 @@ mod validation;
 /// Cant compile a program if you don't have a lexer or parser.
 fn main() {
     let source = "
-int x = 1 + 4 / 2 + y * 20;
-double y = 2.3434;
-
-double take_and_return_double(double d) {
-    return d;
-}
+/*a*/
+int x = 0;
 "; // test string
     let lexer = lex::Lexer::new(source.to_string());
     let program = util::Program::new("test".to_string());
@@ -35,4 +31,5 @@ double take_and_return_double(double d) {
     for node in body {
         println!("{}", node);
     }
+    // println!("{:#?}", body);
 }

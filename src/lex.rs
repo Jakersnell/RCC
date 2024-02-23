@@ -488,6 +488,57 @@ impl Lexer {
         }
         .map(Token::Symbol)
     }
+
+    /// Removes whitespace and comments from incoming source
+    fn remove_trivial(&mut self) {
+        let mut state = TriviaState::Start;
+        loop {
+            if state != TriviaState::Start {
+                self.next_char();
+            }
+            if state == TriviaState::CommentEnd {
+                self.next_char();
+            }
+            state = self.get_current_trivia(state);
+            if state == TriviaState::End {
+                break;
+            }
+        }
+    }
+
+    fn get_current_trivia(&self, state: TriviaState) -> TriviaState {
+        match (state, self.current, self.next) {
+            (TriviaState::WhiteSpace | TriviaState::CommentEnd, Some(current), _) => {
+                TriviaState::Start
+            }
+
+            (TriviaState::Start, Some(current), _) if current.is_whitespace() => {
+                TriviaState::WhiteSpace
+            }
+
+            (TriviaState::BlockComment, Some('*'), Some('/')) => TriviaState::CommentEnd,
+
+            (TriviaState::Start, Some('/'), Some('*'))
+            | (TriviaState::BlockComment, Some(_), _) => TriviaState::BlockComment,
+
+            (TriviaState::InlineComment, Some('\n'), _) => TriviaState::Start,
+
+            (TriviaState::Start, Some('/'), Some('/'))
+            | (TriviaState::InlineComment, Some(_), _) => TriviaState::InlineComment,
+
+            _ => TriviaState::End,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq)]
+enum TriviaState {
+    Start,
+    InlineComment,
+    WhiteSpace,
+    BlockComment,
+    CommentEnd,
+    End,
 }
 
 impl Iterator for Lexer {
@@ -495,9 +546,7 @@ impl Iterator for Lexer {
     type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current.is_some_and(|c| c.is_whitespace()) {
-            self.next_char();
-        }
+        self.remove_trivial();
         self.current.map(|c| {
             let start = self.position;
             let kind = match c {
