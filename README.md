@@ -30,6 +30,8 @@ source code, this is because I designed the "pretty_print" function
 to display certain elements like variable declarations as we are familiar
 with seeing them. Other more important elements like the AST itself are
 displayed similar to the output of the Unix "tree" command.
+
+---
 The non "pretty printed" actual AST data structure can be viewed [here](example_ast.ron). 
 It is very verbose, but is a good illustration for how the data is parsed by the compiler.
 ```
