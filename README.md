@@ -30,6 +30,7 @@ source code, this is because I designed the "pretty_print" function
 to display certain elements like variable declarations as we are familiar
 with seeing them. Other more important elements like the AST itself are
 displayed similar to the output of the Unix "tree" command.
+[The non "pretty printed" actual AST structure can be viewed here](example_ast.ron)
 ```
 double take_and_return_double(double d) {
     int new_double = (
