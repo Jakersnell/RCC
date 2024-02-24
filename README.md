@@ -22,6 +22,7 @@ int main() {
 }
 ```
 And parse it to the following Abstract Syntax Tree.
+
 You may notice some things look fairly similar to the
 source code, this is because I designed the "pretty_print" function
 to display certain elements like variable declarations as we are familiar
@@ -43,6 +44,7 @@ double take_and_return_double(double d) {
 int x = (
     4
 )
+
 double y;
 
 int main() {
