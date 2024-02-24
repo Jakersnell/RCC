@@ -5,61 +5,56 @@ A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 ## Current Stage
 Currently we are able to take in syntax such as this C code:
 ```
-int x = 1 + 4 / 2 + y * 20;
-double y = 2.3434;
-
+// int x = 1 + 4 / 2 + y * 20;
+/* double y = 2.3434;
+*/ 
 double take_and_return_double(double d) {
     int new_double = d * 2 + 1;
     return d;
 }
+
+int x = 4;
+double y;
 
 int main() {
     y = y + x;
     return 0;
 }
 ```
-And parse it to the following Abstract Syntax Tree
+And parse it to the following Abstract Syntax Tree.
+You may notice some things look fairly similar to the
+source code, this is because I designed the "pretty_print" function
+to display certain elements like variable declarations as we are familiar
+with seeing them. Other more important elements like the AST itself are
+displayed similar to the output of the Unix "tree" command.
 ```
-int x
-└── =
-   ├── x
-   └── +
-      ├── +
-      │  ├── 1
-      │  └── /
-      │     ├── 4
-      │     └── 2
-      └── *
-         ├── y
-         └── 20
-
-double y
-└── =
-   ├── y
-   └── 2.3434
-
 double take_and_return_double(double d) {
-    int new_double
-    └── =
-       ├── new_double
-       └── +
-          ├── *
-          │  ├── d
-          │  └── 2
-          └── 1
+    int new_double = (
+        +
+        ├─ *
+        │  ├─ d
+        │  └─ 2
+        └─ 1
+    )
     return
-    └── d
+        └─ d
 }
+
+int x = (
+    4
+)
+double y;
 
 int main() {
-    └── =
-       ├── y
-       └── +
-          ├── y
-          └── x
+    y = (
+        +
+        ├─ y
+        └─ x
+    )
     return
-    └── 0
+        └─ 0
 }
+
 ```
 This is really cool because the AST represents the logical structure of the program.
 More to come soon!
