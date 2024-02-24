@@ -24,16 +24,6 @@ int main() {
 }
 ```
 And parse it to the following Abstract Syntax Tree.
-
-You may notice some things look fairly similar to the
-source code, this is because I designed the "pretty_print" function
-to display certain elements like variable declarations as we are familiar
-with seeing them. Other more important elements like the AST itself are
-displayed similar to the output of the Unix "tree" command.
-
----
-The non "pretty printed" actual AST data structure can be viewed [here](example_ast.ron). 
-It is very verbose, but is a good illustration for how the data is parsed by the compiler.
 ```
 double take_and_return_double(double d) {
     int new_double = (
@@ -66,6 +56,17 @@ int main() {
 ```
 This is really cool because the AST represents the logical structure of the program.
 More to come soon!
+
+---
+You may notice some things look fairly similar to the
+source code, this is because I designed the "pretty_print" function
+to display certain elements like variable declarations as we are familiar
+with seeing them. Other more important elements like the AST itself are
+displayed similar to the output of the Unix "tree" command.
+
+---
+The non "pretty printed" actual AST data structure can be viewed [here](example_ast.ron). 
+It is very verbose, but is a good illustration for how the data is parsed by the compiler.
 
 ### Roadmap
 <pre>
