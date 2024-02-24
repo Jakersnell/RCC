@@ -87,8 +87,8 @@ It is very verbose, but is a good illustration for how the data is parsed by the
 [ ] Function pointers
 </pre>
 
-#### Why?
-I am doing this project to study program compilation. I want to write a fully fledged C compiler and this is a good precursor to that. 
+#### Why work on this?
+I am doing this project to study program compilation. I want to write a fully fledged and complete C compiler some day and this is a good precursor to that. 
 
 The phases I hope for this compiler to have are as follows.
 1. Lexical analysis (Reading literals, keywords, operators, etc)
