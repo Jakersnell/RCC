@@ -28,10 +28,10 @@ And parse it to the following Abstract Syntax Tree.
 double take_and_return_double(double d) {
     int new_double = (
         +
-        ├─ *
-        │  ├─ d
-        │  └─ 2
-        └─ 1
+        ├─ 1
+        └─ *
+           ├─ 2
+           └─ d
     )
     return
         └─ d
@@ -44,15 +44,13 @@ int x = (
 double y;
 
 int main() {
-    y = (
-        +
-        ├─ y
-        └─ x
-    )
+    y =
+    └─ +
+       ├─ x
+       └─ y
     return
         └─ 0
 }
-
 ```
 This is really cool because the AST represents the logical structure of the program.
 More to come soon!
