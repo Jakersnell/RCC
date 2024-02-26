@@ -33,8 +33,9 @@ And parse it to the following Abstract Syntax Tree.
            ├─ 2
            └─ d
     )
-    <stmt> return
-        └─ d
+    <stmt> return <expr> (
+        d
+    )
 }
 
 <init dec> <stmt> <var> int x = <expr> (
