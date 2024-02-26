@@ -96,5 +96,13 @@ I am doing this project to study program compilation. I want to write a fully fl
 The phases I hope for this compiler to have are as follows.
 1. Lexical analysis (Reading literals, keywords, operators, etc)
 2. Parsing (Reading the logical structure of the code)
-3. Binding (Type checking and the like)
+3. Semantic analysis (Type checking, variable validation, and the like)
 4. Codegen (Creating the IR, linking the object files, creating a binary)
+
+### Resources I have used to help me with this project
+- [Stanford CS143 semantic analysis](https://web.stanford.edu/class/archive/cs/cs143/cs143.1128/handouts/180%20Semantic%20Analysis.pdf)
+- [Developing a C compiler from scratch in C](https://www.udemy.com/course/creating-a-c-compiler-from-scratch-module-1)
+- [Compiler Design](https://www.youtube.com/playlist?list=PLBlnK6fEyqRjT3oJxFXRgjPNzeS-LFY-q)
+- [Building a compiler - Immo Landwerth](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y)
+- [The rust compiler - for reference](https://github.com/rust-lang/rust)
+- [Salwater compiler - for reference](https://github.com/jyn514/saltwater)
