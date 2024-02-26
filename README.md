@@ -25,31 +25,35 @@ int main() {
 ```
 And parse it to the following Abstract Syntax Tree.
 ```
-double take_and_return_double(double d) {
-    int new_double = (
+<init dec> <fn> double take_and_return_double(double d) {
+    <stmt> <var> int new_double = <expr> (
         +
         ├─ 1
         └─ *
            ├─ 2
            └─ d
     )
-    return
+    <stmt> return
         └─ d
 }
 
-int x = (
+<init dec> <stmt> <var> int x = <expr> (
     4
 )
 
-double y;
+<init dec> <stmt> <var> double y;
 
-int main() {
-    y =
-    └─ +
-       ├─ x
-       └─ y
-    return
-        └─ 0
+<init dec> <fn> int main() {
+    <stmt> <expr> (
+        y =
+        └─ +
+           ├─ x
+           └─ y
+    )
+
+    <stmt> return <expr> (
+        0
+    )
 }
 ```
 This is really cool because the AST represents the logical structure of the program.
