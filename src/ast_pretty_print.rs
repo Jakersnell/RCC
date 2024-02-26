@@ -37,30 +37,17 @@ impl Expression {
                 format!("{}\n", value)
             }
             Expression::Binary(op, left, right) => {
-                if let BinaryOp::Assign(_) = op {
-                    let right = right.pretty_print(padding.clone(), true, true);
-                    format!("{} {} (\n{})", left, op, indent_string(right, 0, 4))
-                } else {
-                    let left = left.pretty_print(padding.clone(), false, false);
-                    let right = right.pretty_print(padding.clone(), true, false);
-                    format!("{}\n{}{}", op, left, right)
-                }
+                let right = right.pretty_print(padding.clone(), false, false);
+                let left = left.pretty_print(padding.clone(), true, false);
+                format!("{}\n{}{}", op, right, left)
             }
             Expression::Unary(op, right) => {
                 right.pretty_print(padding.clone(), true, false);
                 format!("{}\n", op)
             }
-            Expression::PreDecrement(ident) => {
-                format!("-- {}\n", ident)
-            }
-            Expression::PreIncrement(ident) => {
-                format!("++ {}\n", ident)
-            }
-            Expression::PostDecrement(ident) => {
-                format!("{} --\n", ident)
-            }
-            Expression::PostIncrement(ident) => {
-                format!("{} ++\n", ident)
+            Expression::Assignment(op, left, right) => {
+                let right = right.pretty_print(padding.clone(), true, false);
+                format!("{} {}\n{}", left, op, right)
             }
             val => unimplemented!("{:#?}", val),
         };
@@ -141,7 +128,7 @@ impl Display for DeclarationType {
                 Some(size) => write!(f, "{}[{}]", of, size),
                 None => write!(f, "{}[]", of),
             },
-            Type { specifiers, ty } => {
+            Unit { specifiers, ty } => {
                 if let Some(specifiers) = specifiers {
                     for specifier in specifiers {
                         write!(f, "{} ", specifier)?;
@@ -191,19 +178,19 @@ impl Display for Statement {
             Declaration(decl) => write!(f, "{}", decl),
             Return(expr) => match expr {
                 Some(expr) => write!(f, "return\n{}", indent_string(format!("└─ {}", expr), 0, 4)),
-                None => writeln!(f, "return"),
+                None => writeln!(f, "return;"),
             },
             Block(block) => write!(f, "{}", block),
         }
     }
 }
 
-impl Display for TypeOrIdentifier {
+impl Display for TypeOrExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::TypeOrIdentifier::*;
+        use crate::ast::TypeOrExpression::*;
         match self {
             Type(ty) => write!(f, "{}", ty),
-            Identifier(id) => write!(f, "{}", id),
+            Expr(expr) => write!(f, "{}", expr),
         }
     }
 }
@@ -216,6 +203,8 @@ impl Display for UnaryOp {
             Negate => "-",
             LogicalNot => "!",
             BitwiseNot => "~",
+            Increment => "++",
+            Decrement => "--",
         }
         .to_string();
         write!(f, "{}", str)
@@ -262,16 +251,37 @@ impl Display for BinaryOp {
     }
 }
 
+impl Display for AssignOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use crate::ast::AssignOp::*;
+        let str = match self {
+            Assign => "=",
+            Plus => "+",
+            Minus => "-",
+            Multiply => "*",
+            Divide => "/",
+            Modulo => "%",
+            BitwiseAnd => "&",
+            BitwiseOr => "|",
+            BitwiseXor => "^",
+            LeftShift => "<<",
+            RightShift => ">>",
+        }
+        .to_string();
+        write!(f, "{}", str)
+    }
+}
+
 impl Display for VariableDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.initializer {
-            Some(expr) => write!(
+            Some(expr) => writeln!(
                 f,
                 "{} = (\n{})",
                 self.declaration,
                 indent_string(format!("{}", expr), 0, 4)
             ),
-            None => write!(f, "{}", self.declaration),
+            None => writeln!(f, "{};", self.declaration),
         }
     }
 }

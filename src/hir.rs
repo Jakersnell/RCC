@@ -1,34 +1,37 @@
-use crate::ast::{Declaration, DeclarationType, FunctionDeclaration};
+use crate::ast::{ASTRoot, Declaration, DeclarationType, FunctionDeclaration};
 use crate::str_intern::InternedStr;
 use crate::util::Program;
 use std::collections::HashMap;
 
-struct SymbolResolver<'a> {
-    symbols: HashMap<InternedStr, SymbolType<'a>>,
-    parent: Option<&'a SymbolResolver<'a>>,
-}
-
-enum SymbolType<'a> {
-    Function(&'a FunctionDeclaration),
-    Variable(&'a Declaration),
-}
-
 struct Validator<'a> {
     root_resolver: SymbolResolver<'a>,
     current_resolver: SymbolResolver<'a>,
+    root: ASTRoot,
+}
+
+struct SymbolResolver<'a> {
+    symbols: HashMap<InternedStr, SymbolKind>,
+    parent: Option<&'a SymbolResolver<'a>>,
+}
+
+enum SymbolKind {
+    Function {
+        ty: BoundType,
+        parameters: Vec<BoundType>,
+    },
+    Variable(BoundType),
 }
 
 pub enum BoundType {
-    UnsignedInt(u32),
-    Int(i32),
-    UnsignedLong(u64),
-    Long(i64),
-    Float(f32),
-    Double(f64),
+    Void,
+    Int(bool), // signed/unsigned
+    Long(bool),
+    Float,
+    Double,
 }
 
 pub enum BoundLiteral {
-    Int(i32),
+    Int(u32),
     Float(f32),
     Double(f64),
 }

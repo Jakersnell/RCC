@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::ast::{
     AssignOp, BinaryOp, Block, DataType, Declaration, DeclarationType, Expression,
-    FunctionDeclaration, InitDeclaration, Statement, UnaryOp, VariableDeclaration,
+    FunctionDeclaration, InitDeclaration, PostfixOp, Statement, UnaryOp, VariableDeclaration,
 };
 use crate::lex::LexResult;
 use crate::str_intern::InternedStr;
@@ -35,24 +35,28 @@ macro_rules! is {
     };
 }
 
-macro_rules! confirm_body {
-    (
-        $value:ident,
-        $location:ident,
-        $closure:expr,
-        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
-    ) => {{
-        let formatted = format!("{:#?}", $value);
-        #[allow(clippy::redundant_closure_call)]
-        match $closure($value) {
-            $pattern $(if $guard)? => Ok(Locatable::new($location, $if_ok)),
-            _ => Err(vec![Locatable{
-                location:$location,
-                value:CompilerError::ExpectedVariety($if_err.to_string(), formatted)
-            }])
-        }
-    }};
+macro_rules! match_next {
+    ($invoker:ident, $closure:expr, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
+        $invoker.next.as_ref().map(|next|{
+            #[allow(clippy::redundant_closure_call)]
+            match $closure(&next.value) {
+                $pattern $(if $guard)? => Some(Locatable{
+                    location: next.location,
+                    value: $if_ok
+                }),
+                _ => None
+            }
+        }).flatten()
+    };
+    ($invoker:ident, $closure:expr, $pattern:pat $(if $guard:expr)?) => {
+        match_next!($invoker, $closure, $pattern $(if $guard)? => Some($if_ok))
+    };
+    ($invoker:ident, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
+        match_next!($invoker, |x|{x}, $pattern $(if $guard)? => Some($if_ok))
+    };
+    ($invoker:ident, $pattern:pat $(if $guard:expr)?) => {
+        match_next!($invoker, $pattern $(if $guard)? => Some(()))
+    };
 }
 
 macro_rules! confirm {
@@ -67,7 +71,7 @@ macro_rules! confirm {
         let locatable = $invoker.consume()?;
         let location = locatable.location;
         let value = locatable.value;
-        confirm_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
     (
@@ -98,7 +102,7 @@ macro_rules! confirm {
         let locatable = &$invoker.current.as_ref().unwrap();
         let value = &locatable.value;
         let location = locatable.location;
-        confirm_body!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
         (
@@ -118,6 +122,24 @@ macro_rules! confirm {
     ) => {
         confirm!( $invoker, borrow, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
+
+        (
+        $value:ident,
+        $location:ident,
+        $closure:expr,
+        $pattern:pat $(if $guard:expr)? => $if_ok:expr,
+        $if_err:literal
+    ) => {{
+        let formatted = format!("{:#?}", $value);
+        #[allow(clippy::redundant_closure_call)]
+        match $closure($value) {
+            $pattern $(if $guard)? => Ok(Locatable::new($location, $if_ok)),
+            _ => Err(vec![Locatable{
+                location:$location,
+                value:CompilerError::ExpectedVariety($if_err.to_string(), formatted)
+            }])
+        }
+    }};
 }
 
 impl<L> Parser<L>
@@ -293,7 +315,7 @@ where
         let identifier = self.confirm_identifier()?;
 
         // currently we only have unit types so this is hardcoded as DC::Type
-        let dec_type = DeclarationType::Type {
+        let dec_type = DeclarationType::Unit {
             specifiers: None,
             ty: keyword.value,
         };
@@ -390,16 +412,40 @@ where
             }
             _ => {
                 let stmt = self
-                    .parse_binary_expression(None)
+                    .parse_assignment_expression()
                     .map(Statement::Expression);
                 confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
                 stmt
             }
         }
     }
+
+    fn parse_assignment_expression(&mut self) -> CompilerResult<Expression> {
+        let mut root: Option<Expression> = None;
+        while let (Ok(ident), Some(op)) = (
+            self.match_identifier(),
+            match_next!(self, |x|{AssignOp::try_from(x)}, Ok(x) => x),
+        ) {
+            self.advance()?;
+            self.advance()?;
+            let right = self.parse_assignment_expression()?;
+            root = Some(Expression::Assignment(
+                op.value,
+                ident.value,
+                Box::new(right),
+            ));
+        }
+        if let Some(root) = root {
+            Ok(root)
+        } else {
+            self.parse_binary_expression(None)
+        }
+    }
+
     fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<Expression> {
         let lp = lp.unwrap_or(0);
-        let mut left = self.parse_unary_expression()?;
+        let mut left = self.parse_prefix_unary_expression()?;
+
         loop {
             if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
                 break;
@@ -417,17 +463,18 @@ where
             let right = self.parse_binary_expression(Some(rp))?;
             left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
         }
+
         Ok(left)
     }
 
-    fn parse_unary_expression(&mut self) -> CompilerResult<Expression> {
+    fn parse_prefix_unary_expression(&mut self) -> CompilerResult<Expression> {
         let mut node;
         let token = self.current.as_ref().unwrap();
 
         if let Ok(un_op) = UnaryOp::try_from(&token.value) {
             self.span.end = token.location.end;
             self.advance()?;
-            let expr = self.parse_unary_expression()?;
+            let expr = self.parse_prefix_unary_expression()?;
             node = Ok(Expression::Unary(un_op, Box::new(expr)));
         } else {
             node = self.parse_primary_expression();
@@ -436,35 +483,13 @@ where
         node
     }
 
-    fn parse_postfix_expression(&mut self, primary_expr: Expression) -> CompilerResult<Expression> {
-        if self.current.is_none() {
-            return Ok(primary_expr);
-        }
-        let expr = match &self.current.as_ref().unwrap().value {
-            Token::Symbol(Symbol::OpenParen) => {
-                todo!("function call!")
-            }
-            Token::Symbol(Symbol::Increment) => {
-                todo!("post increment!")
-            }
-            _ => primary_expr,
-        };
-        todo!()
-    }
-
     fn parse_primary_expression(&mut self) -> CompilerResult<Expression> {
-        if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
-            self.advance()?;
+        let locatable = self.consume()?;
+        let expression = if Token::Symbol(Symbol::OpenParen) == locatable.value {
             let expr = self.parse_binary_expression(None)?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            return Ok(expr);
-        }
-        self.parse_literal_or_variable()
-    }
-
-    fn parse_literal_or_variable(&mut self) -> CompilerResult<Expression> {
-        let locatable = self.consume()?;
-        if let Token::Literal(literal) = locatable.value {
+            Ok(expr)
+        } else if let Token::Literal(literal) = locatable.value {
             Ok(Expression::Literal(literal))
         } else if let Token::Identifier(identifier) = locatable.value {
             Ok(Expression::Variable(identifier))
@@ -477,6 +502,44 @@ where
                     format!("{:#?}", locatable.value),
                 ),
             )])
+        }?;
+
+        self.parse_postfix_unary_expression(expression)
+    }
+
+    fn parse_postfix_unary_expression(
+        &mut self,
+        primary_expr: Expression,
+    ) -> CompilerResult<Expression> {
+        if self.current.is_none() {
+            return Ok(primary_expr);
+        }
+        let current = self.current.as_ref().unwrap();
+        if let Ok(op) = PostfixOp::try_from(&current.value) {
+            Ok(Expression::PostFix(op, Box::new(primary_expr)))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
+            && matches!(&primary_expr, Expression::Variable(_))
+        {
+            let ident = match primary_expr {
+                Expression::Variable(var) => var,
+                _ => panic!("Nothing else should get to this point."),
+            };
+            self.advance()?;
+            let mut args = Vec::new();
+            while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
+                self.advance()?;
+                let expr = self.parse_binary_expression(None)?;
+                args.push(expr);
+                if is!(self, current, Token::Symbol(Symbol::Comma)) {
+                    self.advance()?;
+                } else {
+                    break;
+                }
+            }
+            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
+            Ok(Expression::FunctionCall(ident, args))
+        } else {
+            Ok(primary_expr)
         }
     }
 }

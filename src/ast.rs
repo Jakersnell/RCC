@@ -1,8 +1,11 @@
+use crate::ast::PostfixOp::Increment;
 use crate::str_intern::InternedStr;
 use crate::tokens::{Literal, Symbol, Token};
 use crate::util::CompilerResult;
 use std::fmt::Display;
 use std::sync::Arc;
+
+pub type ASTRoot = Vec<InitDeclaration>;
 
 #[derive(Debug)]
 pub(crate) struct Block(pub(crate) Vec<Statement>);
@@ -24,7 +27,6 @@ pub(crate) struct FunctionDeclaration {
 #[derive(Debug)]
 pub struct VariableDeclaration {
     pub(crate) declaration: Declaration,
-    // this will only ever be a binary expression because assignment is a binary operator
     pub(crate) initializer: Option<Expression>,
 }
 
@@ -43,7 +45,7 @@ pub(crate) enum DeclarationType {
         of: Box<DeclarationType>,
         size: Option<usize>,
     },
-    Type {
+    Unit {
         specifiers: Option<Vec<Specifier>>,
         ty: DataType,
     },
@@ -95,40 +97,48 @@ pub(crate) enum Statement {
 pub(crate) enum Expression {
     Literal(Literal),
     Variable(InternedStr),
-    Sizeof(TypeOrIdentifier),
-    PreDecrement(InternedStr), // decided to do these different because they operate on idents only
-    PreIncrement(InternedStr),
-    PostDecrement(InternedStr),
-    PostIncrement(InternedStr),
+    Sizeof(TypeOrExpression),
+    // this doesn't include all postfix operations, just inc and dec so far
+    PostFix(PostfixOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
+    Assignment(AssignOp, InternedStr, Box<Expression>),
     Binary(BinaryOp, Box<Expression>, Box<Expression>),
     FunctionCall(InternedStr, Vec<Expression>),
 }
 
 #[derive(Debug)]
-pub(crate) enum TypeOrIdentifier {
+pub(crate) enum TypeOrExpression {
     Type(DataType),
-    Identifier(InternedStr),
+    Expr(Box<Expression>),
+}
+
+#[derive(Debug)]
+pub(crate) enum PostfixOp {
+    Increment,
+    Decrement,
+}
+
+impl TryFrom<&Token> for PostfixOp {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use PostfixOp::*;
+        match value {
+            Token::Symbol(Symbol::Increment) => Ok(Increment),
+            Token::Symbol(Symbol::Decrement) => Ok(Decrement),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) enum UnaryOp {
+    Increment,
+    Decrement,
     Plus,
     Negate,
     LogicalNot,
     BitwiseNot,
-}
-
-impl UnaryOp {
-    pub(crate) fn precedence(&self) -> u8 {
-        use UnaryOp::*;
-        match self {
-            Plus => 4,
-            Negate => 4,
-            LogicalNot => 4,
-            BitwiseNot => 4,
-        }
-    }
 }
 
 impl TryFrom<&Token> for UnaryOp {
@@ -141,6 +151,8 @@ impl TryFrom<&Token> for UnaryOp {
             Token::Symbol(Symbol::Minus) => Ok(Negate),
             Token::Symbol(Symbol::Bang) => Ok(LogicalNot),
             Token::Symbol(Symbol::Tilde) => Ok(BitwiseNot),
+            Token::Symbol(Symbol::Increment) => Ok(Increment),
+            Token::Symbol(Symbol::Decrement) => Ok(Decrement),
             _ => Err(()),
         }
     }
@@ -180,7 +192,6 @@ impl BinaryOp {
         match self {
             Multiply | Divide | Modulo => 3,
             Add | Subtract => 2,
-            Assign(_) => 1,
             _ => 0,
         }
     }
@@ -210,18 +221,6 @@ impl TryFrom<&Token> for BinaryOp {
             Token::Symbol(Symbol::Caret) => Ok(BitwiseXor),
             Token::Symbol(Symbol::LeftShift) => Ok(LeftShift),
             Token::Symbol(Symbol::RightShift) => Ok(RightShift),
-
-            Token::Symbol(Symbol::Equal) => Ok(Assign(AssignOp::Assign)),
-            Token::Symbol(Symbol::PlusEqual) => Ok(Assign(AssignOp::Plus)),
-            Token::Symbol(Symbol::MinusEqual) => Ok(Assign(AssignOp::Minus)),
-            Token::Symbol(Symbol::StarEqual) => Ok(Assign(AssignOp::Multiply)),
-            Token::Symbol(Symbol::SlashEqual) => Ok(Assign(AssignOp::Divide)),
-            Token::Symbol(Symbol::ModuloEqual) => Ok(Assign(AssignOp::Modulo)),
-            Token::Symbol(Symbol::AmpersandEqual) => Ok(Assign(AssignOp::BitwiseAnd)),
-            Token::Symbol(Symbol::PipeEqual) => Ok(Assign(AssignOp::BitwiseOr)),
-            Token::Symbol(Symbol::CaretEqual) => Ok(Assign(AssignOp::BitwiseXor)),
-            Token::Symbol(Symbol::LeftShiftEqual) => Ok(Assign(AssignOp::LeftShift)),
-            Token::Symbol(Symbol::RightShiftEqual) => Ok(Assign(AssignOp::RightShift)),
 
             _ => Err(()),
         }

@@ -14,7 +14,10 @@ pub struct Locatable<T> {
 
 impl<T> Locatable<T> {
     #[inline]
-    pub fn map<U>(self, mapper: fn(T) -> U) -> Locatable<U> {
+    pub fn map<F, U>(self, mapper: F) -> Locatable<U>
+    where
+        F: Fn(T) -> U,
+    {
         Locatable::new(self.location, mapper(self.value))
     }
 }
