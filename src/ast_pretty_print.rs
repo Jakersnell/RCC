@@ -33,6 +33,8 @@ impl Expression {
                 let value = match literal {
                     Literal::Integer { value, suffix } => value.to_string(),
                     Literal::Float { value, suffix } => value.to_string(),
+                    Literal::Char { value } => value.to_string(),
+                    Literal::String { value } => value.to_string(),
                 };
                 format!("{}\n", value)
             }
@@ -128,15 +130,37 @@ impl Display for DeclarationType {
                 Some(size) => write!(f, "{}[{}]", of, size),
                 None => write!(f, "{}[]", of),
             },
-            Unit { specifiers, ty } => {
+            Unit {
+                specifiers,
+                ty,
+                qualifiers,
+            } => {
+                write!(f, "{}", ty)?;
                 if let Some(specifiers) = specifiers {
                     for specifier in specifiers {
                         write!(f, "{} ", specifier)?;
                     }
                 }
-                write!(f, "{}", ty)
+                if let Some(qualifiers) = qualifiers {
+                    for qualifier in qualifiers {
+                        write!(f, "{} ", qualifier)?;
+                    }
+                }
+                Ok(())
             }
         }
+    }
+}
+
+impl Display for TypeQualifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use crate::ast::TypeQualifier::*;
+        let str = match self {
+            Const => "const",
+            volatile => "volatile",
+        }
+        .to_string();
+        write!(f, "{}", str)
     }
 }
 
@@ -146,12 +170,12 @@ impl Display for TypeSpecifier {
         let str = match self {
             Void => "void",
             Char => "char",
-            Short => "short",
             Int => "int",
             Long => "long",
-            LongLong => "long long",
             Float => "float",
             Double => "double",
+            Signed => "signed",
+            Unsigned => "unsigned",
         }
         .to_string();
         write!(f, "{}", str)
@@ -162,8 +186,8 @@ impl Display for StorageSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::StorageSpecifier::*;
         let str = match self {
-            Const => "const",
-            Unsigned => "unsigned",
+            r#const => "const",
+            unsigned => "unsigned",
         }
         .to_string();
         write!(f, "{}", str)
@@ -181,6 +205,7 @@ impl Display for Statement {
                 None => writeln!(f, "return;"),
             },
             Block(block) => write!(f, "{}", block),
+            _ => panic!("unimplemented statement: {:#?}", self),
         }
     }
 }
