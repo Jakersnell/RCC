@@ -21,7 +21,7 @@ mod validation;
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't a compiler.
 
-static DEBUG: bool = false;
+const DEBUG: bool = false;
 
 fn main() {
     let source = "
@@ -48,7 +48,7 @@ int main() {
     let parser = parse::Parser::from_lexer(program, lexer);
     let program = parser.parse();
     let body = program.body.unwrap().unwrap();
-    if DEBUG {
+    if cfg!(DEBUG) {
         println!("{:#?}", body);
     } else {
         for node in body {
