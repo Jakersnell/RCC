@@ -1,4 +1,4 @@
-use crate::ast::{ASTRoot, Declaration, DeclarationType, FunctionDeclaration};
+use crate::ast::{ASTRoot, Declaration, FunctionDeclaration};
 use crate::str_intern::InternedStr;
 use crate::util::Program;
 use std::collections::HashMap;
