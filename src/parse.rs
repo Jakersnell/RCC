@@ -352,7 +352,7 @@ where
         } else if let Ok(ident) = self.match_identifier() {
             self.advance()?;
             Ok(Declarator::Unit {
-                ident: ident.clone(),
+                ident: ident.value.clone(),
             })
         } else {
             Ok(Declarator::None)

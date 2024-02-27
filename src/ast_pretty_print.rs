@@ -28,7 +28,7 @@ impl Expression {
             padding += if last { "   " } else { "│  " };
         };
         let child_output = match self {
-            Expression::Variable(ident) => format!("{}{}", ident, if is_root { "" } else { "\n" }),
+            Expression::Variable(ident) => format!("{}\n", ident),
             Expression::Literal(literal) => {
                 let value = match literal {
                     Literal::Integer { value, suffix } => value.to_string(),
@@ -79,8 +79,8 @@ impl Display for InitDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::InitDeclaration::*;
         match self {
-            Declaration(variable) => write!(f, "{}", variable),
-            Function(function) => write!(f, "{}", function),
+            Declaration(variable) => write!(f, "<init-var-dec> {}", variable),
+            Function(function) => write!(f, "<fn> {}", function),
         }
     }
 }
@@ -113,41 +113,21 @@ impl Display for FunctionDeclaration {
 
 impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let name = match &self.name {
-            Some(name) => name.as_ref(),
-            None => "<anon function>",
-        };
-        write!(f, "{} {}", self.ty, name)
+        write!(f, "{} {}", self.specifier, self.declarator)
     }
 }
 
-impl Display for DeclarationType {
+impl Display for Declarator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::DeclarationType::*;
+        use crate::ast::Declarator::*;
         match self {
             Pointer { to } => write!(f, "*{}", to),
             Array { of, size } => match size {
                 Some(size) => write!(f, "{}[{}]", of, size),
-                None => write!(f, "{}[]", of),
+                any => write!(f, "{}[]", of),
             },
-            Unit {
-                specifiers,
-                ty,
-                qualifiers,
-            } => {
-                write!(f, "{}", ty)?;
-                if let Some(specifiers) = specifiers {
-                    for specifier in specifiers {
-                        write!(f, "{} ", specifier)?;
-                    }
-                }
-                if let Some(qualifiers) = qualifiers {
-                    for qualifier in qualifiers {
-                        write!(f, "{} ", qualifier)?;
-                    }
-                }
-                Ok(())
-            }
+            Unit { ident } => write!(f, "{}", ident),
+            None => Ok(()),
         }
     }
 }
@@ -157,7 +137,6 @@ impl Display for TypeQualifier {
         use crate::ast::TypeQualifier::*;
         let str = match self {
             Const => "const",
-            volatile => "volatile",
         }
         .to_string();
         write!(f, "{}", str)
@@ -172,7 +151,6 @@ impl Display for TypeSpecifier {
             Char => "char",
             Int => "int",
             Long => "long",
-            Float => "float",
             Double => "double",
             Signed => "signed",
             Unsigned => "unsigned",
@@ -184,10 +162,8 @@ impl Display for TypeSpecifier {
 
 impl Display for StorageSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::StorageSpecifier::*;
         let str = match self {
-            r#const => "const",
-            unsigned => "unsigned",
+            StorageSpecifier::Static => "static",
         }
         .to_string();
         write!(f, "{}", str)
@@ -197,14 +173,19 @@ impl Display for StorageSpecifier {
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::Statement::*;
+        write!(f, "<stmt> ");
         match self {
-            Expression(expr) => write!(f, "{}", expr),
-            Declaration(decl) => write!(f, "{}", decl),
+            Expression(expr) => write!(f, " <expr> {}", expr),
+            Declaration(decl) => write!(f, " <var-dec> {}", decl),
             Return(expr) => match expr {
-                Some(expr) => write!(f, "return\n{}", indent_string(format!("└─ {}", expr), 0, 4)),
+                Some(expr) => write!(
+                    f,
+                    "return <expr> (\n{})",
+                    indent_string(format!("{}", expr), 0, 4)
+                ),
                 None => writeln!(f, "return;"),
             },
-            Block(block) => write!(f, "{}", block),
+            Block(block) => write!(f, "<block> {}", block),
             _ => panic!("unimplemented statement: {:#?}", self),
         }
     }
@@ -217,6 +198,25 @@ impl Display for TypeOrExpression {
             Type(ty) => write!(f, "{}", ty),
             Expr(expr) => write!(f, "{}", expr),
         }
+    }
+}
+
+impl Display for DeclarationSpecifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        macro_rules! write_field {
+            ($field:expr) => {
+                for (i, item) in $field.iter().enumerate() {
+                    write!(f, "{}", item)?;
+                    if i != $field.len() - 1 {
+                        write!(f, " ")?;
+                    }
+                }
+            };
+        }
+        write_field!(self.specifiers);
+        write_field!(self.qualifiers);
+        write_field!(self.ty);
+        Ok(())
     }
 }
 
@@ -302,7 +302,7 @@ impl Display for VariableDeclaration {
         match &self.initializer {
             Some(expr) => writeln!(
                 f,
-                "{} = (\n{})",
+                "{} = <init-expr> (\n{})",
                 self.declaration,
                 indent_string(format!("{}", expr), 0, 4)
             ),
