@@ -2,7 +2,7 @@
 This project is currently a work in progress.
 A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 Since this does not follow any C specification, I wrote up a formal lexical grammar for the language, I plan on extending this to a small formal specification.
-You can view the grammar [here](MICRO-C-GRAMMAR.md)
+You can view the formal grammar [here](MICRO-C-GRAMMAR.md).
 
 ## Current Stage
 Currently we are able to take in syntax such as this C code:
