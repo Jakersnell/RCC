@@ -2,8 +2,9 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::ast::{
-    AssignOp, BinaryOp, Block, Declaration, DeclarationType, Expression, FunctionDeclaration,
-    InitDeclaration, PostfixOp, Statement, TypeSpecifier, UnaryOp, VariableDeclaration,
+    AssignOp, BinaryOp, Block, Declaration, DeclarationSpecifier, Declarator, Expression,
+    FunctionDeclaration, InitDeclaration, PostfixOp, Statement, StorageSpecifier, TypeQualifier,
+    TypeSpecifier, UnaryOp, VariableDeclaration,
 };
 use crate::error::CompilerError;
 use crate::lex::LexResult;
@@ -35,9 +36,9 @@ macro_rules! is {
     };
 }
 
-macro_rules! match_next {
-    ($invoker:ident, $closure:expr, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
-        $invoker.next.as_ref().map(|next|{
+macro_rules! match_token {
+    ($invoker:ident, $current_or_next:ident, $closure:expr, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
+        $invoker.$current_or_next.as_ref().map(|next|{
             #[allow(clippy::redundant_closure_call)]
             match $closure(&next.value) {
                 $pattern $(if $guard)? => Some(Locatable{
@@ -48,15 +49,16 @@ macro_rules! match_next {
             }
         }).flatten()
     };
-    ($invoker:ident, $closure:expr, $pattern:pat $(if $guard:expr)?) => {
-        match_next!($invoker, $closure, $pattern $(if $guard)? => Some($if_ok))
+    ($invoker:ident, $current_or_next:ident, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
+        match_token!($invoker, $current_or_next, |x|{x}, $pattern $(if $guard)? => $if_ok)
     };
-    ($invoker:ident, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
-        match_next!($invoker, |x|{x}, $pattern $(if $guard)? => Some($if_ok))
+    ($invoker:ident, $current_or_next:ident, $closure:expr, $pattern:pat $(if $guard:expr)?) => {
+        match_token!($invoker, $current_or_next, $closure, $pattern $(if $guard)? => Some($if_ok))
     };
-    ($invoker:ident, $pattern:pat $(if $guard:expr)?) => {
-        match_next!($invoker, $pattern $(if $guard)? => Some(()))
+    ($invoker:ident, $current_or_next:ident, $pattern:pat $(if $guard:expr)?) => {
+        match_token!($invoker, $current_or_next, $pattern $(if $guard)? => Some(()))
     };
+
 }
 
 macro_rules! confirm {
@@ -310,20 +312,79 @@ where
     }
 
     fn parse_declaration(&mut self) -> CompilerResult<Declaration> {
-        // parse qualifiers / specifiers here
-        let keyword = self.confirm_type()?;
-        let identifier = self.confirm_identifier()?;
-
-        // currently we only have unit types so this is hardcoded as DC::Type
-        let dec_type = DeclarationType::Unit {
-            qualifiers: None,
-            specifiers: None,
-            ty: keyword.value,
-        };
-
+        let specifier = self.parse_declaration_specifier()?;
+        let declarator = self.parse_declarator()?;
         Ok(Declaration {
-            ty: dec_type,
-            name: Some(identifier.value),
+            specifier,
+            declarator,
+        })
+    }
+
+    fn parse_declarator(&mut self) -> CompilerResult<Declarator> {
+        // I apologize in advance for the following code lol
+        if is!(self, current, Token::Symbol(Symbol::Star)) {
+            self.advance()?;
+            let to = Box::new(self.parse_declarator()?);
+            Ok(Declarator::Pointer { to })
+        } else if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
+            self.advance()?;
+            let of = Box::new(self.parse_declarator()?);
+            let size = if let Some(Locatable {
+                location,
+                value: (integer, suffix),
+            }) = match_token!(self, current, Token::Literal(Literal::Integer {value, suffix}) => (*value, suffix.clone()))
+            {
+                if suffix.is_some() {
+                    return Err(vec![Locatable::new(
+                        location,
+                        CompilerError::CustomError(
+                            "Suffixes in array sizes are not currently supported.".to_string(),
+                        ),
+                    )]);
+                }
+                self.advance()?;
+                Some(integer as usize)
+            } else {
+                None
+            };
+            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
+            Ok(Declarator::Array { of, size })
+        } else if let Ok(ident) = self.match_identifier() {
+            self.advance()?;
+            Ok(Declarator::Unit {
+                ident: ident.clone(),
+            })
+        } else {
+            Ok(Declarator::None)
+        }
+    }
+
+    fn parse_declaration_specifier(&mut self) -> CompilerResult<DeclarationSpecifier> {
+        let mut storage_specifiers = Vec::new();
+        while let Some(storage_specifier) =
+            match_token!(self, current, |x|{StorageSpecifier::try_from(x)}, Ok(x) => x)
+        {
+            storage_specifiers.push(storage_specifier.value);
+            self.advance()?;
+        }
+        let mut type_qualifiers = Vec::new();
+        while let Some(type_qualifier) =
+            match_token!(self, current, |x|{TypeQualifier::try_from(x)}, Ok(x) => x)
+        {
+            type_qualifiers.push(type_qualifier.value);
+            self.advance()?;
+        }
+        let mut type_specifiers = Vec::new();
+        while let Some(type_specifier) =
+            match_token!(self, current, |x|{TypeSpecifier::try_from(x)}, Ok(x) => x)
+        {
+            type_specifiers.push(type_specifier.value);
+            self.advance()?;
+        }
+        Ok(DeclarationSpecifier {
+            specifiers: storage_specifiers,
+            qualifiers: type_qualifiers,
+            ty: type_specifiers,
         })
     }
 
@@ -363,7 +424,7 @@ where
         &mut self,
         declaration: Declaration,
     ) -> CompilerResult<VariableDeclaration> {
-        debug_assert!(declaration.name.is_some());
+        // debug_assert!(declaration.name.is_some());
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
             Some(self.parse_binary_expression(None)?)
@@ -425,7 +486,7 @@ where
         let mut root: Option<Expression> = None;
         while let (Ok(ident), Some(op)) = (
             self.match_identifier(),
-            match_next!(self, |x|{AssignOp::try_from(x)}, Ok(x) => x),
+            match_token!(self, next, |x|{AssignOp::try_from(x)}, Ok(x) => x),
         ) {
             self.advance()?;
             self.advance()?;
