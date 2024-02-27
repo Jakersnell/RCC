@@ -3,9 +3,13 @@ I created this to give myself a better structure for writing the compiler.
 Items denoted with a $ at the front such as $start, or $identifier are non-terminal symbols.
 This is done to denote this even though they are text and not a symbol literal. Anything inside of single quotes, such as
 'const' are keywords or programmatic symbols, they are non-terminals.
-This will mostly follow similar structure to the ansi C, with a few key exceptions that should be very noticable.
-One being that 'const' can not come after a type specifier, for example.
-specification which can be found [here](https://www.lysator.liu.se/c/ANSI-C-grammar-y.html#declaration).
+This will follow similar structure to the ansi C specification, with a few key exceptions and items missing.
+
+
+The ANSI C specification can be found [here](https://www.lysator.liu.se/c/ANSI-C-grammar-y.html#declaration). 
+
+If you are not familiar with formal grammars, 
+I recommend starting [here](https://en.wikipedia.org/wiki/Formal_grammar).
 
 <pre>
 $start
@@ -13,7 +17,7 @@ $start
     ;
 
 compilation_unit
-    : compilation_unit init_declaration
+    : init_declaration compilation_unit 
     | compilation_unit $end_of_file
     ;
 
