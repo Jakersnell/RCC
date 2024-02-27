@@ -5,6 +5,7 @@ use std::sync::Arc;
 mod ast;
 mod ast_pretty_print;
 mod codegen;
+mod error;
 mod hir;
 mod lex;
 mod lowering;
@@ -12,6 +13,7 @@ mod parse;
 mod str_intern;
 mod tokens;
 mod util;
+mod validation;
 
 /// The main entry point for the program.
 /// This will be last to be completed because it's just a CLI and

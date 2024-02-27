@@ -3,26 +3,49 @@ use crate::str_intern::InternedStr;
 use crate::util::Program;
 use std::collections::HashMap;
 
-struct Validator<'a> {
-    root_resolver: SymbolResolver<'a>,
-    current_resolver: SymbolResolver<'a>,
-    root: ASTRoot,
-}
+pub struct BoundRoot(pub Vec<BoundStatement>);
 
-struct SymbolResolver<'a> {
-    symbols: HashMap<InternedStr, SymbolKind>,
-    parent: Option<&'a SymbolResolver<'a>>,
-}
-
-enum SymbolKind {
-    Function {
-        ty: BoundType,
-        parameters: Vec<BoundType>,
+pub enum BoundInitDeclaration {
+    VariableDeclaration {
+        ident: InternedStr,
+        ty: BoundTypeKind,
+        initializer: Option<BoundExpr>,
     },
-    Variable(BoundType),
+    FunctionDeclaration {
+        ident: InternedStr,
+        ty: BoundTypeKind,
+        parameters: Vec<(InternedStr, BoundTypeKind)>,
+        body: Vec<BoundStatement>,
+    },
 }
 
-pub enum BoundType {
+pub enum BoundStatement {
+    VariableDeclaration {
+        ident: InternedStr,
+        ty: BoundTypeKind,
+        initializer: Option<BoundExpr>,
+    },
+    FunctionDeclaration {
+        ident: InternedStr,
+        ty: BoundTypeKind,
+        parameters: Vec<(InternedStr, BoundTypeKind)>,
+        body: Vec<BoundStatement>,
+    },
+    Return(BoundExpr),
+    Expression(BoundExpr),
+}
+
+#[derive(Debug)]
+pub enum SymbolKind {
+    Function {
+        ty: BoundTypeKind,
+        parameters: Vec<BoundTypeKind>,
+    },
+    Variable(BoundTypeKind),
+}
+
+#[derive(Debug)]
+pub enum BoundTypeKind {
     Void,
     Int(bool), // signed/unsigned
     Long(bool),
@@ -30,17 +53,20 @@ pub enum BoundType {
     Double,
 }
 
+#[derive(Debug)]
 pub enum BoundLiteral {
     Int(u32),
     Float(f32),
     Double(f64),
 }
 
+#[derive(Debug)]
 pub struct BoundExpr {
-    pub ty: BoundType,
+    pub ty: BoundTypeKind,
     pub kind: BoundExprKind,
 }
 
+#[derive(Debug)]
 pub enum BoundExprKind {
     Literal(BoundLiteral),
     Variable(Declaration),

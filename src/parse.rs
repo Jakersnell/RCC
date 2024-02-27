@@ -5,12 +5,12 @@ use crate::ast::{
     AssignOp, BinaryOp, Block, DataType, Declaration, DeclarationType, Expression,
     FunctionDeclaration, InitDeclaration, PostfixOp, Statement, UnaryOp, VariableDeclaration,
 };
+use crate::error::CompilerError;
 use crate::lex::LexResult;
 use crate::str_intern::InternedStr;
 use crate::tokens::Symbol;
 use crate::tokens::Token;
 use crate::tokens::{Keyword, Literal};
-use crate::util::CompilerError;
 use crate::util::{CompilerResult, Locatable, LocatableToken, Program, Span};
 
 static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof";

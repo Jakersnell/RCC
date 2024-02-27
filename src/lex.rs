@@ -1,4 +1,5 @@
-use crate::util::{CompilerError, Locatable, Span};
+use crate::error::CompilerError;
+use crate::util::{Locatable, Span};
 use crate::{
     lex,
     tokens::{Keyword, Literal, Symbol, Token},
