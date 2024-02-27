@@ -80,9 +80,11 @@ It is very verbose, but is a good illustration for how the data is parsed by the
 [X] Variables
 [X] Scope
 [X] Function declarations
-[ ] "int main" entry point
-[ ] First codegen with cranelift
+[X] "int main" entry point
+[ ] Binding and HIR
+[ ] Initial lowering and LLIR
 [ ] Temp Buildin of printf function
+[ ] First codegen with cranelift
 [ ] If control flow
 [ ] While loops
 [ ] For loops
