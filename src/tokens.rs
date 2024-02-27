@@ -39,9 +39,21 @@ pub enum Literal {
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Keyword {
     Void,
+    Char,
+    Long,
     Int,
     Double,
     Return,
+    Signed,
+    Unsigned,
+    If,
+    Else,
+    While,
+    For,
+    Break,
+    Continue,
+    Static,
+    Const,
 }
 
 impl Keyword {
