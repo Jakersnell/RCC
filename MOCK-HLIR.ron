@@ -1,0 +1,50 @@
+/*
+This document shows what a High Level Intermediate Representation (HLIR or HIR) might look like
+for this compiler. This is a very rough draft and is subject to change. Ive just designed this
+with what I know I will need in an HLIR for this compiler. This is a starting template that I can
+implement within the semantic analyzer.
+*/
+Declaration(
+    type_spec: (
+        ty: Int(true),
+        qualifier: Some([
+            Const,
+        ]),
+        specifiers: None,
+    ),
+    ident: "x",
+    initializer: Some((
+        ty: Int(true),
+        expr: Binary(
+            op: Add,
+            lhs: (
+                ty: Int(true),
+                expr: Literal(Int(5)),
+                span: (
+                    file: "main.c",
+                    start: 0,
+                    end: 0,
+                ),
+            ),
+            rhs: (
+                ty: Int(true),
+                expr: Literal(Int(2)),
+                span: (
+                    file: "main.c",
+                    start: 0,
+                    end: 0,
+                ),
+            ),
+        ),
+        span: (
+            file: "main.c",
+            start: 0,
+            end: 0,
+        ),
+    )),
+    span: (
+        file: "main.c",
+        start: 0,
+        end: 0,
+    ),
+)
