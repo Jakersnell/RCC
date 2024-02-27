@@ -1,9 +1,14 @@
 use crate::ast::PostfixOp::Increment;
 use crate::str_intern::InternedStr;
-use crate::tokens::{Literal, Symbol, Token};
+use crate::tokens::{Keyword, Literal, Symbol, Token};
 use crate::util::CompilerResult;
 use std::fmt::Display;
 use std::sync::Arc;
+
+/*
+Some things in this AST very closely follow the ANSI C Yacc grammar.
+The majority does not.
+ */
 
 pub type ASTRoot = Vec<InitDeclaration>;
 
@@ -32,24 +37,31 @@ pub struct VariableDeclaration {
 
 #[derive(Debug)]
 pub(crate) struct Declaration {
-    pub(crate) ty: DeclarationType,
-    pub(crate) name: Option<InternedStr>,
+    pub(crate) specifier: DeclarationSpecifier,
+    pub(crate) declarator: Declarator,
 }
 
 #[derive(Debug)]
-pub(crate) enum DeclarationType {
+pub(crate) enum Declarator {
+    // not supporting function pointers
     Pointer {
-        to: Box<DeclarationType>,
+        to: Box<Declarator>,
     },
     Array {
-        of: Box<DeclarationType>,
+        of: Box<Declarator>,
         size: Option<usize>,
     },
     Unit {
-        qualifiers: Option<Vec<TypeQualifier>>,
-        specifiers: Option<Vec<StorageSpecifier>>,
-        ty: TypeSpecifier,
+        ident: InternedStr,
     },
+    None,
+}
+
+#[derive(Debug)]
+pub(crate) struct DeclarationSpecifier {
+    pub(crate) specifiers: Vec<StorageSpecifier>,
+    pub(crate) qualifiers: Vec<TypeQualifier>,
+    pub(crate) ty: Vec<TypeSpecifier>,
 }
 
 #[derive(Debug)]
@@ -58,7 +70,6 @@ pub(crate) enum TypeSpecifier {
     Char,
     Int,
     Long,
-    Float,
     Double,
     Signed,
     Unsigned,
@@ -70,11 +81,13 @@ impl TryFrom<&Token> for TypeSpecifier {
     fn try_from(value: &Token) -> Result<Self, Self::Error> {
         use TypeSpecifier::*;
         match value {
-            Token::Keyword(keyword) => match keyword {
-                crate::tokens::Keyword::Int => Ok(Int),
-                crate::tokens::Keyword::Double => Ok(Double),
-                _ => Err(()),
-            },
+            Token::Keyword(Keyword::Int) => Ok(Int),
+            Token::Keyword(Keyword::Double) => Ok(Double),
+            Token::Keyword(Keyword::Void) => Ok(Void),
+            Token::Keyword(Keyword::Char) => Ok(Char),
+            Token::Keyword(Keyword::Long) => Ok(Long),
+            Token::Keyword(Keyword::Signed) => Ok(Signed),
+            Token::Keyword(Keyword::Unsigned) => Ok(Unsigned),
             _ => Err(()),
         }
     }
@@ -85,9 +98,33 @@ pub(crate) enum StorageSpecifier {
     Static,
 }
 
+impl TryFrom<&Token> for StorageSpecifier {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use StorageSpecifier::*;
+        match value {
+            Token::Keyword(Keyword::Static) => Ok(Static),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) enum TypeQualifier {
     Const,
+}
+
+impl TryFrom<&Token> for TypeQualifier {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use TypeQualifier::*;
+        match value {
+            Token::Keyword(Keyword::Const) => Ok(Const),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug)]
