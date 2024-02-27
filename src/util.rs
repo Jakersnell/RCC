@@ -2,6 +2,7 @@ use crate::ast::InitDeclaration;
 use crate::error::{CompilerError, CompilerWarning};
 use crate::tokens::Token as LexToken;
 use derive_new::new;
+use std::fmt::{Display, Formatter};
 
 pub type LocatableToken = Locatable<LexToken>;
 pub type CompilerResult<T> = Result<T, Vec<Locatable<CompilerError>>>;
@@ -26,6 +27,12 @@ impl<T> Locatable<T> {
 pub struct Span {
     pub start: usize,
     pub end: usize,
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "Span({}, {})", self.start, self.end)
+    }
 }
 
 #[derive(Debug)]
