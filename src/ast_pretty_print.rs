@@ -79,7 +79,7 @@ impl Display for InitDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::InitDeclaration::*;
         match self {
-            Declaration(variable) => write!(f, "<init-var-dec> {}", variable),
+            Declaration(variable) => writeln!(f, "<init-var-dec> {};", variable),
             Function(function) => write!(f, "<fn> {}", function),
         }
     }
@@ -175,17 +175,23 @@ impl Display for Statement {
         use crate::ast::Statement::*;
         write!(f, "<stmt> ");
         match self {
-            Expression(expr) => write!(f, " <expr> {}", expr),
-            Declaration(decl) => write!(f, " <var-dec> {}", decl),
-            Return(expr) => match expr {
-                Some(expr) => write!(
+            Expression(expr) => {
+                writeln!(
                     f,
-                    "return <expr> (\n{})",
+                    "<expr> (\n{});",
+                    indent_string(format!("{}", expr), 0, 4)
+                )
+            }
+            Declaration(decl) => writeln!(f, "<var-dec> {};", decl),
+            Return(expr) => match expr {
+                Some(expr) => writeln!(
+                    f,
+                    "return <expr> (\n{});",
                     indent_string(format!("{}", expr), 0, 4)
                 ),
                 None => writeln!(f, "return;"),
             },
-            Block(block) => write!(f, "<block> {}", block),
+            Block(block) => writeln!(f, "<block> {}", block),
             _ => panic!("unimplemented statement: {:#?}", self),
         }
     }
@@ -300,13 +306,13 @@ impl Display for AssignOp {
 impl Display for VariableDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.initializer {
-            Some(expr) => writeln!(
+            Some(expr) => write!(
                 f,
                 "{} = <init-expr> (\n{})",
                 self.declaration,
                 indent_string(format!("{}", expr), 0, 4)
             ),
-            None => writeln!(f, "{};", self.declaration),
+            None => write!(f, "{}", self.declaration),
         }
     }
 }

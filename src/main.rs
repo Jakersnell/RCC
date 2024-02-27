@@ -21,10 +21,7 @@ mod validation;
 
 const DEBUG: bool = false;
 
-fn main() {}
-
-#[test]
-fn test_comments_and_functions_dot_c() {
+fn main() {
     let source = std::fs::read_to_string("_c_test_files/comments_and_functions.c").unwrap();
     let lexer = lex::Lexer::new(source);
     let program = util::Program::new("comments_and_functions.c".to_string());
