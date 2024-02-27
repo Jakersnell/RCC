@@ -140,9 +140,9 @@ impl Display for DeclarationType {
     }
 }
 
-impl Display for DataType {
+impl Display for TypeSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::DataType::*;
+        use crate::ast::TypeSpecifier::*;
         let str = match self {
             Void => "void",
             Char => "char",
@@ -158,9 +158,9 @@ impl Display for DataType {
     }
 }
 
-impl Display for Specifier {
+impl Display for StorageSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::Specifier::*;
+        use crate::ast::StorageSpecifier::*;
         let str = match self {
             Const => "const",
             Unsigned => "unsigned",
