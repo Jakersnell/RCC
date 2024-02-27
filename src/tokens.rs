@@ -1,4 +1,5 @@
 use crate::str_intern::InternedStr;
+use arcstr::Substr;
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -34,6 +35,8 @@ impl Token {
 pub enum Literal {
     Integer { value: u128, suffix: Option<String> },
     Float { value: f64, suffix: Option<String> },
+    Char { value: char },
+    String { value: Substr },
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
