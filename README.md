@@ -2,7 +2,7 @@
 This project is currently a work in progress.
 A compiler to implement a subset of C language features. Thus dubbed "Micro C".
 Since this does not follow any C specification, I wrote up a formal lexical grammar for the language, I plan on extending this to a small formal specification.
-You can view the grammar [here]()
+You can view the grammar [here](MICRO-C-GRAMMAR.md)
 
 ## Current Stage
 Currently we are able to take in syntax such as this C code:
@@ -25,7 +25,7 @@ int main() {
     return 0;
 }
 ```
-And parse it to the following Abstract Syntax Tree.
+And parse it to the following Abstract Syntax Tree. Printed by the 'ast_pretty_print' system to be more readable.
 ```
 <init dec> <fn> double take_and_return_double(double d) {
     <stmt> <var> int new_double = <expr> (
