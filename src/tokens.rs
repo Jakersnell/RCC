@@ -57,11 +57,22 @@ pub enum Keyword {
     Continue,
     Static,
     Const,
+    Struct,
 }
 
 impl Keyword {
-    pub fn is_type(&self) -> bool {
-        matches!(self, Keyword::Int | Keyword::Double | Keyword::Void)
+    pub fn is_for_type(&self) -> bool {
+        matches!(
+            self,
+            Keyword::Int
+                | Keyword::Double
+                | Keyword::Void
+                | Keyword::Char
+                | Keyword::Long
+                | Keyword::Signed
+                | Keyword::Unsigned
+                | Keyword::Struct
+        )
     }
 }
 

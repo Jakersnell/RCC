@@ -456,7 +456,7 @@ where
                 let block = self.parse_compound_statement()?;
                 Ok(Statement::Block(block))
             }
-            Token::Keyword(keyword) if keyword.is_type() => {
+            Token::Keyword(keyword) if keyword.is_for_type() => {
                 let dec = self.parse_declaration()?;
                 let variable_declaration = self.parse_variable_declaration(dec)?;
                 confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
@@ -578,7 +578,7 @@ where
 
     fn parse_sizeof(&mut self) -> CompilerResult<Expression> {
         if is!(self, current, Token::Symbol(Symbol::OpenParen))
-            && is!(self, next, Token::Keyword(kw) if kw.is_type())
+            && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
             let ty = self.parse_declaration_specifier()?;
             self.advance()?;

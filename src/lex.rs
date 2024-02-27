@@ -102,7 +102,7 @@ impl Lexer {
                 "void" => Token::Keyword(Keyword::Void),
                 "signed" => Token::Keyword(Keyword::Signed),
                 "unsigned" => Token::Keyword(Keyword::Unsigned),
-
+                "struct" => Token::Keyword(Keyword::Struct),
                 "if" => Token::Keyword(Keyword::If),
                 "else" => Token::Keyword(Keyword::Else),
                 "while" => Token::Keyword(Keyword::While),

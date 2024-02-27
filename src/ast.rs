@@ -73,6 +73,7 @@ pub(crate) enum TypeSpecifier {
     Double,
     Signed,
     Unsigned,
+    Struct(InternedStr),
 }
 
 impl TryFrom<&Token> for TypeSpecifier {
