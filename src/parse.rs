@@ -2,8 +2,8 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::ast::{
-    AssignOp, BinaryOp, Block, DataType, Declaration, DeclarationType, Expression,
-    FunctionDeclaration, InitDeclaration, PostfixOp, Statement, UnaryOp, VariableDeclaration,
+    AssignOp, BinaryOp, Block, Declaration, DeclarationType, Expression, FunctionDeclaration,
+    InitDeclaration, PostfixOp, Statement, TypeSpecifier, UnaryOp, VariableDeclaration,
 };
 use crate::error::CompilerError;
 use crate::lex::LexResult;
@@ -220,8 +220,8 @@ where
     }
 
     #[inline(always)]
-    fn confirm_type(&mut self) -> CompilerResult<Locatable<DataType>> {
-        confirm!(self, consume, |x| {DataType::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
+    fn confirm_type(&mut self) -> CompilerResult<Locatable<TypeSpecifier>> {
+        confirm!(self, consume, |x| {TypeSpecifier::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
     }
 
     #[inline(always)]
@@ -316,6 +316,7 @@ where
 
         // currently we only have unit types so this is hardcoded as DC::Type
         let dec_type = DeclarationType::Unit {
+            qualifiers: None,
             specifiers: None,
             ty: keyword.value,
         };

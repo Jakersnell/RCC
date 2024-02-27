@@ -20,8 +20,8 @@ pub(crate) enum InitDeclaration {
 pub(crate) struct FunctionDeclaration {
     pub(crate) declaration: Declaration,
     pub(crate) parameters: Vec<Declaration>,
-    pub(crate) varargs: bool, // varargs == true means the last element is of type parameters[parameters.len()-1]
-    pub(crate) body: Option<Block>,
+    pub(crate) varargs: bool,       // we don't currently support varargs
+    pub(crate) body: Option<Block>, // this is an option, but we currently don't support function prototypes
 }
 
 #[derive(Debug)]
@@ -46,28 +46,29 @@ pub(crate) enum DeclarationType {
         size: Option<usize>,
     },
     Unit {
-        specifiers: Option<Vec<Specifier>>,
-        ty: DataType,
+        qualifiers: Option<Vec<TypeQualifier>>,
+        specifiers: Option<Vec<StorageSpecifier>>,
+        ty: TypeSpecifier,
     },
 }
 
 #[derive(Debug)]
-pub(crate) enum DataType {
+pub(crate) enum TypeSpecifier {
     Void,
     Char,
-    Short,
     Int,
     Long,
-    LongLong,
     Float,
     Double,
+    Signed,
+    Unsigned,
 }
 
-impl TryFrom<&Token> for DataType {
+impl TryFrom<&Token> for TypeSpecifier {
     type Error = ();
 
     fn try_from(value: &Token) -> Result<Self, Self::Error> {
-        use DataType::*;
+        use TypeSpecifier::*;
         match value {
             Token::Keyword(keyword) => match keyword {
                 crate::tokens::Keyword::Int => Ok(Int),
@@ -80,15 +81,30 @@ impl TryFrom<&Token> for DataType {
 }
 
 #[derive(Debug)]
-pub(crate) enum Specifier {
+pub(crate) enum StorageSpecifier {
+    Static,
+}
+
+#[derive(Debug)]
+pub(crate) enum TypeQualifier {
     Const,
-    Unsigned,
 }
 
 #[derive(Debug)]
 pub(crate) enum Statement {
     Expression(Expression),
     Declaration(VariableDeclaration),
+    If(Expression, Box<Statement>),
+    IfElse(Expression, Box<Statement>, Box<Statement>),
+    While(Expression, Box<Statement>),
+    For(
+        Option<VariableDeclaration>,
+        Option<Expression>,
+        Option<Expression>,
+        Box<Statement>,
+    ),
+    Break,
+    Continue,
     Return(Option<Expression>),
     Block(Block),
 }
@@ -104,11 +120,15 @@ pub(crate) enum Expression {
     Assignment(AssignOp, InternedStr, Box<Expression>),
     Binary(BinaryOp, Box<Expression>, Box<Expression>),
     FunctionCall(InternedStr, Vec<Expression>),
+    Index(Box<Expression>, Box<Expression>),
+    Member(Box<Expression>, InternedStr),
+    PointerMember(Box<Expression>, InternedStr),
+    Cast(TypeSpecifier, Box<Expression>),
 }
 
 #[derive(Debug)]
 pub(crate) enum TypeOrExpression {
-    Type(DataType),
+    Type(TypeSpecifier),
     Expr(Box<Expression>),
 }
 
