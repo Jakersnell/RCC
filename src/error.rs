@@ -1,4 +1,3 @@
-use clap::error;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -74,6 +73,9 @@ pub enum CompilerError {
 
     #[error("Unexpected end of file.")]
     UnexpectedEOF,
+
+    #[error("'The identifier {0}' already exists in this scope and cannot be redeclared.")]
+    IdentifierExists(String),
 }
 
 #[derive(Error, Debug)]

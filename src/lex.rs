@@ -1,6 +1,6 @@
+use crate::error::CompilerError;
 use crate::util::{Locatable, Span};
 use crate::{
-    error::CompilerError,
     lex,
     tokens::{Keyword, Literal, Symbol, Token},
 };
@@ -488,6 +488,52 @@ impl Lexer {
         }
         .map(Token::Symbol)
     }
+
+    /// Removes whitespace and comments from incoming source
+    fn remove_trivial(&mut self) {
+        let mut state = TriviaState::Start;
+        loop {
+            if state != TriviaState::Start {
+                self.next_char();
+            }
+            if state == TriviaState::BlockCommentEnd {
+                self.next_char();
+            }
+            state = self.get_current_trivia(state);
+            if state == TriviaState::End {
+                break;
+            }
+        }
+    }
+
+    fn get_current_trivia(&self, state: TriviaState) -> TriviaState {
+        use TriviaState::*;
+        match (state, self.current, self.next) {
+            (WhiteSpace | BlockCommentEnd, Some(current), _) => Start,
+
+            (Start, Some(current), _) if current.is_whitespace() => WhiteSpace,
+
+            (BlockComment, Some('*'), Some('/')) => BlockCommentEnd,
+
+            (Start, Some('/'), Some('*')) | (BlockComment, Some(_), _) => BlockComment,
+
+            (InlineComment, Some('\n'), _) => Start,
+
+            (Start, Some('/'), Some('/')) | (InlineComment, Some(_), _) => InlineComment,
+
+            _ => End,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq)]
+enum TriviaState {
+    Start,
+    InlineComment,
+    WhiteSpace,
+    BlockComment,
+    BlockCommentEnd,
+    End,
 }
 
 impl Iterator for Lexer {
@@ -495,9 +541,7 @@ impl Iterator for Lexer {
     type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current.is_some_and(|c| c.is_whitespace()) {
-            self.next_char();
-        }
+        self.remove_trivial();
         self.current.map(|c| {
             let start = self.position;
             let kind = match c {

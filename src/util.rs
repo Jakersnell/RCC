@@ -1,4 +1,4 @@
-use crate::ast::{Expression, InitDeclaration, Statement};
+use crate::ast::InitDeclaration;
 use crate::error::{CompilerError, CompilerWarning};
 use crate::tokens::Token as LexToken;
 use derive_new::new;
@@ -10,6 +10,16 @@ pub type CompilerResult<T> = Result<T, Vec<Locatable<CompilerError>>>;
 pub struct Locatable<T> {
     pub location: Span,
     pub value: T,
+}
+
+impl<T> Locatable<T> {
+    #[inline]
+    pub fn map<F, U>(self, mapper: F) -> Locatable<U>
+    where
+        F: Fn(T) -> U,
+    {
+        Locatable::new(self.location, mapper(self.value))
+    }
 }
 
 #[derive(Debug, PartialEq, new, Clone, Copy)]

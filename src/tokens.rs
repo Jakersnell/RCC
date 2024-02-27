@@ -11,14 +11,34 @@ pub enum Token {
     Symbol(Symbol),
 }
 
+impl Token {
+    pub fn is_assign_op(&self) -> bool {
+        matches!(
+            self,
+            Token::Symbol(Symbol::Equal)
+                | Token::Symbol(Symbol::PlusEqual)
+                | Token::Symbol(Symbol::MinusEqual)
+                | Token::Symbol(Symbol::StarEqual)
+                | Token::Symbol(Symbol::SlashEqual)
+                | Token::Symbol(Symbol::ModuloEqual)
+                | Token::Symbol(Symbol::AmpersandEqual)
+                | Token::Symbol(Symbol::PipeEqual)
+                | Token::Symbol(Symbol::CaretEqual)
+                | Token::Symbol(Symbol::LeftShiftEqual)
+                | Token::Symbol(Symbol::RightShiftEqual)
+        )
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Literal {
     Integer { value: u128, suffix: Option<String> },
     Float { value: f64, suffix: Option<String> },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Keyword {
+    Void,
     Int,
     Double,
     Return,
@@ -26,11 +46,11 @@ pub enum Keyword {
 
 impl Keyword {
     pub fn is_type(&self) -> bool {
-        matches!(self, Keyword::Int | Keyword::Double)
+        matches!(self, Keyword::Int | Keyword::Double | Keyword::Void)
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Symbol {
     Sizeof, // It's really convenient to have this as a symbol
 
