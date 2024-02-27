@@ -27,34 +27,33 @@ int main() {
 ```
 And parse it to the following Abstract Syntax Tree. Printed by the 'src/ast_pretty_print.rs' system to be more readable.
 ```
-<init dec> <fn> double take_and_return_double(double d) {
-    <stmt> <var> int new_double = <expr> (
+<fn> double take_and_return_double(double d) {
+    <stmt: dec> int new_double = <init-expr> (
         +
         ├─ 1
         └─ *
            ├─ 2
            └─ d
     )
-    <stmt> return <expr> (
+    <stmt: return> (
         d
     )
 }
 
-<init dec> <stmt> <var> int x = <expr> (
+<init-dec> int x = <init-expr> (
     4
 )
 
-<init dec> <stmt> <var> double y;
+<init-dec> double y;
 
-<init dec> <fn> int main() {
-    <stmt> <expr> (
+<fn> int main() {
+    <stmt: expr> (
         y =
         └─ +
            ├─ x
            └─ y
     )
-
-    <stmt> return <expr> (
+    <stmt: return> (
         0
     )
 }
