@@ -1,5 +1,5 @@
 use crate::error::CompilerError;
-use crate::util::{Locatable, Span};
+use crate::util::{CompilerResult, Locatable, Span};
 use crate::{
     lex,
     tokens::{Keyword, Literal, Symbol, Token},
@@ -111,8 +111,25 @@ impl Lexer {
             .map(|text| match text.as_str() {
                 "int" => Token::Keyword(Keyword::Int),
                 "double" => Token::Keyword(Keyword::Double),
+                "char" => Token::Keyword(Keyword::Char),
+                "long" => Token::Keyword(Keyword::Long),
+                "void" => Token::Keyword(Keyword::Void),
+                "signed" => Token::Keyword(Keyword::Signed),
+                "unsigned" => Token::Keyword(Keyword::Unsigned),
+
+                "if" => Token::Keyword(Keyword::If),
+                "else" => Token::Keyword(Keyword::Else),
+                "while" => Token::Keyword(Keyword::While),
+                "for" => Token::Keyword(Keyword::For),
+                "break" => Token::Keyword(Keyword::Break),
+                "continue" => Token::Keyword(Keyword::Continue),
+                "static" => Token::Keyword(Keyword::Static),
+                "const" => Token::Keyword(Keyword::Const),
                 "return" => Token::Keyword(Keyword::Return),
+
+                // not a keyword, but a special symbol
                 "sizeof" => Token::Symbol(Symbol::Sizeof),
+
                 _ => Token::Identifier(crate::str_intern::intern(&text)),
             })
     }
@@ -487,6 +504,10 @@ impl Lexer {
             _ => None,
         }
         .map(Token::Symbol)
+    }
+
+    fn eat_string(&mut self) -> Option<Token> {
+        todo!()
     }
 
     /// Removes whitespace and comments from incoming source
