@@ -35,8 +35,8 @@ impl Token {
 pub enum Literal {
     Integer { value: u128, suffix: Option<String> },
     Float { value: f64, suffix: Option<String> },
-    String { value: Substr },
     Char { value: char },
+    String { value: Substr },
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -67,7 +67,7 @@ impl Keyword {
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Symbol {
-    Sizeof, // It's really convenient to have this here
+    Sizeof, // It's really convenient to have this as a symbol
 
     Plus,
     Minus,

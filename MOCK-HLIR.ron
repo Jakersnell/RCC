@@ -1,7 +1,7 @@
 /*
 This document shows what a High Level Intermediate Representation (HLIR or HIR) might look like
 for this compiler. This is a very rough draft and is subject to change. Ive just designed this
-with what I know I will need in an HLIR for this compiler. This is a starting template that I can
+with what I know I will need in an HLIR in mind. This is a starting template that I can
 implement within the semantic analyzer.
 */
 Declaration(

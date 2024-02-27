@@ -1,3 +1,4 @@
+use crate::util::Span;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -42,7 +43,10 @@ pub enum CompilerError {
     InvalidCharacterLiteral(String),
 
     #[error("Unclosed string literal: {0}")]
-    UnclosedStringLiteral(String),
+    UnclosedStringLiteral(Span),
+
+    #[error("Unclosed char literal: {0}")]
+    UnclosedCharLiteral(Span),
 
     #[error("Cannot cast {0} to {1}")]
     CannotCast(String, String),

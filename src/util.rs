@@ -2,7 +2,7 @@ use crate::ast::InitDeclaration;
 use crate::error::{CompilerError, CompilerWarning};
 use crate::tokens::Token as LexToken;
 use derive_new::new;
-use std::ops::Deref;
+use std::fmt::{Display, Formatter};
 
 pub type LocatableToken = Locatable<LexToken>;
 pub type CompilerResult<T> = Result<T, Vec<Locatable<CompilerError>>>;
@@ -14,6 +14,7 @@ pub struct Locatable<T> {
 }
 
 impl<T> Locatable<T> {
+    #[inline]
     pub fn map<F, U>(self, mapper: F) -> Locatable<U>
     where
         F: Fn(T) -> U,
@@ -22,18 +23,16 @@ impl<T> Locatable<T> {
     }
 }
 
-impl<T> Deref for Locatable<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
 #[derive(Debug, PartialEq, new, Clone, Copy)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "Span({}, {})", self.start, self.end)
+    }
 }
 
 #[derive(Debug)]
