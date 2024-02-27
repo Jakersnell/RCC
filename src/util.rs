@@ -2,6 +2,7 @@ use crate::ast::InitDeclaration;
 use crate::error::{CompilerError, CompilerWarning};
 use crate::tokens::Token as LexToken;
 use derive_new::new;
+use std::ops::Deref;
 
 pub type LocatableToken = Locatable<LexToken>;
 pub type CompilerResult<T> = Result<T, Vec<Locatable<CompilerError>>>;
@@ -13,12 +14,19 @@ pub struct Locatable<T> {
 }
 
 impl<T> Locatable<T> {
-    #[inline]
     pub fn map<F, U>(self, mapper: F) -> Locatable<U>
     where
         F: Fn(T) -> U,
     {
         Locatable::new(self.location, mapper(self.value))
+    }
+}
+
+impl<T> Deref for Locatable<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
