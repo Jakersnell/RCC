@@ -25,7 +25,7 @@ int main() {
     return 0;
 }
 ```
-And parse it to the following Abstract Syntax Tree. Printed by the 'ast_pretty_print' system to be more readable.
+And parse it to the following Abstract Syntax Tree. Printed by the 'src/ast_pretty_print.rs' system to be more readable.
 ```
 <init dec> <fn> double take_and_return_double(double d) {
     <stmt> <var> int new_double = <expr> (
