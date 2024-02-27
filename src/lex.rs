@@ -27,20 +27,6 @@ pub struct Lexer {
     next: Option<char>,
 }
 
-impl Default for Lexer {
-    fn default() -> Self {
-        Self {
-            position: 0,
-            col: 0,
-            row: 0,
-            source: ArcStr::from(""),
-            problems: Vec::new(),
-            current: None,
-            next: None,
-        }
-    }
-}
-
 impl TryFrom<PathBuf> for Lexer {
     type Error = io::Error;
 
@@ -506,8 +492,87 @@ impl Lexer {
         .map(Token::Symbol)
     }
 
+    fn eat_char(&mut self) -> Option<Token> {
+        if self.current != Some('\'') {
+            return None;
+        }
+        self.next_char();
+        let start = self.position;
+        let value = match self.current {
+            Some('\\') => self.eat_escape_char(),
+            Some(current) => {
+                self.next_char();
+                Some(current)
+            }
+            None => {
+                let span = Span::new(start, self.position);
+                let error = Locatable::new(span, CompilerError::UnclosedCharLiteral(span));
+                self.problems.push(error);
+                None
+            }
+        }
+        .unwrap_or('\0');
+        if self.current != Some('\'') {
+            let span = Span::new(start, self.position);
+            let error = Locatable::new(span, CompilerError::UnclosedCharLiteral(span));
+            self.problems.push(error);
+        } else {
+            self.next_char();
+        }
+        Some(Token::Literal(Literal::Char { value }))
+    }
+
     fn eat_string(&mut self) -> Option<Token> {
-        todo!()
+        if self.current != Some('"') {
+            return None;
+        }
+        self.next_char();
+        let start = self.position;
+        while let Some(current) = self.current {
+            match current {
+                '"' => {
+                    self.next_char();
+                    break;
+                }
+                '\\' => {
+                    self.eat_escape_char();
+                }
+                '\n' | '\r' | '\0' => {
+                    let span = Span::new(start, self.position);
+                    let error = Locatable::new(span, CompilerError::UnclosedStringLiteral(span));
+                    self.problems.push(error);
+                    break;
+                }
+                _ => (),
+            }
+            self.next_char();
+        }
+        let end = self.position - 1;
+        let value = self.source.substr(start..end);
+        Some(Token::Literal(Literal::String { value }))
+    }
+
+    fn eat_escape_char(&mut self) -> Option<char> {
+        debug_assert!(self.current == Some('\\'));
+        self.next_char();
+        self.next_char().map(|current| match current {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => '\0',
+            '\\' => '\\',
+            '\'' => '\'',
+            '"' => '"',
+            _ => {
+                let span = Span::new(self.position - 1, self.position + 1);
+                let error = Locatable::new(
+                    span,
+                    CompilerError::InvalidEscapeSequence(format!("\\{}", current)),
+                );
+                self.problems.push(error);
+                '\0'
+            }
+        })
     }
 
     /// Removes whitespace and comments from incoming source
@@ -566,13 +631,9 @@ impl Iterator for Lexer {
         self.current.map(|c| {
             let start = self.position;
             let kind = match c {
-                '\'' => {
-                    panic!("CHAR"); // this is a placeholder
-                }
+                '\'' => self.eat_char(),
 
-                '"' => {
-                    panic!("STRING"); // this is a placeholder
-                }
+                '"' => self.eat_string(),
 
                 '0'..='9' => self.eat_number(),
 
@@ -594,6 +655,21 @@ impl Iterator for Lexer {
                 Err(mem::take(&mut self.problems))
             }
         })
+    }
+}
+
+// for Testing
+impl Default for Lexer {
+    fn default() -> Self {
+        Self {
+            position: 0,
+            col: 0,
+            row: 0,
+            source: ArcStr::from(""),
+            problems: Vec::new(),
+            current: None,
+            next: None,
+        }
     }
 }
 
