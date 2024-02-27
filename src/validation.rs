@@ -1,6 +1,6 @@
 use crate::ast::ASTRoot;
 use crate::error::CompilerError;
-use crate::hir::{BoundTypeKind, SymbolKind};
+use crate::hlir::{BoundTypeKind, SymbolKind};
 use crate::str_intern::InternedStr;
 use crate::util::{CompilerResult, Locatable, Span};
 use std::collections::HashMap;
