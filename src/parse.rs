@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use crate::ast::{
     AssignOp, BinaryOp, Block, Declaration, DeclarationSpecifier, Declarator, Expression,
-    FunctionDeclaration, InitDeclaration, PostfixOp, Statement, StorageSpecifier, TypeQualifier,
-    TypeSpecifier, UnaryOp, VariableDeclaration,
+    FunctionDeclaration, InitDeclaration, PostfixOp, Statement, StorageSpecifier, TypeOrExpression,
+    TypeQualifier, TypeSpecifier, UnaryOp, VariableDeclaration,
 };
 use crate::error::CompilerError;
 use crate::lex::LexResult;
@@ -472,6 +472,30 @@ where
                     Ok(Statement::Return(Some(expr)))
                 }
             }
+            Token::Keyword(Keyword::If) => {
+                self.advance()?;
+                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+                let condition = self.parse_binary_expression(None)?;
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+                let stmt = Box::new(self.parse_statement()?);
+                let else_stmt = if is!(self, current, Token::Keyword(Keyword::Else)) {
+                    self.advance()?;
+                    Some(Box::new(self.parse_statement()?))
+                } else {
+                    None
+                };
+                Ok(Statement::If(condition, stmt, else_stmt))
+            }
+            Token::Keyword(Keyword::While) => {
+                self.advance()?;
+                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+                let condition = self.parse_binary_expression(None)?;
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+                let stmt = Box::new(self.parse_statement()?);
+                Ok(Statement::While(condition, stmt))
+            }
+            Token::Keyword(Keyword::Continue) => Ok(Statement::Continue),
+            Token::Keyword(Keyword::Break) => Ok(Statement::Break),
             _ => {
                 let stmt = self
                     .parse_assignment_expression()
@@ -538,11 +562,33 @@ where
             self.advance()?;
             let expr = self.parse_prefix_unary_expression()?;
             node = Ok(Expression::Unary(un_op, Box::new(expr)));
+        } else if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
+            self.advance()?;
+            let ty = self.parse_declaration_specifier()?;
+            todo!()
+        } else if is!(self, current, Token::Symbol(Symbol::Sizeof)) {
+            self.advance()?;
+            node = self.parse_sizeof();
         } else {
             node = self.parse_primary_expression();
         }
 
         node
+    }
+
+    fn parse_sizeof(&mut self) -> CompilerResult<Expression> {
+        if is!(self, current, Token::Symbol(Symbol::OpenParen))
+            && is!(self, next, Token::Keyword(kw) if kw.is_type())
+        {
+            let ty = self.parse_declaration_specifier()?;
+            self.advance()?;
+            self.advance()?;
+            Ok(Expression::Sizeof(TypeOrExpression::Type(ty)))
+        } else {
+            Ok(Expression::Sizeof(TypeOrExpression::Expr(Box::new(
+                self.parse_binary_expression(None)?,
+            ))))
+        }
     }
 
     fn parse_primary_expression(&mut self) -> CompilerResult<Expression> {
@@ -578,7 +624,7 @@ where
         }
         let current = self.current.as_ref().unwrap();
         if let Ok(op) = PostfixOp::try_from(&current.value) {
-            Ok(Expression::PostFix(op, Box::new(primary_expr)))
+            self.parse_postfix_unary_expression(Expression::PostFix(op, Box::new(primary_expr)))
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && matches!(&primary_expr, Expression::Variable(_))
         {
@@ -599,7 +645,29 @@ where
                 }
             }
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            Ok(Expression::FunctionCall(ident, args))
+            self.parse_postfix_unary_expression(Expression::FunctionCall(ident, args))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
+            self.advance()?;
+            let index = self.parse_binary_expression(None)?;
+            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
+            self.parse_postfix_unary_expression(Expression::Index(
+                Box::new(primary_expr),
+                Box::new(index),
+            ))
+        } else if is!(self, current, Token::Symbol(Symbol::Dot)) {
+            self.advance()?;
+            let member = self.confirm_identifier()?;
+            self.parse_postfix_unary_expression(Expression::Member(
+                Box::new(primary_expr),
+                member.value,
+            ))
+        } else if is!(self, current, Token::Symbol(Symbol::Arrow)) {
+            self.advance()?;
+            let member = self.confirm_identifier()?;
+            self.parse_postfix_unary_expression(Expression::PointerMember(
+                Box::new(primary_expr),
+                member.value,
+            ))
         } else {
             Ok(primary_expr)
         }

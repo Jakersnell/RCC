@@ -1,7 +1,5 @@
 #![allow(unused)]
 
-use std::sync::Arc;
-
 mod ast;
 mod ast_pretty_print;
 mod codegen;
@@ -23,28 +21,13 @@ mod validation;
 
 const DEBUG: bool = false;
 
-fn main() {
-    let source = "
-// int x = 1 + 4 / 2 + y * 20; this is in a comment
-/*
-double y = 2.3434; this is also in a comment, it will be ignored by the lexer
-*/
+fn main() {}
 
-double take_and_return_double(double d) {
-    int new_double = d * 2 + 1;
-    return d;
-}
-
-int x = 4;
-double y;
-
-int main() {
-    y = y + x;
-    return 0;
-}
-"; // test string
-    let lexer = lex::Lexer::new(source.to_string());
-    let program = util::Program::new("test".to_string());
+#[test]
+fn test_comments_and_functions_dot_c() {
+    let source = std::fs::read_to_string("tests/comments_and_functions.c").unwrap();
+    let lexer = lex::Lexer::new(source);
+    let program = util::Program::new("comments_and_functions.c".to_string());
     let parser = parse::Parser::from_lexer(program, lexer);
     let program = parser.parse();
     let body = program.body.unwrap().unwrap();

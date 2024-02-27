@@ -131,8 +131,7 @@ impl TryFrom<&Token> for TypeQualifier {
 pub(crate) enum Statement {
     Expression(Expression),
     Declaration(VariableDeclaration),
-    If(Expression, Box<Statement>),
-    IfElse(Expression, Box<Statement>, Box<Statement>),
+    If(Expression, Box<Statement>, Option<Box<Statement>>),
     While(Expression, Box<Statement>),
     For(
         Option<VariableDeclaration>,
@@ -151,7 +150,7 @@ pub(crate) enum Expression {
     Literal(Literal),
     Variable(InternedStr),
     Sizeof(TypeOrExpression),
-    // this doesn't include all postfix operations, just inc and dec so far
+    // this doesn't include all postfix operations, just inc and dec
     PostFix(PostfixOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
     Assignment(AssignOp, InternedStr, Box<Expression>),
@@ -165,7 +164,7 @@ pub(crate) enum Expression {
 
 #[derive(Debug)]
 pub(crate) enum TypeOrExpression {
-    Type(TypeSpecifier),
+    Type(DeclarationSpecifier),
     Expr(Box<Expression>),
 }
 
