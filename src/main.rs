@@ -40,17 +40,22 @@ fn check_test_files_are_ok() {
         "comments_and_functions.c",
         "sizeof.c",
         "const_ptr.c",
+        "member_access.c",
     ];
 
     for test in tests {
-        let source = std::fs::read_to_string(format!("_c_test_files/{}", test)).unwrap();
+        let source = std::fs::read_to_string(format!("_c_test_files/{}", test))
+            .expect("Could not read file.");
         let lexer = lex::Lexer::new(source);
         let program = util::Program::new(test.to_string());
         let parser = parse::Parser::from_lexer(program, lexer);
         let program = parser.parse();
         let body = program.body.unwrap();
-        assert!(body.is_ok(), "Error in file: {}", test);
-        let body = body.unwrap();
-        assert!(!body.is_empty(), "No body in file: {}", test);
+        match body {
+            Ok(body) => {
+                assert!(!body.is_empty(), "No body in file: {}", test);
+            }
+            Err(errors) => panic!("File {} errors:\n{:#?}", test, errors),
+        }
     }
 }
