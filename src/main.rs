@@ -22,17 +22,35 @@ mod validation;
 const DEBUG: bool = false;
 
 fn main() {
-    let source = std::fs::read_to_string("_c_test_files/comments_and_functions.c").unwrap();
+    let source = std::fs::read_to_string("_c_test_files/sizeof.c").unwrap();
     let lexer = lex::Lexer::new(source);
-    let program = util::Program::new("comments_and_functions.c".to_string());
+    let program = util::Program::new("sizeof.c".to_string());
     let parser = parse::Parser::from_lexer(program, lexer);
     let program = parser.parse();
     let body = program.body.unwrap().unwrap();
-    if cfg!(DEBUG) {
-        println!("{:#?}", body);
-    } else {
-        for node in body {
-            println!("{}", node);
-        }
+    for decl in body {
+        println!("{}", decl);
+    }
+}
+
+#[test]
+fn check_test_files_are_ok() {
+    let tests = [
+        "structs.c",
+        "comments_and_functions.c",
+        "sizeof.c",
+        "const_ptr.c",
+    ];
+
+    for test in tests {
+        let source = std::fs::read_to_string(format!("_c_test_files/{}", test)).unwrap();
+        let lexer = lex::Lexer::new(source);
+        let program = util::Program::new(test.to_string());
+        let parser = parse::Parser::from_lexer(program, lexer);
+        let program = parser.parse();
+        let body = program.body.unwrap();
+        assert!(body.is_ok(), "Error in file: {}", test);
+        let body = body.unwrap();
+        assert!(!body.is_empty(), "No body in file: {}", test);
     }
 }

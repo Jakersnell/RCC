@@ -1,5 +1,1 @@
-
-int main() {
-    int x = sizeof (1 + 2);
-    return 0;
-}
+int x = sizeof(4 * 4);

@@ -51,7 +51,41 @@ impl Expression {
                 let right = right.pretty_print(padding.clone(), true, false);
                 format!("{} {}\n{}", left, op, right)
             }
-            val => unimplemented!("{:#?}", val),
+            Expression::PostFix(op, right) => {
+                let right = right.pretty_print(padding.clone(), true, false);
+                format!("{}{}", right, op)
+            }
+            Expression::FunctionCall(ident, args) => {
+                let mut output = format!("{}{}\n", ident, "(");
+                for (i, arg) in args.iter().enumerate() {
+                    output += &arg.pretty_print(padding.clone(), i == args.len() - 1, false);
+                }
+                output += &format!("{})", padding);
+                output
+            }
+            Expression::Member(left, right) => {
+                let left = left.pretty_print(padding.clone(), false, false);
+                format!("{}.{}", left, right)
+            }
+            Expression::PointerMember(left, right) => {
+                let left = left.pretty_print(padding.clone(), false, false);
+                format!("{}->{}", left, right)
+            }
+            Expression::Sizeof(type_or_expr) => {
+                format!(
+                    "sizeof (\n{})",
+                    indent_string(format!("{}", type_or_expr), 0, 4)
+                )
+            }
+            Expression::Index(left, right) => {
+                let left = left.pretty_print(padding.clone(), false, false);
+                let right = right.pretty_print(padding.clone(), true, false);
+                format!("{}[{}]", left, right)
+            }
+            Expression::Cast(ty, right) => {
+                let right = right.pretty_print(padding.clone(), true, false);
+                format!("({}) {}", ty, right)
+            }
         };
 
         output + &child_output
@@ -81,7 +115,32 @@ impl Display for InitDeclaration {
         match self {
             Declaration(variable) => writeln!(f, "<init-var-dec> {};", variable),
             Function(function) => write!(f, "<fn> {}", function),
+            Struct(structure) => write!(f, "<struct> {}", structure),
         }
+    }
+}
+
+impl Display for VariableDeclaration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.initializer {
+            Some(expr) => write!(
+                f,
+                "{} = <init-expr> (\n{})",
+                self.declaration,
+                indent_string(format!("{}", expr), 0, 4)
+            ),
+            None => write!(f, "{}", self.declaration),
+        }
+    }
+}
+
+impl Display for StructDeclaration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "struct {} {{", self.ident)?;
+        for member in &self.members {
+            writeln!(f, "    {};", member)?;
+        }
+        writeln!(f, "}};")
     }
 }
 
@@ -113,20 +172,23 @@ impl Display for FunctionDeclaration {
 
 impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.specifier, self.declarator)
+        write!(f, "{} {}", self.specifier, self.declarator)?;
+        if let Some(ident) = &self.ident {
+            write!(f, "{}", ident)?;
+        }
+        Ok(())
     }
 }
 
-impl Display for Declarator {
+impl Display for DeclaratorType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::Declarator::*;
+        use crate::ast::DeclaratorType::*;
         match self {
             Pointer { to } => write!(f, "*{}", to),
             Array { of, size } => match size {
                 Some(size) => write!(f, "{}[{}]", of, size),
                 any => write!(f, "{}[]", of),
             },
-            Unit { ident } => write!(f, "{}", ident),
             None => Ok(()),
         }
     }
@@ -146,17 +208,16 @@ impl Display for TypeQualifier {
 impl Display for TypeSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::TypeSpecifier::*;
-        let str = match self {
-            Void => "void",
-            Char => "char",
-            Int => "int",
-            Long => "long",
-            Double => "double",
-            Signed => "signed",
-            Unsigned => "unsigned",
+        match self {
+            Void => write!(f, "void"),
+            Char => write!(f, "char"),
+            Int => write!(f, "int"),
+            Long => write!(f, "long"),
+            Double => write!(f, "double"),
+            Signed => write!(f, "signed"),
+            Unsigned => write!(f, "unsigned"),
+            Struct(ident) => write!(f, "struct {}", ident),
         }
-        .to_string();
-        write!(f, "{}", str)
     }
 }
 
@@ -303,16 +364,13 @@ impl Display for AssignOp {
     }
 }
 
-impl Display for VariableDeclaration {
+impl Display for PostfixOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.initializer {
-            Some(expr) => write!(
-                f,
-                "{} = <init-expr> (\n{})",
-                self.declaration,
-                indent_string(format!("{}", expr), 0, 4)
-            ),
-            None => write!(f, "{}", self.declaration),
-        }
+        use crate::ast::PostfixOp::*;
+        let str = match self {
+            Increment => "++",
+            Decrement => "--",
+        };
+        write!(f, "{}", str)
     }
 }

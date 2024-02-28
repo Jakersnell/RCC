@@ -13,59 +13,64 @@ The majority does not.
 pub type ASTRoot = Vec<InitDeclaration>;
 
 #[derive(Debug)]
-pub(crate) struct Block(pub(crate) Vec<Statement>);
+pub struct Block(pub Vec<Statement>);
 
 #[derive(Debug)]
-pub(crate) enum InitDeclaration {
+pub enum InitDeclaration {
     Declaration(VariableDeclaration), // (declaration,  initializer)
     Function(FunctionDeclaration),
+    Struct(StructDeclaration),
 }
 
 #[derive(Debug)]
-pub(crate) struct FunctionDeclaration {
-    pub(crate) declaration: Declaration,
-    pub(crate) parameters: Vec<Declaration>,
-    pub(crate) varargs: bool,       // we don't currently support varargs
-    pub(crate) body: Option<Block>, // this is an option, but we currently don't support function prototypes
+pub struct StructDeclaration {
+    pub ident: InternedStr,
+    pub members: Vec<Declaration>,
+}
+
+#[derive(Debug)]
+pub struct FunctionDeclaration {
+    pub declaration: Declaration,
+    pub parameters: Vec<Declaration>,
+    pub varargs: bool,       // we don't currently support varargs
+    pub body: Option<Block>, // this is an option, but we currently don't support function prototypes
 }
 
 #[derive(Debug)]
 pub struct VariableDeclaration {
-    pub(crate) declaration: Declaration,
-    pub(crate) initializer: Option<Expression>,
+    pub declaration: Declaration,
+    pub initializer: Option<Expression>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Declaration {
-    pub(crate) specifier: DeclarationSpecifier,
-    pub(crate) declarator: Declarator,
+pub struct Declaration {
+    pub specifier: DeclarationSpecifier,
+    pub declarator: DeclaratorType,
+    pub ident: Option<InternedStr>,
 }
 
 #[derive(Debug)]
-pub(crate) enum Declarator {
+pub enum DeclaratorType {
     // not supporting function pointers
     Pointer {
-        to: Box<Declarator>,
+        to: Box<DeclaratorType>,
     },
     Array {
-        of: Box<Declarator>,
+        of: Box<DeclaratorType>,
         size: Option<usize>,
-    },
-    Unit {
-        ident: InternedStr,
     },
     None,
 }
 
 #[derive(Debug)]
-pub(crate) struct DeclarationSpecifier {
-    pub(crate) specifiers: Vec<StorageSpecifier>,
-    pub(crate) qualifiers: Vec<TypeQualifier>,
-    pub(crate) ty: Vec<TypeSpecifier>,
+pub struct DeclarationSpecifier {
+    pub specifiers: Vec<StorageSpecifier>,
+    pub qualifiers: Vec<TypeQualifier>,
+    pub ty: Vec<TypeSpecifier>,
 }
 
 #[derive(Debug)]
-pub(crate) enum TypeSpecifier {
+pub enum TypeSpecifier {
     Void,
     Char,
     Int,
@@ -95,7 +100,7 @@ impl TryFrom<&Token> for TypeSpecifier {
 }
 
 #[derive(Debug)]
-pub(crate) enum StorageSpecifier {
+pub enum StorageSpecifier {
     Static,
 }
 
@@ -112,7 +117,7 @@ impl TryFrom<&Token> for StorageSpecifier {
 }
 
 #[derive(Debug)]
-pub(crate) enum TypeQualifier {
+pub enum TypeQualifier {
     Const,
 }
 
@@ -129,7 +134,7 @@ impl TryFrom<&Token> for TypeQualifier {
 }
 
 #[derive(Debug)]
-pub(crate) enum Statement {
+pub enum Statement {
     Expression(Expression),
     Declaration(VariableDeclaration),
     If(Expression, Box<Statement>, Option<Box<Statement>>),
@@ -147,7 +152,7 @@ pub(crate) enum Statement {
 }
 
 #[derive(Debug)]
-pub(crate) enum Expression {
+pub enum Expression {
     Literal(Literal),
     Variable(InternedStr),
     Sizeof(TypeOrExpression),
@@ -164,13 +169,13 @@ pub(crate) enum Expression {
 }
 
 #[derive(Debug)]
-pub(crate) enum TypeOrExpression {
+pub enum TypeOrExpression {
     Type(DeclarationSpecifier),
     Expr(Box<Expression>),
 }
 
 #[derive(Debug)]
-pub(crate) enum PostfixOp {
+pub enum PostfixOp {
     Increment,
     Decrement,
 }
@@ -189,7 +194,7 @@ impl TryFrom<&Token> for PostfixOp {
 }
 
 #[derive(Debug)]
-pub(crate) enum UnaryOp {
+pub enum UnaryOp {
     Increment,
     Decrement,
     Plus,
@@ -216,7 +221,7 @@ impl TryFrom<&Token> for UnaryOp {
 }
 
 #[derive(Debug)]
-pub(crate) enum BinaryOp {
+pub enum BinaryOp {
     Add,
     Subtract,
     Multiply,
@@ -244,7 +249,7 @@ pub(crate) enum BinaryOp {
 }
 
 impl BinaryOp {
-    pub(crate) fn precedence(&self) -> u8 {
+    pub fn precedence(&self) -> u8 {
         use BinaryOp::*;
         match self {
             Multiply | Divide | Modulo => 3,
@@ -285,7 +290,7 @@ impl TryFrom<&Token> for BinaryOp {
 }
 
 #[derive(Debug)]
-pub(crate) enum AssignOp {
+pub enum AssignOp {
     Assign,
     Plus,
     Minus,
