@@ -297,6 +297,8 @@ impl Display for UnaryOp {
             BitwiseNot => "~",
             Increment => "++",
             Decrement => "--",
+            Deref => "*",
+            AddressOf => "&",
         }
         .to_string();
         write!(f, "{}", str)
