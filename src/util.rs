@@ -27,6 +27,8 @@ impl<T> Locatable<T> {
 pub struct Span {
     pub start: usize,
     pub end: usize,
+    pub col: usize,
+    pub line: usize,
 }
 
 impl Display for Span {
