@@ -83,6 +83,9 @@ pub enum CompilerError {
 
     #[error("{0}")]
     CustomError(String),
+
+    #[error("Else without if")]
+    ElseWithNoIf(Span),
 }
 
 #[derive(Error, Debug)]
