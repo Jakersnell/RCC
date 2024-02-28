@@ -170,7 +170,7 @@ pub enum Expression {
 
 #[derive(Debug)]
 pub enum TypeOrExpression {
-    Type(DeclarationSpecifier),
+    Type(Declaration),
     Expr(Box<Expression>),
 }
 
@@ -201,6 +201,8 @@ pub enum UnaryOp {
     Negate,
     LogicalNot,
     BitwiseNot,
+    Deref,
+    AddressOf,
 }
 
 impl TryFrom<&Token> for UnaryOp {
@@ -215,6 +217,9 @@ impl TryFrom<&Token> for UnaryOp {
             Token::Symbol(Symbol::Tilde) => Ok(BitwiseNot),
             Token::Symbol(Symbol::Increment) => Ok(Increment),
             Token::Symbol(Symbol::Decrement) => Ok(Decrement),
+            Token::Symbol(Symbol::Star) => Ok(Deref),
+            Token::Symbol(Symbol::Ampersand) => Ok(AddressOf),
+
             _ => Err(()),
         }
     }
