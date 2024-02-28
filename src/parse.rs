@@ -334,7 +334,7 @@ where
 
     fn parse_declaration(&mut self) -> CompilerResult<Declaration> {
         let specifier = self.parse_declaration_specifier()?;
-        let declarator = self.parse_declarator()?;
+        let declarator = self.parse_pre_declarator()?;
         let ident = if let Some(ident) =
             match_token!(self, current, Token::Identifier(ident) => ident.clone())
         {
@@ -343,6 +343,7 @@ where
         } else {
             None
         };
+        let declarator = self.parse_array_declarator(declarator)?;
         Ok(Declaration {
             specifier,
             declarator,
@@ -350,14 +351,9 @@ where
         })
     }
 
-    fn parse_declarator(&mut self) -> CompilerResult<DeclaratorType> {
-        if is!(self, current, Token::Symbol(Symbol::Star)) {
+    fn parse_array_declarator(&mut self, dec: DeclaratorType) -> CompilerResult<DeclaratorType> {
+        if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
             self.advance()?;
-            let to = Box::new(self.parse_declarator()?);
-            Ok(DeclaratorType::Pointer { to })
-        } else if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
-            self.advance()?;
-            let of = Box::new(self.parse_declarator()?);
             let size = if let Some(Locatable {
                 location,
                 value: (integer, suffix),
@@ -377,7 +373,21 @@ where
                 None
             };
             confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
-            Ok(DeclaratorType::Array { of, size })
+            let dec = DeclaratorType::Array {
+                of: Box::new(dec),
+                size,
+            };
+            Ok(self.parse_array_declarator(dec)?)
+        } else {
+            Ok(dec)
+        }
+    }
+
+    fn parse_pre_declarator(&mut self) -> CompilerResult<DeclaratorType> {
+        if is!(self, current, Token::Symbol(Symbol::Star)) {
+            self.advance()?;
+            let to = Box::new(self.parse_pre_declarator()?);
+            Ok(DeclaratorType::Pointer { to })
         } else {
             Ok(DeclaratorType::None)
         }
@@ -459,7 +469,7 @@ where
         // debug_assert!(declaration.name.is_some());
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
-            Some(self.parse_binary_expression(None)?)
+            Some(self.parse_initializer()?)
         } else {
             None
         };
@@ -483,7 +493,20 @@ where
 
     fn parse_statement(&mut self) -> CompilerResult<Statement> {
         self.check_for_eof("statement")?;
+        self.skip_empty_statements()?;
         match self.current.as_ref().unwrap().value {
+            Token::Symbol(Symbol::Semicolon) => {
+                self.advance()?;
+                Ok(Statement::Empty)
+            }
+            Token::Keyword(Keyword::Continue) => {
+                self.advance()?;
+                Ok(Statement::Continue)
+            }
+            Token::Keyword(Keyword::Break) => {
+                self.advance()?;
+                Ok(Statement::Break)
+            }
             Token::Symbol(Symbol::OpenCurly) => {
                 let block = self.parse_compound_statement()?;
                 Ok(Statement::Block(block))
@@ -526,15 +549,65 @@ where
                 let stmt = Box::new(self.parse_statement()?);
                 Ok(Statement::While(condition, stmt))
             }
-            Token::Keyword(Keyword::Continue) => Ok(Statement::Continue),
-            Token::Keyword(Keyword::Break) => Ok(Statement::Break),
+            Token::Keyword(Keyword::For) => {
+                self.advance()?;
+                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+                let initializer = if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+                    None
+                } else {
+                    let dec = self.parse_declaration()?;
+                    Some(self.parse_variable_declaration(dec)?)
+                };
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                let condition = if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+                    None
+                } else {
+                    Some(self.parse_binary_expression(None)?)
+                };
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                let after_loop = if is!(self, current, Token::Symbol(Symbol::CloseParen)) {
+                    None
+                } else {
+                    Some(self.parse_binary_expression(None)?)
+                };
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+                let stmt = Box::new(self.parse_statement()?);
+                Ok(Statement::For(initializer, condition, after_loop, stmt))
+            }
+            Token::Keyword(Keyword::Else) => {
+                let locatable = self.consume()?;
+                Err(vec![Locatable::new(
+                    locatable.location,
+                    CompilerError::ElseWithNoIf(locatable.location),
+                )])
+            }
             _ => {
                 let stmt = self
                     .parse_binary_expression(None)
-                    .map(Statement::Expression);
-                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-                stmt
+                    .map(Statement::Expression)?;
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), "Expression statements must be terminated by a semicolon.")?;
+                Ok(stmt)
             }
+        }
+    }
+
+    fn parse_initializer(&mut self) -> CompilerResult<Expression> {
+        if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
+            self.advance()?;
+            let mut contents = Vec::new();
+            while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
+                let expr = self.parse_initializer()?;
+                contents.push(expr);
+                if is!(self, current, Token::Symbol(Symbol::Comma)) {
+                    self.advance()?;
+                } else {
+                    break;
+                }
+            }
+            confirm!(self, consume, Token::Symbol(Symbol::CloseCurly) => (), "}")?;
+            Ok(Expression::ArrayInitializer(contents))
+        } else {
+            self.parse_binary_expression(None)
         }
     }
 
@@ -574,7 +647,11 @@ where
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
-            todo!("parse cast")
+            self.advance()?;
+            let ty = self.parse_declaration()?;
+            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+            let expr = self.parse_prefix_unary_expression()?;
+            Ok(Expression::Cast(ty, Box::new(expr)))
         } else if is!(self, current, Token::Symbol(Symbol::Sizeof)) {
             self.advance()?;
             self.parse_sizeof()
@@ -633,6 +710,7 @@ where
         }
         let current = self.current.as_ref().unwrap();
         if let Ok(op) = PostfixOp::try_from(&current.value) {
+            self.advance()?;
             self.parse_postfix_unary_expression(Expression::PostFix(op, Box::new(primary_expr)))
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && matches!(&primary_expr, Expression::Variable(_))
@@ -644,7 +722,6 @@ where
             self.advance()?;
             let mut args = Vec::new();
             while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
-                self.advance()?;
                 let expr = self.parse_binary_expression(None)?;
                 args.push(expr);
                 if is!(self, current, Token::Symbol(Symbol::Comma)) {
@@ -681,13 +758,6 @@ where
             Ok(primary_expr)
         }
     }
-}
-
-#[cfg(test)]
-macro_rules! make_token {
-    ($tk:expr) => {
-        Ok(Locatable::new(Span::new(0, 0), $tk))
-    };
 }
 
 #[test]

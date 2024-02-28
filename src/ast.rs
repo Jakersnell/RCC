@@ -148,6 +148,7 @@ pub enum Statement {
     Continue,
     Return(Option<Expression>),
     Block(Block),
+    Empty, // this is for a semicolon by itself,
 }
 
 #[derive(Debug)]
@@ -164,7 +165,8 @@ pub enum Expression {
     Index(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, InternedStr),
     PointerMember(Box<Expression>, InternedStr),
-    Cast(TypeSpecifier, Box<Expression>),
+    Cast(Declaration, Box<Expression>),
+    ArrayInitializer(Vec<Expression>),
 }
 
 #[derive(Debug)]
