@@ -1,7 +1,7 @@
 use crate::ast::UnaryOp::Plus;
 use crate::ast::*;
 use crate::tokens::Literal;
-use std::fmt::{Display, Formatter};
+use std::fmt::{write, Display, Formatter};
 
 // good util for pretty printing the ast
 pub fn indent_string(string: String, start_line: usize, indentation: usize) -> String {
@@ -33,13 +33,14 @@ impl Expression {
                 let value = match literal {
                     Literal::Integer { value, suffix } => value.to_string(),
                     Literal::Float { value, suffix } => value.to_string(),
-                    Literal::Char { value } => value.to_string(),
-                    Literal::String { value } => value.to_string(),
+                    Literal::Char { value } => format!("'{}'", value),
+                    Literal::String { value } => format!("\"{}\"", value),
                 };
                 format!("{}\n", value)
             }
             Expression::Parenthesized(expr) => {
                 let expr = expr.pretty_print(padding.clone(), true, true);
+                let expr = indent_string(expr, 0, 4);
                 format!("(\n{}{})\n", expr, padding)
             }
             Expression::Binary(op, left, right) => {
@@ -48,12 +49,12 @@ impl Expression {
                 format!("{}\n{}{}", op, right, left)
             }
             Expression::Unary(op, right) => {
-                right.pretty_print(padding.clone(), true, false);
-                format!("{}\n", op)
+                let right = right.pretty_print(padding.clone(), true, false);
+                format!("{}\n{}", op, right)
             }
             Expression::PostFix(op, right) => {
                 let right = right.pretty_print(padding.clone(), true, false);
-                format!("{}{}", right, op)
+                format!("{} <post> \n{}", op, right)
             }
             Expression::FunctionCall(ident, args) => {
                 let mut output = format!("{}{}\n", ident, "(");
@@ -67,9 +68,9 @@ impl Expression {
                 let expr = expr.pretty_print(padding.clone(), true, false);
                 format!(".\n{}├─ {}\n{}", padding, ident, expr)
             }
-            Expression::PointerMember(left, right) => {
-                let left = left.pretty_print(padding.clone(), false, false);
-                format!("->\n{}{}", left, right)
+            Expression::PointerMember(expr, ident) => {
+                let expr = expr.pretty_print(padding.clone(), true, false);
+                format!("->\n{}├─ {}\n{}", padding, ident, expr)
             }
             Expression::Sizeof(type_or_expr) => {
                 format!(
@@ -86,6 +87,15 @@ impl Expression {
                 let right = right.pretty_print(padding.clone(), true, false);
                 format!("({}) {}", ty, right)
             }
+            Expression::ArrayInitializer(initializer) => {
+                let mut output = "{\n".to_string();
+                for (i, expr) in initializer.iter().enumerate() {
+                    output +=
+                        &expr.pretty_print(padding.clone(), i == initializer.len() - 1, false);
+                }
+                output += &"}";
+                output
+            }
         };
         output + &child_output
     }
@@ -95,6 +105,73 @@ impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let output = self.pretty_print("".to_string(), true, true);
         write!(f, "{}", output)
+    }
+}
+
+impl Display for Statement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use crate::ast::Statement::*;
+        write!(f, "<stmt> ");
+        match self {
+            Expression(expr) => {
+                write!(
+                    f,
+                    "<expr> (\n{});",
+                    indent_string(format!("{}", expr), 0, 4)
+                )
+            }
+            Declaration(decl) => write!(f, "<var-dec> {};", decl),
+            Return(expr) => match expr {
+                Some(expr) => write!(
+                    f,
+                    "return <expr> (\n{});",
+                    indent_string(format!("{}", expr), 0, 4)
+                ),
+                None => write!(f, "return;"),
+            },
+            If(cond, then, els) => {
+                write!(
+                    f,
+                    "if <cond> (\n{}\n) <then> {{\n{}\n}}",
+                    indent_string(format!("{}", cond), 0, 4),
+                    indent_string(format!("{}", then), 0, 4),
+                )?;
+                if let Some(els) = els {
+                    write!(f, " else {}", els)?;
+                }
+                Ok(())
+            }
+            While(cond, body) => write!(
+                f,
+                "while <cond> (\n{}) <body> {{\n{}}}",
+                indent_string(format!("{}", cond), 0, 4),
+                indent_string(format!("{}", body), 0, 4)
+            ),
+            For(init, cond, post, body) => write!(
+                f,
+                "for <init> (\n{}), <cond> (\n{}), <post> (\n{}) <body> {{\n{}\n}}",
+                if let Some(init) = init {
+                    indent_string(format!("{}", init), 0, 4)
+                } else {
+                    "None".to_string()
+                },
+                if let Some(cond) = cond {
+                    indent_string(format!("{}", cond), 0, 4)
+                } else {
+                    "None".to_string()
+                },
+                if let Some(post) = post {
+                    indent_string(format!("{}", post), 0, 4)
+                } else {
+                    "None".to_string()
+                },
+                indent_string(format!("{}", body), 0, 4)
+            ),
+            Block(block) => write!(f, "<block> {}", block),
+            Break => write!(f, "break;"),
+            Continue => write!(f, "continue;"),
+            Empty => write!(f, "<empty statement>;"),
+        }
     }
 }
 
@@ -227,33 +304,6 @@ impl Display for StorageSpecifier {
         }
         .to_string();
         write!(f, "{}", str)
-    }
-}
-
-impl Display for Statement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::Statement::*;
-        write!(f, "<stmt> ");
-        match self {
-            Expression(expr) => {
-                writeln!(
-                    f,
-                    "<expr> (\n{});",
-                    indent_string(format!("{}", expr), 0, 4)
-                )
-            }
-            Declaration(decl) => writeln!(f, "<var-dec> {};", decl),
-            Return(expr) => match expr {
-                Some(expr) => writeln!(
-                    f,
-                    "return <expr> (\n{});",
-                    indent_string(format!("{}", expr), 0, 4)
-                ),
-                None => writeln!(f, "return;"),
-            },
-            Block(block) => writeln!(f, "<block> {}", block),
-            _ => panic!("unimplemented statement: {:#?}", self),
-        }
     }
 }
 
