@@ -17,19 +17,29 @@ mod validation;
 /// The main entry point for the program.
 /// This will be last to be completed because it's just a CLI and
 /// requires the API to be complete in order to function.
-/// Cant compile a program if you don't a compiler.
+/// Cant compile a program if you don't have a compiler.
 
-const DEBUG: bool = false;
+const PRETTY: bool = true;
 
 fn main() {
-    let source = std::fs::read_to_string("_c_test_files/sizeof.c").unwrap();
-    let lexer = lex::Lexer::new(source);
-    let program = util::Program::new("sizeof.c".to_string());
+    let src = "
+int main() {
+    x.y.z = y = 3;
+    return 0;
+}
+";
+    let lexer = lex::Lexer::new(src.to_string());
+    let program = util::Program::new("test.c".to_string());
     let parser = parse::Parser::from_lexer(program, lexer);
     let program = parser.parse();
     let body = program.body.unwrap().unwrap();
-    for decl in body {
-        println!("{}", decl);
+
+    if PRETTY {
+        for decl in body {
+            println!("{}", decl);
+        }
+    } else {
+        println!("{:#?}", body);
     }
 }
 
