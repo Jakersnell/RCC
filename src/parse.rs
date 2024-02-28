@@ -609,9 +609,9 @@ where
         if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
-            let ty = self.parse_declaration_specifier()?;
             self.advance()?;
             self.advance()?;
+            let ty = self.parse_declaration()?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
             Ok(Expression::Sizeof(TypeOrExpression::Type(ty)))
         } else {
