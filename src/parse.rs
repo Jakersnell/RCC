@@ -162,7 +162,7 @@ where
             global: Vec::new(),
             current: None,
             next: None,
-            span: Span::new(0, 0),
+            span: Span::new(0, 0, 0, 0),
         }
     }
 
@@ -176,7 +176,7 @@ where
         program
     }
 
-    /// this seemed like the only way to avoid returning a result in the constructor
+    /// this seemed like the best way to avoid returning a result in the constructor
     #[inline(always)]
     fn prime(&mut self) -> CompilerResult<()> {
         self.advance()?;
@@ -530,7 +530,7 @@ where
             Token::Keyword(Keyword::Break) => Ok(Statement::Break),
             _ => {
                 let stmt = self
-                    .parse_assignment_expression()
+                    .parse_binary_expression(None)
                     .map(Statement::Expression);
                 confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
                 stmt
@@ -538,47 +538,25 @@ where
         }
     }
 
-    fn parse_assignment_expression(&mut self) -> CompilerResult<Expression> {
-        let mut root: Option<Expression> = None;
-        while let (Ok(ident), Some(op)) = (
-            self.match_identifier(),
-            match_token!(self, next, |x|{AssignOp::try_from(x)}, Ok(x) => x),
-        ) {
-            self.advance()?;
-            self.advance()?;
-            let right = self.parse_assignment_expression()?;
-            root = Some(Expression::Assignment(
-                op.value,
-                ident.value,
-                Box::new(right),
-            ));
-        }
-        if let Some(root) = root {
-            Ok(root)
-        } else {
-            self.parse_binary_expression(None)
-        }
-    }
-
-    fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<Expression> {
-        let lp = lp.unwrap_or(0);
+    fn parse_binary_expression(
+        &mut self,
+        parent_precedence: Option<u8>,
+    ) -> CompilerResult<Expression> {
+        let parent_precedence = parent_precedence.unwrap_or(0);
         let mut left = self.parse_prefix_unary_expression()?;
 
-        loop {
-            if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
-                break;
-            }
-            let bin_op = self.match_binary_op();
-            if bin_op.is_err() {
-                break;
-            }
-            let bin_op = bin_op.unwrap();
-            let rp = bin_op.value.precedence();
-            if rp == 0 || rp <= lp {
+        while let Ok(bin_op) = self.match_binary_op() {
+            let precedence = bin_op.value.precedence();
+            if precedence == 0 || precedence <= parent_precedence {
                 break;
             }
             self.advance()?;
-            let right = self.parse_binary_expression(Some(rp))?;
+            let precedence = if let BinaryOp::Assign(op) = &bin_op.value {
+                precedence - 1
+            } else {
+                precedence
+            };
+            let right = self.parse_binary_expression(Some(precedence))?;
             left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
         }
 
@@ -627,7 +605,7 @@ where
         let expression = if Token::Symbol(Symbol::OpenParen) == locatable.value {
             let expr = self.parse_binary_expression(None)?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            Ok(expr)
+            Ok(Expression::Parenthesized(Box::new(expr)))
         } else if let Token::Literal(literal) = locatable.value {
             Ok(Expression::Literal(literal))
         } else if let Token::Identifier(identifier) = locatable.value {

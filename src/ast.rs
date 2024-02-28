@@ -1,4 +1,3 @@
-use crate::ast::PostfixOp::Increment;
 use crate::str_intern::InternedStr;
 use crate::tokens::{Keyword, Literal, Symbol, Token};
 use crate::util::CompilerResult;
@@ -156,10 +155,10 @@ pub enum Expression {
     Literal(Literal),
     Variable(InternedStr),
     Sizeof(TypeOrExpression),
+    Parenthesized(Box<Expression>),
     // this doesn't include all postfix operations, just inc and dec
     PostFix(PostfixOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
-    Assignment(AssignOp, InternedStr, Box<Expression>),
     Binary(BinaryOp, Box<Expression>, Box<Expression>),
     FunctionCall(InternedStr, Vec<Expression>),
     Index(Box<Expression>, Box<Expression>),
@@ -257,9 +256,17 @@ impl BinaryOp {
     pub fn precedence(&self) -> u8 {
         use BinaryOp::*;
         match self {
-            Multiply | Divide | Modulo => 3,
-            Add | Subtract => 2,
-            _ => 0,
+            Multiply | Divide | Modulo => 11,
+            Add | Subtract => 10,
+            LeftShift | RightShift => 9,
+            GreaterThan | GreaterThanEqual | LessThan | LessThanEqual => 8,
+            Equal | NotEqual => 7,
+            BitwiseAnd => 6,
+            BitwiseXor => 5,
+            BitwiseOr => 4,
+            LogicalAnd => 3,
+            LogicalOr => 2,
+            Assign(_) => 1,
         }
     }
 }
@@ -288,6 +295,18 @@ impl TryFrom<&Token> for BinaryOp {
             Token::Symbol(Symbol::Caret) => Ok(BitwiseXor),
             Token::Symbol(Symbol::LeftShift) => Ok(LeftShift),
             Token::Symbol(Symbol::RightShift) => Ok(RightShift),
+
+            Token::Symbol(Symbol::Equal) => Ok(Assign(AssignOp::Assign)),
+            Token::Symbol(Symbol::PlusEqual) => Ok(Assign(AssignOp::Plus)),
+            Token::Symbol(Symbol::MinusEqual) => Ok(Assign(AssignOp::Minus)),
+            Token::Symbol(Symbol::StarEqual) => Ok(Assign(AssignOp::Multiply)),
+            Token::Symbol(Symbol::SlashEqual) => Ok(Assign(AssignOp::Divide)),
+            Token::Symbol(Symbol::ModuloEqual) => Ok(Assign(AssignOp::Modulo)),
+            Token::Symbol(Symbol::AmpersandEqual) => Ok(Assign(AssignOp::BitwiseAnd)),
+            Token::Symbol(Symbol::PipeEqual) => Ok(Assign(AssignOp::BitwiseOr)),
+            Token::Symbol(Symbol::CaretEqual) => Ok(Assign(AssignOp::BitwiseXor)),
+            Token::Symbol(Symbol::LeftShiftEqual) => Ok(Assign(AssignOp::LeftShift)),
+            Token::Symbol(Symbol::RightShiftEqual) => Ok(Assign(AssignOp::RightShift)),
 
             _ => Err(()),
         }

@@ -22,7 +22,7 @@ impl Expression {
         let mut padding = padding;
         let mut output;
         if is_root {
-            output = "".to_string();
+            output = padding.clone();
         } else {
             output = format!("{}{}", padding, if last { "└─ " } else { "├─ " });
             padding += if last { "   " } else { "│  " };
@@ -38,6 +38,10 @@ impl Expression {
                 };
                 format!("{}\n", value)
             }
+            Expression::Parenthesized(expr) => {
+                let expr = expr.pretty_print(padding.clone(), true, true);
+                format!("(\n{}{})\n", expr, padding)
+            }
             Expression::Binary(op, left, right) => {
                 let right = right.pretty_print(padding.clone(), false, false);
                 let left = left.pretty_print(padding.clone(), true, false);
@@ -46,10 +50,6 @@ impl Expression {
             Expression::Unary(op, right) => {
                 right.pretty_print(padding.clone(), true, false);
                 format!("{}\n", op)
-            }
-            Expression::Assignment(op, left, right) => {
-                let right = right.pretty_print(padding.clone(), true, false);
-                format!("{} {}\n{}", left, op, right)
             }
             Expression::PostFix(op, right) => {
                 let right = right.pretty_print(padding.clone(), true, false);
@@ -63,13 +63,13 @@ impl Expression {
                 output += &format!("{})", padding);
                 output
             }
-            Expression::Member(left, right) => {
-                let left = left.pretty_print(padding.clone(), false, false);
-                format!("{}.{}", left, right)
+            Expression::Member(expr, ident) => {
+                let expr = expr.pretty_print(padding.clone(), true, false);
+                format!(".\n{}├─ {}\n{}", padding, ident, expr)
             }
             Expression::PointerMember(left, right) => {
                 let left = left.pretty_print(padding.clone(), false, false);
-                format!("{}->{}", left, right)
+                format!("->\n{}{}", left, right)
             }
             Expression::Sizeof(type_or_expr) => {
                 format!(
@@ -87,7 +87,6 @@ impl Expression {
                 format!("({}) {}", ty, right)
             }
         };
-
         output + &child_output
     }
 }
@@ -309,39 +308,27 @@ impl Display for BinaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::ast::AssignOp;
         use crate::ast::BinaryOp::*;
-        let str = match self {
-            Add => "+",
-            Subtract => "-",
-            Multiply => "*",
-            Divide => "/",
-            Modulo => "%",
-            Equal => "==",
-            NotEqual => "!=",
-            GreaterThan => ">",
-            GreaterThanEqual => ">=",
-            LessThan => "<",
-            LessThanEqual => "<=",
-            LogicalAnd => "&&",
-            LogicalOr => "||",
-            BitwiseAnd => "&",
-            BitwiseOr => "|",
-            BitwiseXor => "^",
-            LeftShift => "<<",
-            RightShift => ">>",
-            Assign(AssignOp::Assign) => "=",
-            Assign(AssignOp::Plus) => "+=",
-            Assign(AssignOp::Minus) => "-=",
-            Assign(AssignOp::Multiply) => "*=",
-            Assign(AssignOp::Divide) => "/=",
-            Assign(AssignOp::Modulo) => "%=",
-            Assign(AssignOp::BitwiseAnd) => "&=",
-            Assign(AssignOp::BitwiseOr) => "|=",
-            Assign(AssignOp::BitwiseXor) => "^=",
-            Assign(AssignOp::LeftShift) => "<<=",
-            Assign(AssignOp::RightShift) => ">>=",
+        match self {
+            Add => write!(f, "+"),
+            Subtract => write!(f, "-"),
+            Multiply => write!(f, "*"),
+            Divide => write!(f, "/"),
+            Modulo => write!(f, "%"),
+            Equal => write!(f, "=="),
+            NotEqual => write!(f, "!="),
+            GreaterThan => write!(f, ">"),
+            GreaterThanEqual => write!(f, ">="),
+            LessThan => write!(f, "<"),
+            LessThanEqual => write!(f, "<="),
+            LogicalAnd => write!(f, "&&"),
+            LogicalOr => write!(f, "||"),
+            BitwiseAnd => write!(f, "&"),
+            BitwiseOr => write!(f, "|"),
+            BitwiseXor => write!(f, "^"),
+            LeftShift => write!(f, "<<"),
+            RightShift => write!(f, ">>"),
+            Assign(op) => write!(f, "{}", op),
         }
-        .to_string();
-        write!(f, "{}", str)
     }
 }
 
