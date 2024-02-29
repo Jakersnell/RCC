@@ -1,9 +1,12 @@
+use log::debug;
 use std::io;
 use std::path::PathBuf;
 
 use crate::ast::{
-    AssignOp, BinaryOp, Block, Declaration, DeclarationType, Expression, FunctionDeclaration,
-    InitDeclaration, PostfixOp, Statement, TypeSpecifier, UnaryOp, VariableDeclaration,
+    AssignOp, BinaryOp, Block, Declaration, DeclarationSpecifier, DeclaratorType, Expression,
+    FunctionDeclaration, InitDeclaration, PostfixOp, Statement, StorageSpecifier,
+    StructDeclaration, TypeOrExpression, TypeQualifier, TypeSpecifier, UnaryOp,
+    VariableDeclaration,
 };
 use crate::error::CompilerError;
 use crate::lex::LexResult;
@@ -35,9 +38,9 @@ macro_rules! is {
     };
 }
 
-macro_rules! match_next {
-    ($invoker:ident, $closure:expr, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
-        $invoker.next.as_ref().map(|next|{
+macro_rules! match_token {
+    ($invoker:ident, $current_or_next:ident, $closure:expr, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
+        $invoker.$current_or_next.as_ref().map(|next|{
             #[allow(clippy::redundant_closure_call)]
             match $closure(&next.value) {
                 $pattern $(if $guard)? => Some(Locatable{
@@ -48,15 +51,16 @@ macro_rules! match_next {
             }
         }).flatten()
     };
-    ($invoker:ident, $closure:expr, $pattern:pat $(if $guard:expr)?) => {
-        match_next!($invoker, $closure, $pattern $(if $guard)? => Some($if_ok))
+    ($invoker:ident, $current_or_next:ident, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
+        match_token!($invoker, $current_or_next, |x|{x}, $pattern $(if $guard)? => $if_ok)
     };
-    ($invoker:ident, $pattern:pat $(if $guard:expr)? => $if_ok:expr) => {
-        match_next!($invoker, |x|{x}, $pattern $(if $guard)? => Some($if_ok))
+    ($invoker:ident, $current_or_next:ident, $closure:expr, $pattern:pat $(if $guard:expr)?) => {
+        match_token!($invoker, $current_or_next, $closure, $pattern $(if $guard)? => Some($if_ok))
     };
-    ($invoker:ident, $pattern:pat $(if $guard:expr)?) => {
-        match_next!($invoker, $pattern $(if $guard)? => Some(()))
+    ($invoker:ident, $current_or_next:ident, $pattern:pat $(if $guard:expr)?) => {
+        match_token!($invoker, $current_or_next, $pattern $(if $guard)? => Some(()))
     };
+
 }
 
 macro_rules! confirm {
@@ -158,7 +162,7 @@ where
             global: Vec::new(),
             current: None,
             next: None,
-            span: Span::new(0, 0),
+            span: Span::new(0, 0, 0, 0),
         }
     }
 
@@ -172,7 +176,7 @@ where
         program
     }
 
-    /// this seemed like the only way to avoid returning a result in the constructor
+    /// this seemed like the best way to avoid returning a result in the constructor
     #[inline(always)]
     fn prime(&mut self) -> CompilerResult<()> {
         self.advance()?;
@@ -247,7 +251,6 @@ where
         Ok(())
     }
 
-    /// Advances the lexer without checking for EOF
     fn advance(&mut self) -> CompilerResult<()> {
         self.current = self.next.take();
         self.next = match self.lexer.next() {
@@ -260,7 +263,6 @@ where
         Ok(())
     }
 
-    // Collects all errors from the lexer and appends them to the errors vector
     fn get_all_errors(&mut self, errors: &mut Vec<Locatable<CompilerError>>) {
         let all_results = std::mem::take(&mut self.lexer).collect::<Vec<_>>();
         let all_errors = all_results
@@ -285,7 +287,6 @@ where
     fn parse_init_declaration(&mut self) -> CompilerResult<InitDeclaration> {
         self.skip_empty_statements()?;
         let dec = self.parse_declaration()?;
-
         if is!(
             self,
             current,
@@ -298,6 +299,9 @@ where
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
             let function = self.parse_function_declaration(dec)?;
             Ok(InitDeclaration::Function(function))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
+            let _struct = self.parse_struct_declaration(dec)?;
+            Ok(InitDeclaration::Struct(_struct))
         } else {
             Err(vec![Locatable::new(
                 self.span,
@@ -309,21 +313,120 @@ where
         }
     }
 
+    fn parse_struct_declaration(
+        &mut self,
+        declaration: Declaration,
+    ) -> CompilerResult<StructDeclaration> {
+        confirm!(self, consume, Token::Symbol(Symbol::OpenCurly), "{")?;
+        let mut members = Vec::new();
+        while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
+            let member = self.parse_declaration()?;
+            members.push(member);
+            confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";");
+        }
+        confirm!(self, consume, Token::Symbol(Symbol::CloseCurly), "}")?;
+        confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";")?;
+        Ok(StructDeclaration {
+            declaration,
+            members,
+        })
+    }
+
     fn parse_declaration(&mut self) -> CompilerResult<Declaration> {
-        // parse qualifiers / specifiers here
-        let keyword = self.confirm_type()?;
-        let identifier = self.confirm_identifier()?;
-
-        // currently we only have unit types so this is hardcoded as DC::Type
-        let dec_type = DeclarationType::Unit {
-            qualifiers: None,
-            specifiers: None,
-            ty: keyword.value,
+        let specifier = self.parse_declaration_specifier()?;
+        let declarator = self.parse_pre_declarator()?;
+        let ident = if let Some(ident) =
+            match_token!(self, current, Token::Identifier(ident) => ident.clone())
+        {
+            self.advance()?;
+            Some(ident.value)
+        } else {
+            None
         };
-
+        let declarator = self.parse_array_declarator(declarator)?;
         Ok(Declaration {
-            ty: dec_type,
-            name: Some(identifier.value),
+            specifier,
+            declarator,
+            ident,
+        })
+    }
+
+    fn parse_array_declarator(&mut self, dec: DeclaratorType) -> CompilerResult<DeclaratorType> {
+        if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
+            self.advance()?;
+            let size = if let Some(Locatable {
+                location,
+                value: (integer, suffix),
+            }) = match_token!(self, current, Token::Literal(Literal::Integer {value, suffix}) => (*value, suffix.clone()))
+            {
+                if suffix.is_some() {
+                    return Err(vec![Locatable::new(
+                        location,
+                        CompilerError::CustomError(
+                            "Suffixes in array sizes are not currently supported.".to_string(),
+                        ),
+                    )]);
+                }
+                self.advance()?;
+                Some(integer as usize)
+            } else {
+                None
+            };
+            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
+            let dec = DeclaratorType::Array {
+                of: Box::new(dec),
+                size,
+            };
+            Ok(self.parse_array_declarator(dec)?)
+        } else {
+            Ok(dec)
+        }
+    }
+
+    fn parse_pre_declarator(&mut self) -> CompilerResult<DeclaratorType> {
+        if is!(self, current, Token::Symbol(Symbol::Star)) {
+            self.advance()?;
+            let to = Box::new(self.parse_pre_declarator()?);
+            Ok(DeclaratorType::Pointer { to })
+        } else {
+            Ok(DeclaratorType::Base)
+        }
+    }
+
+    fn parse_declaration_specifier(&mut self) -> CompilerResult<DeclarationSpecifier> {
+        let mut storage_specifiers = Vec::new();
+        while let Some(storage_specifier) =
+            match_token!(self, current, |x|{StorageSpecifier::try_from(x)}, Ok(x) => x)
+        {
+            storage_specifiers.push(storage_specifier.value);
+            self.advance()?;
+        }
+        let mut type_qualifiers = Vec::new();
+        while let Some(type_qualifier) =
+            match_token!(self, current, |x|{TypeQualifier::try_from(x)}, Ok(x) => x)
+        {
+            type_qualifiers.push(type_qualifier.value);
+            self.advance()?;
+        }
+        let mut type_specifiers = Vec::new();
+        loop {
+            if let Some(type_specifier) =
+                match_token!(self, current, |x|{TypeSpecifier::try_from(x)}, Ok(x) => x)
+            {
+                type_specifiers.push(type_specifier.value);
+                self.advance()?;
+            } else if is!(self, current, Token::Keyword(Keyword::Struct)) {
+                self.advance()?;
+                let ident = self.confirm_identifier()?;
+                type_specifiers.push(TypeSpecifier::Struct(ident.value));
+            } else {
+                break;
+            }
+        }
+        Ok(DeclarationSpecifier {
+            specifiers: storage_specifiers,
+            qualifiers: type_qualifiers,
+            ty: type_specifiers,
         })
     }
 
@@ -363,10 +466,10 @@ where
         &mut self,
         declaration: Declaration,
     ) -> CompilerResult<VariableDeclaration> {
-        debug_assert!(declaration.name.is_some());
+        // debug_assert!(declaration.name.is_some());
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
-            Some(self.parse_binary_expression(None)?)
+            Some(self.parse_initializer()?)
         } else {
             None
         };
@@ -390,12 +493,25 @@ where
 
     fn parse_statement(&mut self) -> CompilerResult<Statement> {
         self.check_for_eof("statement")?;
+        self.skip_empty_statements()?;
         match self.current.as_ref().unwrap().value {
+            Token::Symbol(Symbol::Semicolon) => {
+                self.advance()?;
+                Ok(Statement::Empty)
+            }
+            Token::Keyword(Keyword::Continue) => {
+                self.advance()?;
+                Ok(Statement::Continue)
+            }
+            Token::Keyword(Keyword::Break) => {
+                self.advance()?;
+                Ok(Statement::Break)
+            }
             Token::Symbol(Symbol::OpenCurly) => {
                 let block = self.parse_compound_statement()?;
                 Ok(Statement::Block(block))
             }
-            Token::Keyword(keyword) if keyword.is_type() => {
+            Token::Keyword(keyword) if keyword.is_for_type() => {
                 let dec = self.parse_declaration()?;
                 let variable_declaration = self.parse_variable_declaration(dec)?;
                 confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
@@ -411,57 +527,109 @@ where
                     Ok(Statement::Return(Some(expr)))
                 }
             }
+            Token::Keyword(Keyword::If) => {
+                self.advance()?;
+                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+                let condition = self.parse_binary_expression(None)?;
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+                let stmt = Box::new(self.parse_statement()?);
+                let else_stmt = if is!(self, current, Token::Keyword(Keyword::Else)) {
+                    self.advance()?;
+                    Some(Box::new(self.parse_statement()?))
+                } else {
+                    None
+                };
+                Ok(Statement::If(condition, stmt, else_stmt))
+            }
+            Token::Keyword(Keyword::While) => {
+                self.advance()?;
+                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+                let condition = self.parse_binary_expression(None)?;
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+                let stmt = Box::new(self.parse_statement()?);
+                Ok(Statement::While(condition, stmt))
+            }
+            Token::Keyword(Keyword::For) => {
+                self.advance()?;
+                confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
+                let initializer = if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+                    None
+                } else {
+                    let dec = self.parse_declaration()?;
+                    Some(self.parse_variable_declaration(dec)?)
+                };
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                let condition = if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+                    None
+                } else {
+                    Some(self.parse_binary_expression(None)?)
+                };
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                let after_loop = if is!(self, current, Token::Symbol(Symbol::CloseParen)) {
+                    None
+                } else {
+                    Some(self.parse_binary_expression(None)?)
+                };
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+                let stmt = Box::new(self.parse_statement()?);
+                Ok(Statement::For(initializer, condition, after_loop, stmt))
+            }
+            Token::Keyword(Keyword::Else) => {
+                let locatable = self.consume()?;
+                Err(vec![Locatable::new(
+                    locatable.location,
+                    CompilerError::ElseWithNoIf(locatable.location),
+                )])
+            }
             _ => {
                 let stmt = self
-                    .parse_assignment_expression()
-                    .map(Statement::Expression);
-                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-                stmt
+                    .parse_binary_expression(None)
+                    .map(Statement::Expression)?;
+                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), "Expression statements must be terminated by a semicolon.")?;
+                Ok(stmt)
             }
         }
     }
 
-    fn parse_assignment_expression(&mut self) -> CompilerResult<Expression> {
-        let mut root: Option<Expression> = None;
-        while let (Ok(ident), Some(op)) = (
-            self.match_identifier(),
-            match_next!(self, |x|{AssignOp::try_from(x)}, Ok(x) => x),
-        ) {
+    fn parse_initializer(&mut self) -> CompilerResult<Expression> {
+        if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
             self.advance()?;
-            self.advance()?;
-            let right = self.parse_assignment_expression()?;
-            root = Some(Expression::Assignment(
-                op.value,
-                ident.value,
-                Box::new(right),
-            ));
-        }
-        if let Some(root) = root {
-            Ok(root)
+            let mut contents = Vec::new();
+            while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
+                let expr = self.parse_initializer()?;
+                contents.push(expr);
+                if is!(self, current, Token::Symbol(Symbol::Comma)) {
+                    self.advance()?;
+                } else {
+                    break;
+                }
+            }
+            confirm!(self, consume, Token::Symbol(Symbol::CloseCurly) => (), "}")?;
+            Ok(Expression::ArrayInitializer(contents))
         } else {
             self.parse_binary_expression(None)
         }
     }
 
-    fn parse_binary_expression(&mut self, lp: Option<u8>) -> CompilerResult<Expression> {
-        let lp = lp.unwrap_or(0);
+    fn parse_binary_expression(
+        &mut self,
+        parent_precedence: Option<u8>,
+    ) -> CompilerResult<Expression> {
+        let parent_precedence = parent_precedence.unwrap_or(0);
         let mut left = self.parse_prefix_unary_expression()?;
 
-        loop {
-            if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
-                break;
-            }
-            let bin_op = self.match_binary_op();
-            if bin_op.is_err() {
-                break;
-            }
-            let bin_op = bin_op.unwrap();
-            let rp = bin_op.value.precedence();
-            if rp == 0 || rp <= lp {
+        while let Ok(bin_op) = self.match_binary_op() {
+            let precedence = bin_op.value.precedence();
+            if precedence == 0 || precedence <= parent_precedence {
                 break;
             }
             self.advance()?;
-            let right = self.parse_binary_expression(Some(rp))?;
+            let precedence = if let BinaryOp::Assign(op) = &bin_op.value {
+                precedence - 1
+            } else {
+                precedence
+            };
+            let right = self.parse_binary_expression(Some(precedence))?;
             left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
         }
 
@@ -469,27 +637,51 @@ where
     }
 
     fn parse_prefix_unary_expression(&mut self) -> CompilerResult<Expression> {
-        let mut node;
         let token = self.current.as_ref().unwrap();
 
         if let Ok(un_op) = UnaryOp::try_from(&token.value) {
             self.span.end = token.location.end;
             self.advance()?;
             let expr = self.parse_prefix_unary_expression()?;
-            node = Ok(Expression::Unary(un_op, Box::new(expr)));
+            Ok(Expression::Unary(un_op, Box::new(expr)))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
+            && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
+        {
+            self.advance()?;
+            let ty = self.parse_declaration()?;
+            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+            let expr = self.parse_prefix_unary_expression()?;
+            Ok(Expression::Cast(ty, Box::new(expr)))
+        } else if is!(self, current, Token::Symbol(Symbol::Sizeof)) {
+            self.advance()?;
+            self.parse_sizeof()
         } else {
-            node = self.parse_primary_expression();
+            self.parse_primary_expression()
         }
+    }
 
-        node
+    fn parse_sizeof(&mut self) -> CompilerResult<Expression> {
+        if is!(self, current, Token::Symbol(Symbol::OpenParen))
+            && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
+        {
+            self.advance()?;
+            let ty = self.parse_declaration()?;
+            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+            Ok(Expression::Sizeof(TypeOrExpression::Type(ty)))
+        } else {
+            Ok(Expression::Sizeof(TypeOrExpression::Expr(Box::new(
+                self.parse_binary_expression(None)?,
+            ))))
+        }
     }
 
     fn parse_primary_expression(&mut self) -> CompilerResult<Expression> {
         let locatable = self.consume()?;
+
         let expression = if Token::Symbol(Symbol::OpenParen) == locatable.value {
             let expr = self.parse_binary_expression(None)?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            Ok(expr)
+            Ok(Expression::Parenthesized(Box::new(expr)))
         } else if let Token::Literal(literal) = locatable.value {
             Ok(Expression::Literal(literal))
         } else if let Token::Identifier(identifier) = locatable.value {
@@ -517,7 +709,8 @@ where
         }
         let current = self.current.as_ref().unwrap();
         if let Ok(op) = PostfixOp::try_from(&current.value) {
-            Ok(Expression::PostFix(op, Box::new(primary_expr)))
+            self.advance()?;
+            self.parse_postfix_unary_expression(Expression::PostFix(op, Box::new(primary_expr)))
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && matches!(&primary_expr, Expression::Variable(_))
         {
@@ -528,7 +721,6 @@ where
             self.advance()?;
             let mut args = Vec::new();
             while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
-                self.advance()?;
                 let expr = self.parse_binary_expression(None)?;
                 args.push(expr);
                 if is!(self, current, Token::Symbol(Symbol::Comma)) {
@@ -538,18 +730,33 @@ where
                 }
             }
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            Ok(Expression::FunctionCall(ident, args))
+            self.parse_postfix_unary_expression(Expression::FunctionCall(ident, args))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
+            self.advance()?;
+            let index = self.parse_binary_expression(None)?;
+            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
+            self.parse_postfix_unary_expression(Expression::Index(
+                Box::new(primary_expr),
+                Box::new(index),
+            ))
+        } else if is!(self, current, Token::Symbol(Symbol::Dot)) {
+            self.advance()?;
+            let member = self.confirm_identifier()?;
+            self.parse_postfix_unary_expression(Expression::Member(
+                Box::new(primary_expr),
+                member.value,
+            ))
+        } else if is!(self, current, Token::Symbol(Symbol::Arrow)) {
+            self.advance()?;
+            let member = self.confirm_identifier()?;
+            self.parse_postfix_unary_expression(Expression::PointerMember(
+                Box::new(primary_expr),
+                member.value,
+            ))
         } else {
             Ok(primary_expr)
         }
     }
-}
-
-#[cfg(test)]
-macro_rules! make_token {
-    ($tk:expr) => {
-        Ok(Locatable::new(Span::new(0, 0), $tk))
-    };
 }
 
 #[test]

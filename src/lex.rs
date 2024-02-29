@@ -102,7 +102,7 @@ impl Lexer {
                 "void" => Token::Keyword(Keyword::Void),
                 "signed" => Token::Keyword(Keyword::Signed),
                 "unsigned" => Token::Keyword(Keyword::Unsigned),
-
+                "struct" => Token::Keyword(Keyword::Struct),
                 "if" => Token::Keyword(Keyword::If),
                 "else" => Token::Keyword(Keyword::Else),
                 "while" => Token::Keyword(Keyword::While),
@@ -129,13 +129,15 @@ impl Lexer {
             ($invoker:ident, $($pattern:literal)|+, $error_type:expr) => {
                 {
                     let start = $invoker.position;
+                    let col = $invoker.col;
+                    let row = $invoker.row;
                     $invoker.consume_alphanumeric_text().map(|text| {
                         let lowercased = text.to_lowercase();
                         match lowercased.as_str() {
                             $($pattern)|+ => Some(lowercased),
                             _ => {
                                 let end = $invoker.position;
-                                let span = Span::new(start, end);
+                                let span = Span::new(start, end, col, row);
                                 let error = Locatable::new(span, $error_type(text));
                                 $invoker.problems.push(error);
                                 None
@@ -233,7 +235,7 @@ impl Lexer {
         }
 
         let end = self.position;
-        let span = Span::new(start, end);
+        let span = Span::new(start, end, self.col, self.row);
 
         let base = match state {
             State::Zero => 10,
@@ -498,6 +500,8 @@ impl Lexer {
         }
         self.next_char();
         let start = self.position;
+        let col = self.col;
+        let row = self.row;
         let value = match self.current {
             Some('\\') => self.eat_escape_char(),
             Some(current) => {
@@ -505,7 +509,7 @@ impl Lexer {
                 Some(current)
             }
             None => {
-                let span = Span::new(start, self.position);
+                let span = Span::new(start, self.position, col, row);
                 let error = Locatable::new(span, CompilerError::UnclosedCharLiteral(span));
                 self.problems.push(error);
                 None
@@ -513,7 +517,7 @@ impl Lexer {
         }
         .unwrap_or('\0');
         if self.current != Some('\'') {
-            let span = Span::new(start, self.position);
+            let span = Span::new(start, self.position, col, row);
             let error = Locatable::new(span, CompilerError::UnclosedCharLiteral(span));
             self.problems.push(error);
         } else {
@@ -528,6 +532,8 @@ impl Lexer {
         }
         self.next_char();
         let start = self.position;
+        let col = self.col;
+        let row = self.row;
         while let Some(current) = self.current {
             match current {
                 '"' => {
@@ -538,14 +544,15 @@ impl Lexer {
                     self.eat_escape_char();
                 }
                 '\n' | '\r' | '\0' => {
-                    let span = Span::new(start, self.position);
+                    let span = Span::new(start, self.position, col, row);
                     let error = Locatable::new(span, CompilerError::UnclosedStringLiteral(span));
                     self.problems.push(error);
                     break;
                 }
-                _ => (),
+                _ => {
+                    self.next_char();
+                }
             }
-            self.next_char();
         }
         let end = self.position - 1;
         let value = self.source.substr(start..end);
@@ -553,6 +560,9 @@ impl Lexer {
     }
 
     fn eat_escape_char(&mut self) -> Option<char> {
+        let col = self.col;
+        let row = self.row;
+        let start = self.position;
         debug_assert!(self.current == Some('\\'));
         self.next_char();
         self.next_char().map(|current| match current {
@@ -564,7 +574,7 @@ impl Lexer {
             '\'' => '\'',
             '"' => '"',
             _ => {
-                let span = Span::new(self.position - 1, self.position + 1);
+                let span = Span::new(start, self.position, col, row);
                 let error = Locatable::new(
                     span,
                     CompilerError::InvalidEscapeSequence(format!("\\{}", current)),
@@ -630,6 +640,8 @@ impl Iterator for Lexer {
         self.remove_trivial();
         self.current.map(|c| {
             let start = self.position;
+            let col = self.col;
+            let row = self.row;
             let kind = match c {
                 '\'' => self.eat_char(),
 
@@ -648,7 +660,7 @@ impl Iterator for Lexer {
                 }
             };
             let end = self.position;
-            let location = Span::new(start, end);
+            let location = Span::new(start, end, col, row);
             if let Some(kind) = kind {
                 Ok(Locatable::new(location, kind))
             } else {
@@ -886,5 +898,20 @@ fn test_eat_number_properly_consumes_float_suffix() {
                 suffix: Some(control.to_string()),
             })
         );
+    }
+}
+
+#[test]
+fn test_eat_string_values_match() {
+    let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$\\\"%^&*()_+"#];
+    for test in tests {
+        let mut lexer = Lexer::new(format!("\"{}\"", test));
+        let token = lexer.eat_string().expect("Expected token");
+        match token {
+            Token::Literal(Literal::String { value }) => {
+                assert_eq!(value.to_string(), test);
+            }
+            _ => panic!("Expected string literal, got {:#?}", token),
+        }
     }
 }

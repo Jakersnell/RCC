@@ -80,6 +80,12 @@ pub enum CompilerError {
 
     #[error("'The identifier {0}' already exists in this scope and cannot be redeclared.")]
     IdentifierExists(String),
+
+    #[error("{0}")]
+    CustomError(String),
+
+    #[error("Else without if")]
+    ElseWithNoIf(Span),
 }
 
 #[derive(Error, Debug)]

@@ -3,6 +3,12 @@ This document shows what a High Level Intermediate Representation (HLIR or HIR) 
 for this compiler. This is a very rough draft and is subject to change. Ive just designed this
 with what I know I will need in an HLIR in mind. This is a starting template that I can
 implement within the semantic analyzer.
+
+What is an HLIR?
+An HLIR is a representation of the source code that is more abstract than the AST. It is
+designed to be easier to work with and to be more detailed than the AST. The HLIR can be seen
+as the AST after it has been semantically analyzed, and it contains metadata neccessary for
+the next stages of the compiler.
 */
 Declaration(
     type_spec: (

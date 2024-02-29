@@ -1,67 +1,83 @@
-use crate::ast::PostfixOp::Increment;
 use crate::str_intern::InternedStr;
-use crate::tokens::{Literal, Symbol, Token};
+use crate::tokens::{Keyword, Literal, Symbol, Token};
 use crate::util::CompilerResult;
 use std::fmt::Display;
 use std::sync::Arc;
 
+/*
+Some things in this AST very closely follow the ANSI C Yacc grammar.
+The majority does not. Enjoy.
+*/
+
 pub type ASTRoot = Vec<InitDeclaration>;
 
 #[derive(Debug)]
-pub(crate) struct Block(pub(crate) Vec<Statement>);
+pub struct Block(pub Vec<Statement>);
 
 #[derive(Debug)]
-pub(crate) enum InitDeclaration {
+pub enum InitDeclaration {
     Declaration(VariableDeclaration), // (declaration,  initializer)
     Function(FunctionDeclaration),
+    Struct(StructDeclaration),
 }
 
 #[derive(Debug)]
-pub(crate) struct FunctionDeclaration {
-    pub(crate) declaration: Declaration,
-    pub(crate) parameters: Vec<Declaration>,
-    pub(crate) varargs: bool,       // we don't currently support varargs
-    pub(crate) body: Option<Block>, // this is an option, but we currently don't support function prototypes
+pub struct StructDeclaration {
+    pub declaration: Declaration,
+    pub members: Vec<Declaration>,
+}
+
+#[derive(Debug)]
+pub struct FunctionDeclaration {
+    pub declaration: Declaration,
+    pub parameters: Vec<Declaration>,
+    pub varargs: bool, // don't currently support varargs, but it's here for future
+    pub body: Option<Block>, // this is an option, but we currently don't support function prototypes
 }
 
 #[derive(Debug)]
 pub struct VariableDeclaration {
-    pub(crate) declaration: Declaration,
-    pub(crate) initializer: Option<Expression>,
+    pub declaration: Declaration,
+    pub initializer: Option<Expression>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Declaration {
-    pub(crate) ty: DeclarationType,
-    pub(crate) name: Option<InternedStr>,
+pub struct Declaration {
+    pub specifier: DeclarationSpecifier,
+    pub declarator: DeclaratorType,
+    pub ident: Option<InternedStr>,
 }
 
-#[derive(Debug)]
-pub(crate) enum DeclarationType {
+#[derive(Debug, PartialEq, Eq)]
+pub enum DeclaratorType {
+    // not supporting function pointers
     Pointer {
-        to: Box<DeclarationType>,
+        to: Box<DeclaratorType>,
     },
     Array {
-        of: Box<DeclarationType>,
+        of: Box<DeclaratorType>,
         size: Option<usize>,
     },
-    Unit {
-        qualifiers: Option<Vec<TypeQualifier>>,
-        specifiers: Option<Vec<StorageSpecifier>>,
-        ty: TypeSpecifier,
-    },
+    Base,
 }
 
 #[derive(Debug)]
-pub(crate) enum TypeSpecifier {
+pub struct DeclarationSpecifier {
+    pub specifiers: Vec<StorageSpecifier>,
+    pub qualifiers: Vec<TypeQualifier>,
+    pub ty: Vec<TypeSpecifier>,
+}
+
+#[derive(Debug)]
+pub enum TypeSpecifier {
     Void,
     Char,
     Int,
     Long,
-    Float,
     Double,
     Signed,
     Unsigned,
+    Struct(InternedStr),
 }
 
 impl TryFrom<&Token> for TypeSpecifier {
@@ -70,32 +86,57 @@ impl TryFrom<&Token> for TypeSpecifier {
     fn try_from(value: &Token) -> Result<Self, Self::Error> {
         use TypeSpecifier::*;
         match value {
-            Token::Keyword(keyword) => match keyword {
-                crate::tokens::Keyword::Int => Ok(Int),
-                crate::tokens::Keyword::Double => Ok(Double),
-                _ => Err(()),
-            },
+            Token::Keyword(Keyword::Int) => Ok(Int),
+            Token::Keyword(Keyword::Double) => Ok(Double),
+            Token::Keyword(Keyword::Void) => Ok(Void),
+            Token::Keyword(Keyword::Char) => Ok(Char),
+            Token::Keyword(Keyword::Long) => Ok(Long),
+            Token::Keyword(Keyword::Signed) => Ok(Signed),
+            Token::Keyword(Keyword::Unsigned) => Ok(Unsigned),
             _ => Err(()),
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum StorageSpecifier {
+pub enum StorageSpecifier {
     Static,
 }
 
-#[derive(Debug)]
-pub(crate) enum TypeQualifier {
-    Const,
+impl TryFrom<&Token> for StorageSpecifier {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use StorageSpecifier::*;
+        match value {
+            Token::Keyword(Keyword::Static) => Ok(Static),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub(crate) enum Statement {
+pub enum TypeQualifier {
+    Const,
+}
+
+impl TryFrom<&Token> for TypeQualifier {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        use TypeQualifier::*;
+        match value {
+            Token::Keyword(Keyword::Const) => Ok(Const),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Statement {
     Expression(Expression),
     Declaration(VariableDeclaration),
-    If(Expression, Box<Statement>),
-    IfElse(Expression, Box<Statement>, Box<Statement>),
+    If(Expression, Box<Statement>, Option<Box<Statement>>),
     While(Expression, Box<Statement>),
     For(
         Option<VariableDeclaration>,
@@ -107,33 +148,35 @@ pub(crate) enum Statement {
     Continue,
     Return(Option<Expression>),
     Block(Block),
+    Empty, // this is for a semicolon by itself,
 }
 
 #[derive(Debug)]
-pub(crate) enum Expression {
+pub enum Expression {
     Literal(Literal),
     Variable(InternedStr),
     Sizeof(TypeOrExpression),
-    // this doesn't include all postfix operations, just inc and dec so far
+    Parenthesized(Box<Expression>),
+    // this doesn't include all postfix operations, just inc and dec
     PostFix(PostfixOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
-    Assignment(AssignOp, InternedStr, Box<Expression>),
     Binary(BinaryOp, Box<Expression>, Box<Expression>),
     FunctionCall(InternedStr, Vec<Expression>),
     Index(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, InternedStr),
     PointerMember(Box<Expression>, InternedStr),
-    Cast(TypeSpecifier, Box<Expression>),
+    Cast(Declaration, Box<Expression>),
+    ArrayInitializer(Vec<Expression>),
 }
 
 #[derive(Debug)]
-pub(crate) enum TypeOrExpression {
-    Type(TypeSpecifier),
+pub enum TypeOrExpression {
+    Type(Declaration),
     Expr(Box<Expression>),
 }
 
 #[derive(Debug)]
-pub(crate) enum PostfixOp {
+pub enum PostfixOp {
     Increment,
     Decrement,
 }
@@ -152,13 +195,15 @@ impl TryFrom<&Token> for PostfixOp {
 }
 
 #[derive(Debug)]
-pub(crate) enum UnaryOp {
+pub enum UnaryOp {
     Increment,
     Decrement,
     Plus,
     Negate,
     LogicalNot,
     BitwiseNot,
+    Deref,
+    AddressOf,
 }
 
 impl TryFrom<&Token> for UnaryOp {
@@ -173,13 +218,16 @@ impl TryFrom<&Token> for UnaryOp {
             Token::Symbol(Symbol::Tilde) => Ok(BitwiseNot),
             Token::Symbol(Symbol::Increment) => Ok(Increment),
             Token::Symbol(Symbol::Decrement) => Ok(Decrement),
+            Token::Symbol(Symbol::Star) => Ok(Deref),
+            Token::Symbol(Symbol::Ampersand) => Ok(AddressOf),
+
             _ => Err(()),
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum BinaryOp {
+pub enum BinaryOp {
     Add,
     Subtract,
     Multiply,
@@ -207,12 +255,20 @@ pub(crate) enum BinaryOp {
 }
 
 impl BinaryOp {
-    pub(crate) fn precedence(&self) -> u8 {
+    pub fn precedence(&self) -> u8 {
         use BinaryOp::*;
         match self {
-            Multiply | Divide | Modulo => 3,
-            Add | Subtract => 2,
-            _ => 0,
+            Multiply | Divide | Modulo => 11,
+            Add | Subtract => 10,
+            LeftShift | RightShift => 9,
+            GreaterThan | GreaterThanEqual | LessThan | LessThanEqual => 8,
+            Equal | NotEqual => 7,
+            BitwiseAnd => 6,
+            BitwiseXor => 5,
+            BitwiseOr => 4,
+            LogicalAnd => 3,
+            LogicalOr => 2,
+            Assign(_) => 1,
         }
     }
 }
@@ -242,13 +298,25 @@ impl TryFrom<&Token> for BinaryOp {
             Token::Symbol(Symbol::LeftShift) => Ok(LeftShift),
             Token::Symbol(Symbol::RightShift) => Ok(RightShift),
 
+            Token::Symbol(Symbol::Equal) => Ok(Assign(AssignOp::Assign)),
+            Token::Symbol(Symbol::PlusEqual) => Ok(Assign(AssignOp::Plus)),
+            Token::Symbol(Symbol::MinusEqual) => Ok(Assign(AssignOp::Minus)),
+            Token::Symbol(Symbol::StarEqual) => Ok(Assign(AssignOp::Multiply)),
+            Token::Symbol(Symbol::SlashEqual) => Ok(Assign(AssignOp::Divide)),
+            Token::Symbol(Symbol::ModuloEqual) => Ok(Assign(AssignOp::Modulo)),
+            Token::Symbol(Symbol::AmpersandEqual) => Ok(Assign(AssignOp::BitwiseAnd)),
+            Token::Symbol(Symbol::PipeEqual) => Ok(Assign(AssignOp::BitwiseOr)),
+            Token::Symbol(Symbol::CaretEqual) => Ok(Assign(AssignOp::BitwiseXor)),
+            Token::Symbol(Symbol::LeftShiftEqual) => Ok(Assign(AssignOp::LeftShift)),
+            Token::Symbol(Symbol::RightShiftEqual) => Ok(Assign(AssignOp::RightShift)),
+
             _ => Err(()),
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum AssignOp {
+pub enum AssignOp {
     Assign,
     Plus,
     Minus,
