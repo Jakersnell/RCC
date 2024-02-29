@@ -21,43 +21,7 @@ mod validation;
 
 const PRETTY: bool = false;
 
-fn main() {
-    let src = r#"
-
-struct test {
-    int a;
-    int b;
-};
-
-struct test* create_struct() {
-    struct test *t = (struct test*)malloc(sizeof(struct test));
-    t->a = 1;
-    t->b = 2;
-    return t;
-}
-
-int main() {
-    struct test *t = create_struct();
-    printf("t.a = %d, t.b = %d\n", t->a, t->b);
-    free(t);
-    return 0;
-}
-    "#;
-    let lexer = lex::Lexer::new(src.to_string());
-    // println!("{:#?}", lexer.collect::<Vec<_>>());
-    let program = util::Program::new("test.c".to_string());
-    let parser = parse::Parser::from_lexer(program, lexer);
-    let program = parser.parse();
-    let body = program.body.unwrap().unwrap();
-
-    if PRETTY {
-        for decl in body {
-            println!("{}", decl);
-        }
-    } else {
-        println!("{:#?}", body);
-    }
-}
+fn main() {}
 
 #[cfg(test)]
 mod tests {
