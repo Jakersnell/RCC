@@ -1,29 +1,52 @@
-# micro c
-This project is currently a work in progress.
-A compiler to implement a subset of C language features. Thus dubbed "Micro C".
-Since this does not follow any C specification, I wrote up a formal lexical grammar for the language, I plan on extending this to a small formal specification.
-___
-## Directory
+# Micro-C
 
-### [Formal specification of the language parsing grammar. ](MICRO-C-GRAMMAR.md)
-
-###  [Current roadmap](ROADMAP.md)
-
-### [Current stage analysis](CURRENT.md)
+### a small compiler focusing on a subset of the C language.
 
 ---
 
-### Why work on this?
-I am doing this project to study program compilation. I want to write a fully fledged and complete C compiler some day and this is a good precursor to that. 
+### These elements include but are not limited to
 
-The phases I hope for this compiler to have are as follows.
+- ##### Primitive types (int, char, float, double)
+- ##### Arrays, pointers, and structs
+- ##### Functions (not function pointers, yet!)
+- ##### Control flow (if, else, while, for)
+- ##### Expressions (arithmetic, logical, bitwise, and relational)
+- ##### Variable declarations and assignments
+- ##### Comments (single-line and multi-line)
+- ##### Built in library functions (printf, scanf, etc.)
+
+---
+
+## About the Project
+
+The goal of this project is to create a simple, yet powerful, compiler that can take in a file written in Micro-C
+and output an executable file. This is a long-term project and I will be updating this file as I make progress.
+The reason that I am doing this is to learn more about how compilers work and to improve my programming skills.
+I am also interested in learning more about the C language and how it is compiled. I chose to write this in rust because
+I absolutely love rust, and the idea seemed funny to me, as rust is built to stop the things that make C so "dangerous".
+___
+
+## Directory
+
+### [AST process analysis](AST-PROCESS.md)
+
+### [Formal specification of the language parsing grammar. ](MICRO-C-GRAMMAR.md)
+
+### [Current roadmap](ROADMAP.md)
+
+---
+
+### Phases of the compiler
+
 1. Lexical analysis (Reading literals, keywords, operators, etc)
 2. Parsing (Reading the logical structure of the code)
 3. Semantic analysis (Type checking, variable validation, and the like)
 4. Codegen (Creating the IR, linking the object files, creating a binary)
 
 ---
+
 ### Resources I have found helpful
+
 - [ANSI C specification pdf](https://web.archive.org/web/20200909074736if_/https://www.pdf-archive.com/2014/10/02/ansi-iso-9899-1990-1/ansi-iso-9899-1990-1.pdf)
 - [Stanford CS143 semantic analysis](https://web.stanford.edu/class/archive/cs/cs143/cs143.1128/handouts/180%20Semantic%20Analysis.pdf)
 - [Developing a C compiler from scratch in C - Daniel McCarthy](https://www.udemy.com/course/creating-a-c-compiler-from-scratch-module-1)
