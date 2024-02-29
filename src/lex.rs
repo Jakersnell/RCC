@@ -549,9 +549,10 @@ impl Lexer {
                     self.problems.push(error);
                     break;
                 }
-                _ => (),
+                _ => {
+                    self.next_char();
+                }
             }
-            self.next_char();
         }
         let end = self.position - 1;
         let value = self.source.substr(start..end);
@@ -573,7 +574,7 @@ impl Lexer {
             '\'' => '\'',
             '"' => '"',
             _ => {
-                let span = Span::new(start, self.position + 1, col, row);
+                let span = Span::new(start, self.position, col, row);
                 let error = Locatable::new(
                     span,
                     CompilerError::InvalidEscapeSequence(format!("\\{}", current)),
@@ -897,5 +898,20 @@ fn test_eat_number_properly_consumes_float_suffix() {
                 suffix: Some(control.to_string()),
             })
         );
+    }
+}
+
+#[test]
+fn test_eat_string_values_match() {
+    let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$\\\"%^&*()_+"#];
+    for test in tests {
+        let mut lexer = Lexer::new(format!("\"{}\"", test));
+        let token = lexer.eat_string().expect("Expected token");
+        match token {
+            Token::Literal(Literal::String { value }) => {
+                assert_eq!(value.to_string(), test);
+            }
+            _ => panic!("Expected string literal, got {:#?}", token),
+        }
     }
 }
