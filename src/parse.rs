@@ -286,9 +286,6 @@ where
 
     fn parse_init_declaration(&mut self) -> CompilerResult<InitDeclaration> {
         self.skip_empty_statements()?;
-        if is!(self, current, Token::Keyword(Keyword::Struct)) {
-            return self.parse_struct_declaration();
-        }
         let dec = self.parse_declaration()?;
         if is!(
             self,
@@ -302,6 +299,9 @@ where
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen)) {
             let function = self.parse_function_declaration(dec)?;
             Ok(InitDeclaration::Function(function))
+        } else if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
+            let _struct = self.parse_struct_declaration(dec)?;
+            Ok(InitDeclaration::Struct(_struct))
         } else {
             Err(vec![Locatable::new(
                 self.span,
@@ -313,10 +313,10 @@ where
         }
     }
 
-    fn parse_struct_declaration(&mut self) -> CompilerResult<InitDeclaration> {
-        debug_assert!(is!(self, current, Token::Keyword(Keyword::Struct)));
-        self.advance()?;
-        let ident = self.confirm_identifier()?;
+    fn parse_struct_declaration(
+        &mut self,
+        declaration: Declaration,
+    ) -> CompilerResult<StructDeclaration> {
         confirm!(self, consume, Token::Symbol(Symbol::OpenCurly), "{")?;
         let mut members = Vec::new();
         while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
@@ -326,10 +326,10 @@ where
         }
         confirm!(self, consume, Token::Symbol(Symbol::CloseCurly), "}")?;
         confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";")?;
-        Ok(InitDeclaration::Struct(StructDeclaration {
-            ident: ident.value,
+        Ok(StructDeclaration {
+            declaration,
             members,
-        }))
+        })
     }
 
     fn parse_declaration(&mut self) -> CompilerResult<Declaration> {
@@ -389,7 +389,7 @@ where
             let to = Box::new(self.parse_pre_declarator()?);
             Ok(DeclaratorType::Pointer { to })
         } else {
-            Ok(DeclaratorType::None)
+            Ok(DeclaratorType::Base)
         }
     }
 
@@ -664,7 +664,6 @@ where
         if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
-            self.advance()?;
             self.advance()?;
             let ty = self.parse_declaration()?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;

@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 /*
 Some things in this AST very closely follow the ANSI C Yacc grammar.
-The majority does not.
- */
+The majority does not. Enjoy.
+*/
 
 pub type ASTRoot = Vec<InitDeclaration>;
 
@@ -23,7 +23,7 @@ pub enum InitDeclaration {
 
 #[derive(Debug)]
 pub struct StructDeclaration {
-    pub ident: InternedStr,
+    pub declaration: Declaration,
     pub members: Vec<Declaration>,
 }
 
@@ -31,7 +31,7 @@ pub struct StructDeclaration {
 pub struct FunctionDeclaration {
     pub declaration: Declaration,
     pub parameters: Vec<Declaration>,
-    pub varargs: bool,       // we don't currently support varargs
+    pub varargs: bool, // don't currently support varargs, but it's here for future
     pub body: Option<Block>, // this is an option, but we currently don't support function prototypes
 }
 
@@ -48,7 +48,7 @@ pub struct Declaration {
     pub ident: Option<InternedStr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DeclaratorType {
     // not supporting function pointers
     Pointer {
@@ -58,7 +58,7 @@ pub enum DeclaratorType {
         of: Box<DeclaratorType>,
         size: Option<usize>,
     },
-    None,
+    Base,
 }
 
 #[derive(Debug)]
