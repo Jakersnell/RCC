@@ -57,9 +57,11 @@ impl Expression {
                 format!("{} <post> \n{}", op, right)
             }
             Expression::FunctionCall(ident, args) => {
-                let mut output = format!("{}{}\n", ident, "(");
+                let mut output = format!("<fn-call> {}{}\n", ident, "(");
                 for (i, arg) in args.iter().enumerate() {
-                    output += &arg.pretty_print(padding.clone(), i == args.len() - 1, false);
+                    let arg = &arg.pretty_print(padding.clone(), i == args.len() - 1, false);
+                    let arg = indent_string(arg.to_string(), 0, 4);
+                    output += &arg;
                 }
                 output += &format!("{})", padding);
                 output
@@ -84,8 +86,9 @@ impl Expression {
                 format!("{}[{}]", left, right)
             }
             Expression::Cast(ty, right) => {
-                let right = right.pretty_print(padding.clone(), true, false);
-                format!("({}) {}", ty, right)
+                let right = right.pretty_print(padding.clone(), true, true);
+                let right = indent_string(right, 0, 4);
+                format!("<cast> {} (\n{}\n)", ty, right)
             }
             Expression::ArrayInitializer(initializer) => {
                 let mut output = "{\n".to_string();
@@ -212,7 +215,7 @@ impl Display for VariableDeclaration {
 
 impl Display for StructDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "struct {} {{", self.ident)?;
+        writeln!(f, "{} {{", self.declaration)?;
         for member in &self.members {
             writeln!(f, "    {};", member)?;
         }
@@ -248,9 +251,11 @@ impl Display for FunctionDeclaration {
 
 impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.specifier, self.declarator)?;
+        let dec_is_base = self.declarator == DeclaratorType::Base;
+        let spacer = if dec_is_base { "" } else { " " };
+        write!(f, "({}{}{})", self.specifier, spacer, self.declarator)?;
         if let Some(ident) = &self.ident {
-            write!(f, "{}", ident)?;
+            write!(f, " {}", ident)?;
         }
         Ok(())
     }
@@ -265,7 +270,7 @@ impl Display for DeclaratorType {
                 Some(size) => write!(f, "{}[{}]", of, size),
                 any => write!(f, "{}[]", of),
             },
-            None => Ok(()),
+            Base => Ok(()),
         }
     }
 }
