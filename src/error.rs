@@ -13,34 +13,34 @@ pub enum CompilerError {
     ParseFloatError(#[from] std::num::ParseFloatError),
 
     #[error("Invalid integer suffix: {0}")]
-    InvalidIntegerSuffix(String),
+    InvalidIntegerSuffix(String, Span),
 
     #[error("Invalid float suffix: {0}")]
-    InvalidFloatSuffix(String),
+    InvalidFloatSuffix(String, Span),
 
     #[error("Invalid symbol: {0}")]
-    InvalidSymbol(String),
+    InvalidSymbol(String, Span),
 
     #[error("Found `{0}` but expected one of the following: \n\t{1}\n")]
-    ExpectedVariety(String, String),
+    ExpectedVariety(String, String, Span),
 
     #[error("Expected `{0}` but found {1}")]
-    ExpectedButFound(String, String),
+    ExpectedButFound(String, String, Span),
 
     #[error("Invalid hex literal: {0}")]
-    InvalidHexLiteral(String),
+    InvalidHexLiteral(Span),
 
     #[error("Invalid octal literal: {0}")]
-    InvalidOctalLiteral(String),
+    InvalidOctalLiteral(Span),
 
     #[error("Invalid binary literal: {0}")]
-    InvalidBinaryLiteral(String),
+    InvalidBinaryLiteral(Span),
 
     #[error("Invalid escape sequence: {0}")]
-    InvalidEscapeSequence(String),
+    InvalidEscapeSequence(Span),
 
     #[error("Invalid character literal: {0}")]
-    InvalidCharacterLiteral(String),
+    InvalidCharacterLiteral(Span),
 
     #[error("Unclosed string literal: {0}")]
     UnclosedStringLiteral(Span),
@@ -49,16 +49,16 @@ pub enum CompilerError {
     UnclosedCharLiteral(Span),
 
     #[error("Cannot cast {0} to {1}")]
-    CannotCast(String, String),
+    CannotCast(String, String, Span),
 
     #[error("Cannot assign {0} to type {1}")]
-    CannotAssign(String, String),
+    CannotAssign(String, String, Span),
 
     #[error("Unknown identifier \"{0}\"")]
-    UnknownIdentifier(String),
+    UnknownIdentifier(String, Span),
 
     #[error("Must return type {0} due to declared type")]
-    MustReturn(String),
+    MustReturn(String, Span),
 
     #[error("Unclosed parenthesis")]
     UnclosedParenthesis,
@@ -78,8 +78,8 @@ pub enum CompilerError {
     #[error("Unexpected end of file.")]
     UnexpectedEOF,
 
-    #[error("'The identifier {0}' already exists in this scope and cannot be redeclared.")]
-    IdentifierExists(String),
+    #[error("'This identifier already exists in this scope and cannot be redeclared.")]
+    IdentifierExists(Span),
 
     #[error("{0}")]
     CustomError(String),
