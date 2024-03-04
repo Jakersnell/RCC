@@ -1,6 +1,6 @@
+use crate::lexer::tokens::Literal;
 use crate::parser::ast::UnaryOp::Plus;
 use crate::parser::ast::*;
-use crate::tokens::Literal;
 use std::fmt::{write, Display, Formatter};
 
 // good util for pretty printing the ast
