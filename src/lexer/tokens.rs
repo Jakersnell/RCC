@@ -1,4 +1,4 @@
-use crate::str_intern::InternedStr;
+use crate::util::str_intern::InternedStr;
 use arcstr::Substr;
 use std::fmt::Display;
 use std::sync::Arc;

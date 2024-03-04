@@ -1,9 +1,9 @@
-use crate::ast::ASTRoot;
-use crate::error::CompilerError;
-use crate::hlir::{BoundTypeKind, SymbolKind};
-use crate::str_intern::InternedStr;
-use crate::util::{CompilerResult, Locatable, Span};
 use std::collections::HashMap;
+
+use crate::core::hlir::{BoundTypeKind, SymbolKind};
+use crate::parser::ast::ASTRoot;
+use crate::util::str_intern::InternedStr;
+use crate::util::CompilerResult;
 
 pub struct Validator<'a> {
     current_resolver: SymbolResolver<'a>,
@@ -30,15 +30,7 @@ impl<'a> SymbolResolver<'a> {
 
     #[inline]
     fn add_symbol(&mut self, ident: InternedStr, kind: SymbolKind) -> CompilerResult<()> {
-        if self.ident_exists_in_scope(&ident) {
-            Err(vec![Locatable::new(
-                Span::new(0, 0, 0, 0), // TODO: replace with idents location
-                CompilerError::IdentifierExists(ident.to_string()),
-            )])
-        } else {
-            self.symbols.insert(ident, kind);
-            Ok(())
-        }
+        todo!()
     }
 
     #[inline]

@@ -1,6 +1,5 @@
-use crate::ast::{ASTRoot, Declaration, FunctionDeclaration};
-use crate::str_intern::InternedStr;
-use crate::util::Program;
+use crate::parser::ast::{ASTRoot, Declaration, FunctionDeclaration};
+use crate::util::str_intern::InternedStr;
 use std::collections::HashMap;
 
 pub struct BoundRoot(pub Vec<BoundStatement>);
@@ -78,10 +77,10 @@ pub enum BoundExprKind {
     BinaryOperation {
         left: Box<BoundExpr>,
         right: Box<BoundExpr>,
-        op: crate::ast::BinaryOp,
+        op: crate::parser::ast::BinaryOp,
     },
     UnaryOperation {
         operand: Box<BoundExpr>,
-        op: crate::ast::UnaryOp,
+        op: crate::parser::ast::UnaryOp,
     },
 }
