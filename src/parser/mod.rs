@@ -1,17 +1,20 @@
+use arcstr::ArcStr;
+
+use ast::*;
+use macros::*;
+
+use crate::core::error::{CompilerError, ErrorReporter};
+use crate::lexer::tokens::Token;
+use crate::lexer::tokens::{Keyword, Literal};
+use crate::lexer::LexResult;
+use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, LocatableToken, Program, Span};
+
 pub mod ast;
 pub(super) mod declarations;
 pub(super) mod expressions;
 pub(super) mod macros;
 pub(super) mod statements;
-use crate::error::{CompilerError, ErrorReporter};
-use crate::lex::LexResult;
-use crate::str_intern::InternedStr;
-use crate::tokens::Token;
-use crate::tokens::{Keyword, Literal};
-use crate::util::{Locatable, LocatableToken, Program, Span};
-use arcstr::ArcStr;
-use ast::*;
-use macros::*;
 
 pub(super) static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof";
 pub(super) static EXPECTED_BINARY: &str =

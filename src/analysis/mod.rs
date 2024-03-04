@@ -1,9 +1,9 @@
-use crate::error::CompilerError;
-use crate::hlir::{BoundTypeKind, SymbolKind};
-use crate::parser::ast::ASTRoot;
-use crate::str_intern::InternedStr;
-use crate::util::{CompilerResult, Locatable, Span};
 use std::collections::HashMap;
+
+use crate::core::hlir::{BoundTypeKind, SymbolKind};
+use crate::parser::ast::ASTRoot;
+use crate::util::str_intern::InternedStr;
+use crate::util::CompilerResult;
 
 pub struct Validator<'a> {
     current_resolver: SymbolResolver<'a>,
