@@ -1,5 +1,5 @@
 use crate::parser::ast::{ASTRoot, Declaration, FunctionDeclaration};
-use crate::str_intern::InternedStr;
+use crate::util::str_intern::InternedStr;
 use std::collections::HashMap;
 
 pub struct BoundRoot(pub Vec<BoundStatement>);
