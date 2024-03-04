@@ -30,15 +30,7 @@ impl<'a> SymbolResolver<'a> {
 
     #[inline]
     fn add_symbol(&mut self, ident: InternedStr, kind: SymbolKind) -> CompilerResult<()> {
-        if self.ident_exists_in_scope(&ident) {
-            Err(vec![Locatable::new(
-                Span::new(0, 0, 0, 0), // TODO: replace with idents location
-                CompilerError::IdentifierExists(ident.to_string()),
-            )])
-        } else {
-            self.symbols.insert(ident, kind);
-            Ok(())
-        }
+        todo!()
     }
 
     #[inline]
