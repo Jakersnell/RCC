@@ -1,3 +1,4 @@
+use arcstr::ArcStr;
 use log::debug;
 use std::io;
 use std::path::PathBuf;
@@ -8,33 +9,59 @@ use crate::ast::{
     StructDeclaration, TypeOrExpression, TypeQualifier, TypeSpecifier, UnaryOp,
     VariableDeclaration,
 };
-use crate::error::CompilerError;
+use crate::error::{CompilerError, ErrorReporter};
 use crate::lex::LexResult;
 use crate::str_intern::InternedStr;
 use crate::tokens::Symbol;
 use crate::tokens::Token;
 use crate::tokens::{Keyword, Literal};
-use crate::util::{CompilerResult, Locatable, LocatableToken, Program, Span};
+use crate::util::{Locatable, LocatableToken, Program, Span};
 
 static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof";
 static EXPECTED_BINARY: &str = "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||";
 static EXPECTED_TYPE: &str = "int, long, char, float, double";
 
-pub struct Parser<L>
+pub type ParseResult<T> = Result<T, ()>;
+
+pub trait AstParser<'a, L: Iterator<Item = LexResult> + From<ArcStr>, E: ErrorReporter + 'a>:
+    Iterator<Item = Locatable<InitDeclaration>> + From<&'a mut Program<E>>
 where
-    L: Iterator<Item = LexResult> + Default + TryFrom<PathBuf, Error = io::Error>,
+    L: Iterator<Item = LexResult> + From<ArcStr>,
+    E: ErrorReporter,
 {
-    lexer: L,
-    program: Program,
-    global: Vec<InitDeclaration>,
-    current: Option<LocatableToken>,
-    next: Option<LocatableToken>,
-    span: Span,
+}
+impl<'a, L, E> Iterator for Parser<'a, L, E>
+where
+    L: From<ArcStr> + Iterator<Item = LexResult>,
+    E: ErrorReporter,
+{
+    type Item = Locatable<InitDeclaration>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+impl<'a, L, E> From<&'a mut Program<E>> for Parser<'a, L, E>
+where
+    L: From<ArcStr> + Iterator<Item = LexResult>,
+    E: ErrorReporter,
+{
+    fn from(value: &'a mut Program<E>) -> Self {
+        todo!()
+    }
+}
+
+impl<'a, L, E> AstParser<'a, L, E> for Parser<'a, L, E>
+where
+    L: Iterator<Item = LexResult> + From<ArcStr>,
+    E: ErrorReporter,
+{
 }
 
 macro_rules! is {
     ($invoker:ident, $current_or_next:ident,  $pattern:pat $(if $guard:expr)? $(,)?) => {
-        $invoker.$current_or_next.as_ref().is_some_and(|locatable| matches!(&locatable.value,$pattern $(if $guard)?))
+        $invoker.$current_or_next.as_ref().is_some_and(|locatable| matches!(&locatable.value, $pattern $(if $guard)?))
     };
 }
 
@@ -75,7 +102,7 @@ macro_rules! confirm {
         let locatable = $invoker.consume()?;
         let location = locatable.location;
         let value = locatable.value;
-        confirm!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm!($invoker, value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
     (
@@ -106,7 +133,7 @@ macro_rules! confirm {
         let locatable = &$invoker.current.as_ref().unwrap();
         let value = &locatable.value;
         let location = locatable.location;
-        confirm!(value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
+        confirm!($invoker, value, location, $closure, $pattern $(if $guard)? => $if_ok, $if_err)
     }};
 
         (
@@ -127,7 +154,8 @@ macro_rules! confirm {
         confirm!( $invoker, borrow, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
 
-        (
+    (
+        $invoker:ident,
         $value:ident,
         $location:ident,
         $closure:expr,
@@ -138,153 +166,146 @@ macro_rules! confirm {
         #[allow(clippy::redundant_closure_call)]
         match $closure($value) {
             $pattern $(if $guard)? => Ok(Locatable::new($location, $if_ok)),
-            _ => Err(vec![Locatable{
-                location:$location,
-                value:CompilerError::ExpectedVariety($if_err.to_string(), formatted)
-            }])
+            _ => {
+                $invoker.report_error(CompilerError::ExpectedVariety($if_err.to_string(), formatted, $location));
+                Err(())
+            }
         }
     }};
 }
 
-impl<L> Parser<L>
+pub struct Parser<'a, L, E>
 where
-    L: Iterator<Item = LexResult> + Default + TryFrom<PathBuf, Error = io::Error>,
+    L: Iterator<Item = LexResult> + From<ArcStr>,
+    E: ErrorReporter,
 {
-    pub fn new(program: Program) -> io::Result<Self> {
-        let lexer = L::try_from(PathBuf::from(&program.file_name))?;
-        Ok(Self::from_lexer(program, lexer))
-    }
+    lexer: L,
+    reporter: &'a mut E,
+    global: Vec<InitDeclaration>,
+    current: Option<LocatableToken>,
+    next: Option<LocatableToken>,
+    last_span: Span,
+    current_span: Span,
+    primed: bool,
+}
 
-    pub fn from_lexer(program: Program, lexer: L) -> Self {
-        Self {
-            lexer,
-            program,
-            global: Vec::new(),
-            current: None,
-            next: None,
-            span: Span::new(0, 0, 0, 0),
-        }
-    }
-
-    pub fn parse(mut self) -> Program {
-        let body = self.get_body().map_err(|mut errors| {
-            self.get_all_errors(&mut errors);
-            errors
-        });
-        let mut program = self.program;
-        program.body = Some(body);
-        program
-    }
-
+impl<'a, L, E> Parser<'a, L, E>
+where
+    L: Iterator<Item = LexResult> + From<ArcStr>,
+    E: ErrorReporter,
+{
     /// this seemed like the best way to avoid returning a result in the constructor
     #[inline(always)]
-    fn prime(&mut self) -> CompilerResult<()> {
+    fn prime(&mut self) -> ParseResult<()> {
         self.advance()?;
         self.advance()?;
         Ok(())
     }
 
     #[inline(always)]
-    fn check_for_eof(&mut self, expected: &'static str) -> CompilerResult<()> {
-        if self.current.is_none() {
-            return Err(vec![Locatable::new(
-                self.span,
-                CompilerError::UnexpectedEOF,
-            )]);
-        }
-        Ok(())
+    fn report_error(&mut self, error: CompilerError) {
+        self.reporter.report_error(error);
     }
 
-    fn consume(&mut self) -> CompilerResult<LocatableToken> {
+    #[inline(always)]
+    fn check_for_eof(&mut self, expected: &'static str) -> ParseResult<()> {
+        if self.current.is_none() {
+            self.report_error(CompilerError::UnexpectedEOF);
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn consume(&mut self) -> ParseResult<LocatableToken> {
         self.check_for_eof("token")?;
         let locatable = self.current.take();
         self.advance()?;
         let locatable = locatable.unwrap();
+        self.last_span = locatable.location;
         Ok(locatable)
     }
 
     #[inline(always)]
-    fn confirm_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
+    fn confirm_identifier(&mut self) -> ParseResult<Locatable<InternedStr>> {
         confirm!(self, consume, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
 
     #[inline(always)]
-    fn confirm_literal(&mut self) -> CompilerResult<Locatable<Literal>> {
+    fn confirm_literal(&mut self) -> ParseResult<Locatable<Literal>> {
         confirm!(self, consume, Token::Literal(literal) => literal,  "<literal>")
     }
 
     #[inline(always)]
-    fn match_binary_op(&mut self) -> CompilerResult<Locatable<BinaryOp>> {
+    fn match_binary_op(&mut self) -> ParseResult<Locatable<BinaryOp>> {
         confirm!(self, borrow, |x| {BinaryOp::try_from(x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
     }
 
     #[inline(always)]
-    fn confirm_unary_op(&mut self) -> CompilerResult<Locatable<UnaryOp>> {
+    fn confirm_unary_op(&mut self) -> ParseResult<Locatable<UnaryOp>> {
         confirm!(self, consume, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
     }
 
     #[inline(always)]
-    fn confirm_type(&mut self) -> CompilerResult<Locatable<TypeSpecifier>> {
+    fn confirm_type(&mut self) -> ParseResult<Locatable<TypeSpecifier>> {
         confirm!(self, consume, |x| {TypeSpecifier::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
     }
 
     #[inline(always)]
-    fn match_identifier(&mut self) -> CompilerResult<Locatable<InternedStr>> {
+    fn match_identifier(&mut self) -> ParseResult<Locatable<InternedStr>> {
         confirm!(self, borrow, Token::Identifier(arc_str) => arc_str.clone(), "<identifier>")
     }
 
     #[inline(always)]
-    fn match_keyword(&mut self) -> CompilerResult<Locatable<Keyword>> {
+    fn match_keyword(&mut self) -> ParseResult<Locatable<Keyword>> {
         confirm!(self, borrow, Token::Keyword(keyword) => *keyword, "<keyword>")
     }
 
     #[inline(always)]
-    fn match_assign(&mut self) -> CompilerResult<Locatable<AssignOp>> {
+    fn match_assign(&mut self) -> ParseResult<Locatable<AssignOp>> {
         confirm!(self, borrow, |x| {AssignOp::try_from(x)}, Ok(op) => op, "=, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=")
     }
 
     #[inline(always)]
-    fn skip_empty_statements(&mut self) -> CompilerResult<()> {
+    fn skip_empty_statements(&mut self) -> ParseResult<()> {
         while is!(self, current, Token::Symbol(Symbol::Semicolon)) {
             self.advance()?;
         }
         Ok(())
     }
 
-    fn advance(&mut self) -> CompilerResult<()> {
+    #[inline(always)]
+    fn current_span(&mut self) -> ParseResult<Span> {
+        match self.current.as_ref() {
+            Some(locatable) => Ok(locatable.location),
+            None => {
+                self.report_error(CompilerError::UnexpectedEOF);
+                Err(())
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn advance(&mut self) -> ParseResult<()> {
         self.current = self.next.take();
         self.next = match self.lexer.next() {
             Some(Ok(token)) => Some(token),
             Some(Err(errors)) => {
-                return Err(errors);
+                return Err(());
             }
             None => None,
         };
         Ok(())
     }
+}
 
-    fn get_all_errors(&mut self, errors: &mut Vec<Locatable<CompilerError>>) {
-        let all_results = std::mem::take(&mut self.lexer).collect::<Vec<_>>();
-        let all_errors = all_results
-            .into_iter()
-            .filter_map(|r| if let Err(e) = r { Some(e) } else { None })
-            .flatten();
-        let mut errors = errors;
-        errors.extend(all_errors);
-    }
-
-    fn get_body(&mut self) -> CompilerResult<Vec<InitDeclaration>> {
-        self.prime();
-
-        while self.current.is_some() {
-            let global_declaration = self.parse_init_declaration()?;
-            self.global.push(global_declaration);
-        }
-
-        Ok(std::mem::take(&mut self.global))
-    }
-
-    fn parse_init_declaration(&mut self) -> CompilerResult<InitDeclaration> {
+impl<'a, L, E> Parser<'a, L, E>
+where
+    L: Iterator<Item = LexResult> + From<ArcStr>,
+    E: ErrorReporter,
+{
+    pub fn parse_init_declaration(&mut self) -> ParseResult<InitDeclaration> {
+        let location = self.current_span()?;
         self.skip_empty_statements()?;
         let dec = self.parse_declaration()?;
         if is!(
@@ -303,20 +324,19 @@ where
             let _struct = self.parse_struct_declaration(dec)?;
             Ok(InitDeclaration::Struct(_struct))
         } else {
-            Err(vec![Locatable::new(
-                self.span,
-                CompilerError::ExpectedButFound(
-                    "function or variable declaration".to_string(),
-                    format!("{:#?}", self.current.as_ref().unwrap().value),
-                ),
-            )])?
+            self.report_error(CompilerError::ExpectedButFound(
+                "function or variable declaration".to_string(),
+                format!("{:#?}", self.current.as_ref().unwrap().value),
+                location.merge(self.current_span),
+            ));
+            Err(())
         }
     }
 
-    fn parse_struct_declaration(
+    pub fn parse_struct_declaration(
         &mut self,
-        declaration: Declaration,
-    ) -> CompilerResult<StructDeclaration> {
+        declaration: Locatable<Declaration>,
+    ) -> ParseResult<Locatable<StructDeclaration>> {
         confirm!(self, consume, Token::Symbol(Symbol::OpenCurly), "{")?;
         let mut members = Vec::new();
         while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
@@ -326,33 +346,44 @@ where
         }
         confirm!(self, consume, Token::Symbol(Symbol::CloseCurly), "}")?;
         confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";")?;
-        Ok(StructDeclaration {
-            declaration,
-            members,
-        })
+        let location = declaration.location.merge(self.current_span()?);
+        Ok(Locatable::new(
+            location,
+            StructDeclaration {
+                declaration,
+                members,
+            },
+        ))
     }
 
-    fn parse_declaration(&mut self) -> CompilerResult<Declaration> {
+    pub fn parse_declaration(&mut self) -> ParseResult<Locatable<Declaration>> {
+        let location = self.current_span()?;
         let specifier = self.parse_declaration_specifier()?;
         let declarator = self.parse_pre_declarator()?;
-        let ident = if let Some(ident) =
-            match_token!(self, current, Token::Identifier(ident) => ident.clone())
-        {
+        let mut ident = match_token!(self, current, Token::Identifier(ident) => ident.clone());
+        if ident.is_some() {
             self.advance()?;
-            Some(ident.value)
-        } else {
-            None
-        };
+        }
         let declarator = self.parse_array_declarator(declarator)?;
-        Ok(Declaration {
-            specifier,
-            declarator,
-            ident,
+        let location = ident
+            .as_ref()
+            .map_or(location, |locatable| location.merge(locatable.location));
+        Ok(Locatable {
+            location,
+            value: Declaration {
+                specifier,
+                declarator,
+                ident,
+            },
         })
     }
 
-    fn parse_array_declarator(&mut self, dec: DeclaratorType) -> CompilerResult<DeclaratorType> {
+    pub fn parse_array_declarator(
+        &mut self,
+        dec: Locatable<Box<DeclaratorType>>,
+    ) -> ParseResult<Locatable<Box<DeclaratorType>>> {
         if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
+            let location = self.current_span()?;
             self.advance()?;
             let size = if let Some(Locatable {
                 location,
@@ -360,12 +391,11 @@ where
             }) = match_token!(self, current, Token::Literal(Literal::Integer {value, suffix}) => (*value, suffix.clone()))
             {
                 if suffix.is_some() {
-                    return Err(vec![Locatable::new(
+                    self.report_error(CompilerError::CustomError(
+                        "Suffixes in array sizes are not currently supported.".to_string(),
                         location,
-                        CompilerError::CustomError(
-                            "Suffixes in array sizes are not currently supported.".to_string(),
-                        ),
-                    )]);
+                    ));
+                    return Err(());
                 }
                 self.advance()?;
                 Some(integer as usize)
@@ -373,27 +403,31 @@ where
                 None
             };
             confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
-            let dec = DeclaratorType::Array {
-                of: Box::new(dec),
-                size,
-            };
+            let location = location.merge(self.current_span()?);
+            let dec = Box::new(DeclaratorType::Array { of: dec, size });
+            let dec = Locatable::new(location, dec);
             Ok(self.parse_array_declarator(dec)?)
         } else {
             Ok(dec)
         }
     }
 
-    fn parse_pre_declarator(&mut self) -> CompilerResult<DeclaratorType> {
+    pub fn parse_pre_declarator(&mut self) -> ParseResult<Locatable<Box<DeclaratorType>>> {
+        let location = self.current_span()?;
         if is!(self, current, Token::Symbol(Symbol::Star)) {
             self.advance()?;
-            let to = Box::new(self.parse_pre_declarator()?);
-            Ok(DeclaratorType::Pointer { to })
+            let to = self.parse_pre_declarator()?;
+            Ok(Locatable::new(
+                location,
+                Box::new(DeclaratorType::Pointer { to }),
+            ))
         } else {
-            Ok(DeclaratorType::Base)
+            Ok(Locatable::new(location, Box::new(DeclaratorType::Base)))
         }
     }
 
-    fn parse_declaration_specifier(&mut self) -> CompilerResult<DeclarationSpecifier> {
+    pub fn parse_declaration_specifier(&mut self) -> ParseResult<Locatable<DeclarationSpecifier>> {
+        let span = self.current_span()?;
         let mut storage_specifiers = Vec::new();
         while let Some(storage_specifier) =
             match_token!(self, current, |x|{StorageSpecifier::try_from(x)}, Ok(x) => x)
@@ -423,17 +457,21 @@ where
                 break;
             }
         }
-        Ok(DeclarationSpecifier {
-            specifiers: storage_specifiers,
-            qualifiers: type_qualifiers,
-            ty: type_specifiers,
+        let span = span.extend(self.current_span()?);
+        Ok(Locatable {
+            location: span,
+            value: DeclarationSpecifier {
+                specifiers: storage_specifiers,
+                qualifiers: type_qualifiers,
+                ty: type_specifiers,
+            },
         })
     }
 
-    fn parse_function_declaration(
+    pub fn parse_function_declaration(
         &mut self,
-        declaration: Declaration,
-    ) -> CompilerResult<FunctionDeclaration> {
+        declaration: Locatable<Declaration>,
+    ) -> ParseResult<Locatable<FunctionDeclaration>> {
         confirm!(self, consume, Token::Symbol(Symbol::OpenParen) => (), "(")?;
         let mut parameters = Vec::new();
         while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
@@ -447,25 +485,22 @@ where
         }
         // note to self: parse varargs here
         confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
-        let body = if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
-            Some(self.parse_compound_statement()?)
-        } else {
-            confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-            None
-        };
-
-        Ok(FunctionDeclaration {
-            declaration,
-            parameters,
-            varargs: false,
-            body,
-        })
+        let body = self.parse_compound_statement()?;
+        let location = declaration.location.merge(body.location);
+        Ok(Locatable::new(
+            location,
+            FunctionDeclaration {
+                declaration,
+                parameters,
+                body,
+            },
+        ))
     }
 
-    fn parse_variable_declaration(
+    pub fn parse_variable_declaration(
         &mut self,
-        declaration: Declaration,
-    ) -> CompilerResult<VariableDeclaration> {
+        declaration: Locatable<Declaration>,
+    ) -> ParseResult<Locatable<VariableDeclaration>> {
         // debug_assert!(declaration.name.is_some());
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
@@ -473,14 +508,20 @@ where
         } else {
             None
         };
-
-        Ok(VariableDeclaration {
-            declaration,
-            initializer,
-        })
+        let location = initializer.as_ref().map_or(declaration.location, |init| {
+            declaration.location.merge(init.location)
+        });
+        Ok(Locatable::new(
+            location,
+            VariableDeclaration {
+                declaration,
+                initializer,
+            },
+        ))
     }
 
-    fn parse_compound_statement(&mut self) -> CompilerResult<Block> {
+    pub fn parse_compound_statement(&mut self) -> ParseResult<Locatable<Block>> {
+        let location = self.current_span()?;
         confirm!(self, consume, Token::Symbol(Symbol::OpenCurly) => (), "{")?;
         let mut body = Vec::new();
         while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
@@ -488,44 +529,43 @@ where
             body.push(stmt);
         }
         confirm!(self, consume, Token::Symbol(Symbol::CloseCurly) => (), "}")?;
-        Ok(Block(body))
+        let location = location.merge(self.last_span);
+        Ok(Locatable::new(location, Block(body)))
     }
 
-    fn parse_statement(&mut self) -> CompilerResult<Statement> {
+    pub fn parse_statement(&mut self) -> ParseResult<Locatable<Statement>> {
         self.check_for_eof("statement")?;
-        self.skip_empty_statements()?;
+        let location = self.current_span()?;
         match self.current.as_ref().unwrap().value {
-            Token::Symbol(Symbol::Semicolon) => {
-                self.advance()?;
-                Ok(Statement::Empty)
-            }
-            Token::Keyword(Keyword::Continue) => {
-                self.advance()?;
-                Ok(Statement::Continue)
-            }
-            Token::Keyword(Keyword::Break) => {
-                self.advance()?;
-                Ok(Statement::Break)
-            }
+            Token::Symbol(Symbol::Semicolon) => Ok(self.consume()?.map(|_| Statement::Empty)),
+            Token::Keyword(Keyword::Continue) => Ok(self.consume()?.map(|_| Statement::Continue)),
+            Token::Keyword(Keyword::Break) => Ok(self.consume()?.map(|_| Statement::Break)),
             Token::Symbol(Symbol::OpenCurly) => {
                 let block = self.parse_compound_statement()?;
-                Ok(Statement::Block(block))
+                let location = block.location;
+                Ok(Locatable::new(location, Statement::Block(block)))
             }
             Token::Keyword(keyword) if keyword.is_for_type() => {
                 let dec = self.parse_declaration()?;
                 let variable_declaration = self.parse_variable_declaration(dec)?;
                 confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-                Ok(Statement::Declaration(variable_declaration))
+                let location = variable_declaration.location.merge(self.last_span);
+                Ok(Locatable::new(
+                    location,
+                    Statement::Declaration(variable_declaration),
+                ))
             }
             Token::Keyword(Keyword::Return) => {
                 self.advance()?;
-                if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
-                    Ok(Statement::Return(None))
+                let stmt = if is!(self, current, Token::Symbol(Symbol::Semicolon)) {
+                    Statement::Return(None)
                 } else {
                     let expr = self.parse_binary_expression(None)?;
                     confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
-                    Ok(Statement::Return(Some(expr)))
-                }
+                    Statement::Return(Some(expr))
+                };
+                let location = location.merge(self.last_span);
+                Ok(Locatable::new(location, stmt))
             }
             Token::Keyword(Keyword::If) => {
                 self.advance()?;
@@ -539,7 +579,11 @@ where
                 } else {
                     None
                 };
-                Ok(Statement::If(condition, stmt, else_stmt))
+                let location = location.merge(self.last_span);
+                Ok(Locatable::new(
+                    location,
+                    Statement::If(condition, stmt, else_stmt),
+                ))
             }
             Token::Keyword(Keyword::While) => {
                 self.advance()?;
@@ -547,7 +591,8 @@ where
                 let condition = self.parse_binary_expression(None)?;
                 confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
                 let stmt = Box::new(self.parse_statement()?);
-                Ok(Statement::While(condition, stmt))
+                let location = location.merge(stmt.location);
+                Ok(Locatable::new(location, Statement::While(condition, stmt)))
             }
             Token::Keyword(Keyword::For) => {
                 self.advance()?;
@@ -572,27 +617,31 @@ where
                 };
                 confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
                 let stmt = Box::new(self.parse_statement()?);
-                Ok(Statement::For(initializer, condition, after_loop, stmt))
+                let location = location.merge(stmt.location);
+                Ok(Locatable::new(
+                    location,
+                    Statement::For(initializer, condition, after_loop, stmt),
+                ))
             }
             Token::Keyword(Keyword::Else) => {
-                let locatable = self.consume()?;
-                Err(vec![Locatable::new(
-                    locatable.location,
-                    CompilerError::ElseWithNoIf(locatable.location),
-                )])
+                let location = self.consume()?.location;
+                self.report_error(CompilerError::ElseWithNoIf(location));
+                Err(())
             }
             _ => {
                 let stmt = self
                     .parse_binary_expression(None)
                     .map(Statement::Expression)?;
                 confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), "Expression statements must be terminated by a semicolon.")?;
-                Ok(stmt)
+                let location = location.merge(self.last_span);
+                Ok(Locatable::new(location, stmt))
             }
         }
     }
 
-    fn parse_initializer(&mut self) -> CompilerResult<Expression> {
+    fn parse_initializer(&mut self) -> ParseResult<Locatable<Expression>> {
         if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
+            let location = self.current_span()?;
             self.advance()?;
             let mut contents = Vec::new();
             while !is!(self, current, Token::Symbol(Symbol::CloseCurly)) {
@@ -605,16 +654,25 @@ where
                 }
             }
             confirm!(self, consume, Token::Symbol(Symbol::CloseCurly) => (), "}")?;
-            Ok(Expression::ArrayInitializer(contents))
+            let location = location.merge(self.current_span()?);
+            Ok(Locatable::new(
+                location,
+                Expression::ArrayInitializer(contents),
+            ))
         } else {
             self.parse_binary_expression(None)
         }
     }
-
-    fn parse_binary_expression(
+}
+impl<'a, L, E> Parser<'a, L, E>
+where
+    L: Iterator<Item = LexResult> + From<ArcStr>,
+    E: ErrorReporter,
+{
+    pub fn parse_binary_expression(
         &mut self,
         parent_precedence: Option<u8>,
-    ) -> CompilerResult<Expression> {
+    ) -> ParseResult<Locatable<Expression>> {
         let parent_precedence = parent_precedence.unwrap_or(0);
         let mut left = self.parse_prefix_unary_expression()?;
 
@@ -630,144 +688,216 @@ where
                 precedence
             };
             let right = self.parse_binary_expression(Some(precedence))?;
-            left = Expression::Binary(bin_op.value, Box::new(left), Box::new(right));
+            let location = left.location.merge(self.current_span()?);
+            left = Locatable::new(
+                location,
+                Expression::Binary(bin_op.value, left.map(Box::new), right.map(Box::new)),
+            );
         }
 
         Ok(left)
     }
 
-    fn parse_prefix_unary_expression(&mut self) -> CompilerResult<Expression> {
+    pub fn parse_prefix_unary_expression(&mut self) -> ParseResult<Locatable<Expression>> {
         let token = self.current.as_ref().unwrap();
-
         if let Ok(un_op) = UnaryOp::try_from(&token.value) {
-            self.span.end = token.location.end;
-            self.advance()?;
-            let expr = self.parse_prefix_unary_expression()?;
-            Ok(Expression::Unary(un_op, Box::new(expr)))
+            self.create_unop(un_op)
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
-            self.advance()?;
-            let ty = self.parse_declaration()?;
-            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
-            let expr = self.parse_prefix_unary_expression()?;
-            Ok(Expression::Cast(ty, Box::new(expr)))
+            self.parse_cast()
         } else if is!(self, current, Token::Symbol(Symbol::Sizeof)) {
-            self.advance()?;
             self.parse_sizeof()
         } else {
             self.parse_primary_expression()
         }
     }
 
-    fn parse_sizeof(&mut self) -> CompilerResult<Expression> {
-        if is!(self, current, Token::Symbol(Symbol::OpenParen))
+    pub fn create_unop(&mut self, un_op: UnaryOp) -> ParseResult<Locatable<Expression>> {
+        let location = self.current_span()?;
+        self.advance()?;
+        let expr = self.parse_prefix_unary_expression()?;
+        let location = location.merge(expr.location);
+        let expr = Expression::Unary(un_op, expr.map(Box::new));
+        let locatable = Locatable::new(location, expr);
+        Ok(locatable)
+    }
+
+    pub fn parse_cast(&mut self) -> ParseResult<Locatable<Expression>> {
+        debug_assert!(is!(self, current, Token::Symbol(Symbol::OpenParen)));
+        debug_assert!(is!(self, next, Token::Keyword(kw) if kw.is_for_type()));
+        let location = self.current_span()?;
+        self.advance()?;
+        let ty = self.parse_declaration()?;
+        confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
+        let expr = self.parse_prefix_unary_expression()?;
+        let location = location.merge(self.last_span);
+        let expr = Expression::Cast(ty, expr.map(Box::new));
+        let locatable = Locatable::new(location, expr);
+        Ok(locatable)
+    }
+
+    pub fn parse_sizeof(&mut self) -> ParseResult<Locatable<Expression>> {
+        debug_assert!(is!(self, current, Token::Symbol(Symbol::Sizeof)));
+        let location = self.current_span()?;
+        self.advance()?;
+        let expr = if is!(self, current, Token::Symbol(Symbol::OpenParen))
             && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
             self.advance()?;
             let ty = self.parse_declaration()?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
-            Ok(Expression::Sizeof(TypeOrExpression::Type(ty)))
+            Expression::Sizeof(ty.map(TypeOrExpression::Type))
         } else {
-            Ok(Expression::Sizeof(TypeOrExpression::Expr(Box::new(
-                self.parse_binary_expression(None)?,
-            ))))
-        }
+            Expression::Sizeof(
+                self.parse_binary_expression(None)?
+                    .map(|expr| TypeOrExpression::Expr(Box::new(expr))),
+            )
+        };
+        let location = location.merge(self.last_span);
+        let locatable = Locatable::new(location, expr);
+        Ok(locatable)
     }
 
-    fn parse_primary_expression(&mut self) -> CompilerResult<Expression> {
+    pub fn parse_primary_expression(&mut self) -> ParseResult<Locatable<Expression>> {
         let locatable = self.consume()?;
-
-        let expression = if Token::Symbol(Symbol::OpenParen) == locatable.value {
-            let expr = self.parse_binary_expression(None)?;
-            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            Ok(Expression::Parenthesized(Box::new(expr)))
-        } else if let Token::Literal(literal) = locatable.value {
-            Ok(Expression::Literal(literal))
-        } else if let Token::Identifier(identifier) = locatable.value {
-            Ok(Expression::Variable(identifier))
-        } else {
-            self.span.end = locatable.location.end;
-            Err(vec![Locatable::new(
-                self.span,
-                CompilerError::ExpectedButFound(
+        let span = locatable.location;
+        let expression = match locatable.value {
+            Token::Literal(literal) => Ok(Expression::Literal(span.into_locatable(literal))),
+            Token::Identifier(ident) => Ok(Expression::Variable(span.into_locatable(ident))),
+            Token::Symbol(Symbol::OpenParen) => {
+                let expr = self.parse_binary_expression(None)?;
+                confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
+                Ok(Expression::Parenthesized(expr.map(Box::new)))
+            }
+            _ => {
+                self.report_error(CompilerError::ExpectedButFound(
                     "Literal or Expression".to_string(),
                     format!("{:#?}", locatable.value),
-                ),
-            )])
+                    locatable.location,
+                ));
+                Err(())
+            }
         }?;
-
+        let location = span.merge(self.last_span);
+        let expression = Locatable::new(location, expression);
         self.parse_postfix_unary_expression(expression)
     }
 
-    fn parse_postfix_unary_expression(
+    pub fn parse_postfix_unary_expression(
         &mut self,
-        primary_expr: Expression,
-    ) -> CompilerResult<Expression> {
+        primary_expr: Locatable<Expression>,
+    ) -> ParseResult<Locatable<Expression>> {
         if self.current.is_none() {
             return Ok(primary_expr);
         }
         let current = self.current.as_ref().unwrap();
         if let Ok(op) = PostfixOp::try_from(&current.value) {
             self.advance()?;
-            self.parse_postfix_unary_expression(Expression::PostFix(op, Box::new(primary_expr)))
+            let location = primary_expr.location.merge(self.last_span);
+            let expr = Locatable::new(
+                location,
+                Expression::PostFix(op, primary_expr.map(Box::new)),
+            );
+            self.parse_postfix_unary_expression(expr)
         } else if is!(self, current, Token::Symbol(Symbol::OpenParen))
-            && matches!(&primary_expr, Expression::Variable(_))
+            && matches!(&primary_expr.value, Expression::Variable(_))
         {
-            let ident = match primary_expr {
-                Expression::Variable(var) => var,
-                _ => panic!("Nothing else should get to this point."),
-            };
-            self.advance()?;
-            let mut args = Vec::new();
-            while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
-                let expr = self.parse_binary_expression(None)?;
-                args.push(expr);
-                if is!(self, current, Token::Symbol(Symbol::Comma)) {
-                    self.advance()?;
-                } else {
-                    break;
-                }
-            }
-            confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
-            self.parse_postfix_unary_expression(Expression::FunctionCall(ident, args))
+            self.parse_function_call(primary_expr)
         } else if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
-            self.advance()?;
-            let index = self.parse_binary_expression(None)?;
-            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
-            self.parse_postfix_unary_expression(Expression::Index(
-                Box::new(primary_expr),
-                Box::new(index),
-            ))
+            self.parse_index_access(primary_expr)
         } else if is!(self, current, Token::Symbol(Symbol::Dot)) {
-            self.advance()?;
-            let member = self.confirm_identifier()?;
-            self.parse_postfix_unary_expression(Expression::Member(
-                Box::new(primary_expr),
-                member.value,
-            ))
+            self.parse_member_access(primary_expr)
         } else if is!(self, current, Token::Symbol(Symbol::Arrow)) {
-            self.advance()?;
-            let member = self.confirm_identifier()?;
-            self.parse_postfix_unary_expression(Expression::PointerMember(
-                Box::new(primary_expr),
-                member.value,
-            ))
+            self.parse_deref_member_access(primary_expr)
         } else {
             Ok(primary_expr)
         }
     }
-}
 
-#[test]
-fn test_advance_advances_tokens_correctly() {
-    let program = Program::new("test".to_string());
-    let source = "1 * 1".to_string();
-    let lexer = crate::lex::Lexer::new(source);
-    let mut parser = Parser::from_lexer(program, lexer);
-    parser.prime();
-    assert!(parser.consume().is_ok());
-    assert!(parser.consume().is_ok());
-    assert!(parser.consume().is_ok());
-    assert!(parser.consume().is_err());
+    /// This function parses call syntax and is initiated by an open parenthesis placed immediately
+    /// after a primary expression. It is placed in its own function to keep "parse_postfix_unary_expression"
+    /// more concise. This expects a primary_expr as input in order to nest the original
+    /// expression into the AST node. This currently only parses calls on identifiers because the
+    /// compiler does not support function pointers yet.
+    pub fn parse_function_call(
+        &mut self,
+        primary_expr: Locatable<Expression>,
+    ) -> ParseResult<Locatable<Expression>> {
+        debug_assert!(is!(self, current, Token::Symbol(Symbol::OpenParen)));
+        debug_assert!(matches!(&primary_expr.value, Expression::Variable(_)));
+        let location = primary_expr.location;
+        let ident = match primary_expr.value {
+            Expression::Variable(var) => var,
+            _ => panic!("Nothing else should get to this point."),
+        };
+        self.advance()?;
+        let mut args = Vec::new();
+        while !is!(self, current, Token::Symbol(Symbol::CloseParen)) {
+            let expr = self.parse_binary_expression(None)?;
+            args.push(expr);
+            if is!(self, current, Token::Symbol(Symbol::Comma)) {
+                self.advance()?;
+            } else {
+                break;
+            }
+        }
+        confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), "\t)")?;
+        let location = location.merge(self.last_span);
+        let expr = Locatable::new(location, Expression::FunctionCall(ident, args));
+        self.parse_postfix_unary_expression(expr)
+    }
+
+    pub fn parse_index_access(
+        &mut self,
+        primary_expr: Locatable<Expression>,
+    ) -> ParseResult<Locatable<Expression>> {
+        let location = primary_expr.location;
+        self.advance()?;
+        let index = self.parse_binary_expression(None)?;
+        confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
+        let location = primary_expr.location.merge(self.last_span);
+        let expr = Expression::Index(primary_expr.map(Box::new), index.map(Box::new));
+        let locatable = Locatable::new(location, expr);
+        self.parse_postfix_unary_expression(locatable)
+    }
+
+    pub fn parse_member_access(
+        &mut self,
+        primary_expr: Locatable<Expression>,
+    ) -> ParseResult<Locatable<Expression>> {
+        let location = primary_expr.location;
+        self.advance()?;
+        let member = self.confirm_identifier()?;
+        let location = primary_expr.location.merge(self.last_span);
+        let expr = Expression::Member(primary_expr.map(Box::new), member);
+        let locatable = Locatable::new(location, expr);
+        self.parse_postfix_unary_expression(locatable)
+    }
+
+    pub fn parse_deref_member_access(
+        &mut self,
+        primary_expr: Locatable<Expression>,
+    ) -> ParseResult<Locatable<Expression>> {
+        let location = primary_expr.location;
+        self.advance()?;
+        let member = self.confirm_identifier()?;
+        let location = primary_expr.location.merge(self.last_span);
+        let expr = Expression::PointerMember(primary_expr.map(Box::new), member);
+        let locatable = Locatable::new(location, expr);
+        self.parse_postfix_unary_expression(locatable)
+    }
 }
+//
+// #[test]
+// fn test_advance_advances_tokens_correctly() {
+//     let program = Compiler::new("test".to_string());
+//     let source = "1 * 1".to_string();
+//     let lexer = crate::lex::Lexer::new(source);
+//     let mut parser = Parser::from_lexer(program, lexer);
+//     parser.prime();
+//     assert!(parser.consume().is_ok());
+//     assert!(parser.consume().is_ok());
+//     assert!(parser.consume().is_ok());
+//     assert!(parser.consume().is_err());
+// }
