@@ -1,9 +1,7 @@
 use super::*;
+use crate::lexer::tokens::{Keyword, Symbol};
 
-impl<'a, E> Lexer<'a, E>
-where
-    E: ErrorReporter,
-{
+impl Lexer {
     pub(super) fn eat_ident_or_keyword(&mut self) -> Option<Token> {
         self.consume_alphanumeric_text()
             .map(|text| match text.as_str() {

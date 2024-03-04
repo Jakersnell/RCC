@@ -9,10 +9,7 @@ enum TriviaState {
     BlockCommentEnd,
     End,
 }
-impl<'a, E> Lexer<'a, E>
-where
-    E: ErrorReporter,
-{
+impl Lexer {
     /// Removes whitespace and comments from incoming source
     pub(super) fn remove_trivial(&mut self) {
         let mut state = TriviaState::Start;
