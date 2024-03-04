@@ -1,7 +1,4 @@
 use arcstr::ArcStr;
-use log::debug;
-use std::io;
-use std::path::PathBuf;
 
 use crate::ast::{
     AssignOp, BinaryOp, Block, Declaration, DeclarationSpecifier, DeclaratorType, Expression,
