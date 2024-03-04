@@ -1,9 +1,9 @@
 use super::macros::*;
-use crate::error::{CompilerError, ErrorReporter};
-use crate::lex::LexResult;
+use crate::core::error::{CompilerError, ErrorReporter};
+use crate::lexer::tokens::*;
+use crate::lexer::LexResult;
 use crate::parser::ast::*;
 use crate::parser::{ParseResult, Parser};
-use crate::tokens::*;
 use crate::util::Locatable;
 use arcstr::ArcStr;
 

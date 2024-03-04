@@ -1,9 +1,9 @@
-use crate::error::{CompilerError, ErrorReporter};
-use crate::lex::LexResult;
+use crate::core::error::{CompilerError, ErrorReporter};
+use crate::lexer::tokens::{Keyword, Symbol, Token};
+use crate::lexer::LexResult;
 use crate::parser::ast::{Block, Expression, Statement};
 use crate::parser::macros::{confirm, is};
 use crate::parser::{ParseResult, Parser};
-use crate::tokens::{Keyword, Symbol, Token};
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
