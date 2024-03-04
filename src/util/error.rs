@@ -1,7 +1,7 @@
 use crate::util::Span;
 use thiserror::Error;
 
-pub trait ErrorReporter: Default + Sized {
+pub trait ErrorReporter {
     fn get_status(&self) -> Result<(), ()>;
     fn report_error(&mut self, error: CompilerError);
     fn report_warning(&mut self, warning: CompilerWarning);
@@ -18,7 +18,6 @@ pub enum ProgramErrorStatus {
     Codegen,
 }
 
-#[derive(Default)]
 pub struct ErrorReporterImpl {
     errors: Vec<CompilerError>,
     warnings: Vec<CompilerWarning>,
