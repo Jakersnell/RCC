@@ -1,6 +1,6 @@
 use crate::str_intern::InternedStr;
 use crate::tokens::{Keyword, Literal, Symbol, Token};
-use crate::util::CompilerResult;
+use crate::util::{CompilerResult, Locatable};
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -12,50 +12,49 @@ The majority does not. Enjoy.
 pub type ASTRoot = Vec<InitDeclaration>;
 
 #[derive(Debug)]
-pub struct Block(pub Vec<Statement>);
+pub struct Block(pub Vec<Locatable<Statement>>);
 
 #[derive(Debug)]
 pub enum InitDeclaration {
-    Declaration(VariableDeclaration), // (declaration,  initializer)
-    Function(FunctionDeclaration),
-    Struct(StructDeclaration),
+    Declaration(Locatable<VariableDeclaration>), // (declaration,  initializer)
+    Function(Locatable<FunctionDeclaration>),
+    Struct(Locatable<StructDeclaration>),
 }
 
 #[derive(Debug)]
 pub struct StructDeclaration {
-    pub declaration: Declaration,
-    pub members: Vec<Declaration>,
+    pub declaration: Locatable<Declaration>,
+    pub members: Vec<Locatable<Declaration>>,
 }
 
 #[derive(Debug)]
 pub struct FunctionDeclaration {
-    pub declaration: Declaration,
-    pub parameters: Vec<Declaration>,
-    pub varargs: bool, // don't currently support varargs, but it's here for future
-    pub body: Option<Block>, // this is an option, but we currently don't support function prototypes
+    pub declaration: Locatable<Declaration>,
+    pub parameters: Vec<Locatable<Declaration>>,
+    pub body: Locatable<Block>, // don't support function prototypes
 }
 
 #[derive(Debug)]
 pub struct VariableDeclaration {
-    pub declaration: Declaration,
-    pub initializer: Option<Expression>,
+    pub declaration: Locatable<Declaration>,
+    pub initializer: Option<Locatable<Expression>>,
 }
 
 #[derive(Debug)]
 pub struct Declaration {
-    pub specifier: DeclarationSpecifier,
-    pub declarator: DeclaratorType,
-    pub ident: Option<InternedStr>,
+    pub specifier: Locatable<DeclarationSpecifier>,
+    pub declarator: Locatable<Box<DeclaratorType>>,
+    pub ident: Option<Locatable<InternedStr>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum DeclaratorType {
     // not supporting function pointers
     Pointer {
-        to: Box<DeclaratorType>,
+        to: Locatable<Box<DeclaratorType>>,
     },
     Array {
-        of: Box<DeclaratorType>,
+        of: Locatable<Box<DeclaratorType>>,
         size: Option<usize>,
     },
     Base,
@@ -134,39 +133,47 @@ impl TryFrom<&Token> for TypeQualifier {
 
 #[derive(Debug)]
 pub enum Statement {
-    Expression(Expression),
-    Declaration(VariableDeclaration),
-    If(Expression, Box<Statement>, Option<Box<Statement>>),
-    While(Expression, Box<Statement>),
+    Expression(Locatable<Expression>),
+    Declaration(Locatable<VariableDeclaration>),
+    If(
+        Locatable<Expression>,
+        Box<Locatable<Statement>>,
+        Option<Box<Locatable<Statement>>>,
+    ),
+    While(Locatable<Expression>, Box<Locatable<Statement>>),
     For(
-        Option<VariableDeclaration>,
-        Option<Expression>,
-        Option<Expression>,
-        Box<Statement>,
+        Option<Locatable<VariableDeclaration>>,
+        Option<Locatable<Expression>>,
+        Option<Locatable<Expression>>,
+        Box<Locatable<Statement>>,
     ),
     Break,
     Continue,
-    Return(Option<Expression>),
-    Block(Block),
+    Return(Option<Locatable<Expression>>),
+    Block(Locatable<Block>),
     Empty, // this is for a semicolon by itself,
 }
 
 #[derive(Debug)]
 pub enum Expression {
-    Literal(Literal),
-    Variable(InternedStr),
-    Sizeof(TypeOrExpression),
-    Parenthesized(Box<Expression>),
+    Literal(Locatable<Literal>),
+    Variable(Locatable<InternedStr>),
+    Sizeof(Locatable<TypeOrExpression>),
+    Parenthesized(Locatable<Box<Expression>>),
     // this doesn't include all postfix operations, just inc and dec
-    PostFix(PostfixOp, Box<Expression>),
-    Unary(UnaryOp, Box<Expression>),
-    Binary(BinaryOp, Box<Expression>, Box<Expression>),
-    FunctionCall(InternedStr, Vec<Expression>),
-    Index(Box<Expression>, Box<Expression>),
-    Member(Box<Expression>, InternedStr),
-    PointerMember(Box<Expression>, InternedStr),
-    Cast(Declaration, Box<Expression>),
-    ArrayInitializer(Vec<Expression>),
+    PostFix(PostfixOp, Locatable<Box<Expression>>),
+    Unary(UnaryOp, Locatable<Box<Expression>>),
+    Binary(
+        BinaryOp,
+        Locatable<Box<Expression>>,
+        Locatable<Box<Expression>>,
+    ),
+    FunctionCall(Locatable<InternedStr>, Vec<Locatable<Expression>>),
+    Index(Locatable<Box<Expression>>, Locatable<Box<Expression>>),
+    Member(Locatable<Box<Expression>>, Locatable<InternedStr>),
+    PointerMember(Locatable<Box<Expression>>, Locatable<InternedStr>),
+    Cast(Locatable<Declaration>, Locatable<Box<Expression>>),
+    ArrayInitializer(Vec<Locatable<Expression>>),
 }
 
 #[derive(Debug)]

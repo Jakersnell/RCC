@@ -30,7 +30,7 @@ impl Expression {
         let child_output = match self {
             Expression::Variable(ident) => format!("{}\n", ident),
             Expression::Literal(literal) => {
-                let value = match literal {
+                let value = match &literal.value {
                     Literal::Integer { value, suffix } => value.to_string(),
                     Literal::Float { value, suffix } => value.to_string(),
                     Literal::Char { value } => format!("'{}'", value),
@@ -57,7 +57,7 @@ impl Expression {
                 format!("{} <post> \n{}", op, right)
             }
             Expression::FunctionCall(ident, args) => {
-                let mut output = format!("<fn-call> {}{}\n", ident, "(");
+                let mut output = format!("<fn-call> {}{}\n", **ident, "(");
                 for (i, arg) in args.iter().enumerate() {
                     let arg = &arg.pretty_print(padding.clone(), i == args.len() - 1, false);
                     let arg = indent_string(arg.to_string(), 0, 4);
@@ -68,11 +68,11 @@ impl Expression {
             }
             Expression::Member(expr, ident) => {
                 let expr = expr.pretty_print(padding.clone(), true, false);
-                format!(".\n{}├─ {}\n{}", padding, ident, expr)
+                format!(".\n{}├─ {}\n{}", padding, **ident, expr)
             }
             Expression::PointerMember(expr, ident) => {
                 let expr = expr.pretty_print(padding.clone(), true, false);
-                format!("->\n{}├─ {}\n{}", padding, ident, expr)
+                format!("->\n{}├─ {}\n{}", padding, **ident, expr)
             }
             Expression::Sizeof(type_or_expr) => {
                 format!(
@@ -228,30 +228,18 @@ impl Display for FunctionDeclaration {
         write!(f, "{}(", self.declaration)?;
         for (i, param) in self.parameters.iter().enumerate() {
             write!(f, "{}", param)?;
-            if i != self.parameters.len() - 1 || self.varargs {
+            if i != self.parameters.len() - 1 {
                 write!(f, ", ")?;
             }
         }
-
-        if self.varargs {
-            write!(f, "...")?;
-        }
-
         write!(f, ")")?;
-
-        if let Some(body) = &self.body {
-            write!(f, " {}", body)?;
-        } else {
-            write!(f, ";")?;
-        }
-
-        Ok(())
+        write!(f, " {}", self.body)
     }
 }
 
 impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let dec_is_base = self.declarator == DeclaratorType::Base;
+        let dec_is_base = **self.declarator == DeclaratorType::Base;
         let spacer = if dec_is_base { "" } else { " " };
         write!(f, "({}{}{})", self.specifier, spacer, self.declarator)?;
         if let Some(ident) = &self.ident {
