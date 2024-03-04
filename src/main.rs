@@ -1,12 +1,8 @@
 #![allow(unused)]
 mod analysis;
-mod codegen;
-mod core;
 mod lexer;
-mod lowering;
 mod parser;
 mod util;
-mod validation;
 
 /// The main entry point for the program.
 /// This will be last to be completed because it's just a CLI and

@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+mod hlir;
 
-use crate::core::hlir::{BoundTypeKind, SymbolKind};
 use crate::parser::ast::ASTRoot;
 use crate::util::str_intern::InternedStr;
 use crate::util::CompilerResult;
+use hlir::{BoundTypeKind, SymbolKind};
+use std::collections::HashMap;
 
 pub struct Validator<'a> {
     current_resolver: SymbolResolver<'a>,
