@@ -1,5 +1,5 @@
-use crate::ast::UnaryOp::Plus;
-use crate::ast::*;
+use crate::parser::ast::UnaryOp::Plus;
+use crate::parser::ast::*;
 use crate::tokens::Literal;
 use std::fmt::{write, Display, Formatter};
 
@@ -113,7 +113,7 @@ impl Display for Expression {
 
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::Statement::*;
+        use crate::parser::ast::Statement::*;
         write!(f, "<stmt> ");
         match self {
             Expression(expr) => {
@@ -190,7 +190,7 @@ impl Display for Block {
 
 impl Display for InitDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::InitDeclaration::*;
+        use crate::parser::ast::InitDeclaration::*;
         match self {
             Declaration(variable) => writeln!(f, "<init-var-dec> {};", variable),
             Function(function) => write!(f, "<fn> {}", function),
@@ -251,7 +251,7 @@ impl Display for Declaration {
 
 impl Display for DeclaratorType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::DeclaratorType::*;
+        use crate::parser::ast::DeclaratorType::*;
         match self {
             Pointer { to } => write!(f, "*{}", to),
             Array { of, size } => match size {
@@ -265,7 +265,7 @@ impl Display for DeclaratorType {
 
 impl Display for TypeQualifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::TypeQualifier::*;
+        use crate::parser::ast::TypeQualifier::*;
         let str = match self {
             Const => "const",
         }
@@ -276,7 +276,7 @@ impl Display for TypeQualifier {
 
 impl Display for TypeSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::TypeSpecifier::*;
+        use crate::parser::ast::TypeSpecifier::*;
         match self {
             Void => write!(f, "void"),
             Char => write!(f, "char"),
@@ -302,7 +302,7 @@ impl Display for StorageSpecifier {
 
 impl Display for TypeOrExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::TypeOrExpression::*;
+        use crate::parser::ast::TypeOrExpression::*;
         match self {
             Type(ty) => write!(f, "{}", ty),
             Expr(expr) => write!(f, "{}", expr),
@@ -331,7 +331,7 @@ impl Display for DeclarationSpecifier {
 
 impl Display for UnaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::UnaryOp::*;
+        use crate::parser::ast::UnaryOp::*;
         let str = match self {
             Plus => "+",
             Negate => "-",
@@ -349,8 +349,8 @@ impl Display for UnaryOp {
 
 impl Display for BinaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::AssignOp;
-        use crate::ast::BinaryOp::*;
+        use crate::parser::ast::AssignOp;
+        use crate::parser::ast::BinaryOp::*;
         match self {
             Add => write!(f, "+"),
             Subtract => write!(f, "-"),
@@ -377,7 +377,7 @@ impl Display for BinaryOp {
 
 impl Display for AssignOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::AssignOp::*;
+        use crate::parser::ast::AssignOp::*;
         let str = match self {
             Assign => "=",
             Plus => "+",
@@ -398,7 +398,7 @@ impl Display for AssignOp {
 
 impl Display for PostfixOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::ast::PostfixOp::*;
+        use crate::parser::ast::PostfixOp::*;
         let str = match self {
             Increment => "++",
             Decrement => "--",

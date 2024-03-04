@@ -1,6 +1,5 @@
 #![allow(unused)]
 
-mod ast;
 mod ast_pretty_print;
 mod codegen;
 mod error;
@@ -8,7 +7,6 @@ mod hlir;
 mod lex;
 mod lowering;
 mod mlir;
-mod parse;
 mod parser;
 mod str_intern;
 mod tokens;

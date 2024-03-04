@@ -1,6 +1,6 @@
-use crate::ast::InitDeclaration;
 use crate::error::{CompilerError, ErrorReporter, ProgramErrorStatus};
 use crate::lex::LexResult;
+use crate::parser::ast::InitDeclaration;
 use crate::tokens::Token as LexToken;
 use arcstr::ArcStr;
 use derive_new::new;
