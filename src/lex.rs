@@ -1,4 +1,4 @@
-use crate::error::CompilerError;
+use crate::error::{CompilerError, CompilerWarning, ErrorReporter};
 use crate::util::{CompilerResult, Locatable, Span};
 use crate::{
     lex,
@@ -15,42 +15,40 @@ use std::{
 };
 use thiserror::Error;
 
-pub type LexResult = Result<Locatable<Token>, Vec<Locatable<CompilerError>>>;
+pub type LexResult = Result<Locatable<Token>, ()>;
 
-pub struct Lexer {
-    position: usize,
-    row: usize,
-    col: usize,
+pub struct Lexer<'a, E: ErrorReporter> {
+    reporter: &'a mut E,
     source: ArcStr,
-    problems: Vec<Locatable<CompilerError>>,
+    position: usize,
+    line: usize,
+    col: usize,
     current: Option<char>,
     next: Option<char>,
 }
-
-impl TryFrom<PathBuf> for Lexer {
-    type Error = io::Error;
-
-    fn try_from(path: PathBuf) -> io::Result<Self> {
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        let mut source = String::new();
-        reader.read_to_string(&mut source)?;
-        Ok(Self::new(source))
+impl<'a, E> From<(&'a mut E, ArcStr)> for Lexer<'a, E>
+where
+    E: ErrorReporter,
+{
+    fn from(value: (&'a mut E, ArcStr)) -> Self {
+        Lexer::new(value.0, value.1)
     }
 }
 
-impl Lexer {
-    pub fn new(source: String) -> Self {
-        let source = ArcStr::from(source);
+impl<'a, E> Lexer<'a, E>
+where
+    E: ErrorReporter,
+{
+    pub fn new(reporter: &'a mut E, source: ArcStr) -> Self {
         let mut chars = source.chars();
         let current = chars.next();
         let next = chars.next();
         Self {
+            reporter,
+            source,
             position: 0,
             col: 0,
-            row: 0,
-            source,
-            problems: Vec::new(),
+            line: 0,
             current,
             next,
         }
@@ -59,7 +57,7 @@ impl Lexer {
     #[inline(always)]
     fn next_char(&mut self) -> Option<char> {
         if self.current.is_some_and(|c| c == '\n') {
-            self.row += 1;
+            self.line += 1;
             self.col = 0;
         } else {
             self.col += 1;
@@ -68,6 +66,33 @@ impl Lexer {
         self.current = self.next;
         self.next = self.source.chars().nth(self.position + 1);
         self.current
+    }
+
+    #[inline(always)]
+    fn report_error(&mut self, err: CompilerError) {
+        self.reporter.report_error(err)
+    }
+
+    #[inline(always)]
+    fn report_warning(&mut self, warn: CompilerWarning) {
+        self.reporter.report_warning(warn)
+    }
+
+    #[inline(always)]
+    fn start_span(&mut self) -> Span {
+        Span {
+            start: self.position,
+            end: self.position + 1, // not very important but just to place something here
+            line: self.line,
+            col: self.col,
+        }
+    }
+
+    #[inline(always)]
+    fn end_span(&mut self, span: Span) -> Span {
+        let mut span = span;
+        span.end = self.position;
+        span
     }
 
     fn consume_alphanumeric_text(&mut self) -> Option<String> {
@@ -90,8 +115,6 @@ impl Lexer {
         }
     }
 
-    /// This will consume the next identifier like token
-    /// Such tokens include Identifiers, Keywords, and Special Symbols like "sizeof"
     fn eat_ident_or_keyword(&mut self) -> Option<Token> {
         self.consume_alphanumeric_text()
             .map(|text| match text.as_str() {
@@ -126,29 +149,29 @@ impl Lexer {
         }
 
         macro_rules! consume_suffix {
-            ($invoker:ident, $($pattern:literal)|+, $error_type:expr) => {
+            ($($pattern:literal)|+, $error_type:expr) => {
                 {
-                    let start = $invoker.position;
-                    let col = $invoker.col;
-                    let row = $invoker.row;
-                    $invoker.consume_alphanumeric_text().map(|text| {
+                    let span = self.start_span();
+                    let mut invalid_text = None;
+                    let suffix = self.consume_alphanumeric_text().map(|text| {
                         let lowercased = text.to_lowercase();
                         match lowercased.as_str() {
                             $($pattern)|+ => Some(lowercased),
                             _ => {
-                                let end = $invoker.position;
-                                let span = Span::new(start, end, col, row);
-                                let error = Locatable::new(span, $error_type(text));
-                                $invoker.problems.push(error);
+                                invalid_text = Some(text);
                                 None
                             }
                         }
-                    }).flatten()
+                    }).flatten();
+                    if let Some(text) = invalid_text {
+                        self.report_error($error_type(text, span));
+                    }
+                    suffix
                 }
             };
         }
 
-        let start = self.position;
+        let span = self.start_span();
 
         enum State {
             Start,
@@ -234,8 +257,7 @@ impl Lexer {
             self.next_char();
         }
 
-        let end = self.position;
-        let span = Span::new(start, end, self.col, self.row);
+        let span = self.end_span(span);
 
         let base = match state {
             State::Zero => 10,
@@ -256,12 +278,10 @@ impl Lexer {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
                 let result = u128::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
-                    let error = Locatable::new(span, CompilerError::from(error));
-                    self.problems.push(error);
+                    self.report_error(CompilerError::ParseIntError(span));
                     0
                 });
                 let suffix = consume_suffix!(
-                    self,
                     "u" | "l" | "ul" | "lu" | "llu" | "ll",
                     CompilerError::InvalidIntegerSuffix
                 );
@@ -271,21 +291,16 @@ impl Lexer {
             State::Float => {
                 let result = number.parse();
                 let value = result.unwrap_or_else(|error| {
-                    let error = Locatable::new(span, CompilerError::from(error));
-                    self.problems.push(error);
+                    self.report_error(CompilerError::ParseFloatError(span));
                     0.0
                 });
-                let suffix = consume_suffix!(self, "f" | "l", CompilerError::InvalidFloatSuffix);
+                let suffix = consume_suffix!("f" | "l", CompilerError::InvalidFloatSuffix);
                 Literal::Float { value, suffix }
             }
             _ => unreachable!(),
         };
 
-        if self.problems.is_empty() {
-            Some(Token::Literal(literal))
-        } else {
-            None
-        }
+        Some(Token::Literal(literal))
     }
 
     fn eat_symbol(&mut self) -> Option<Token> {
@@ -499,9 +514,7 @@ impl Lexer {
             return None;
         }
         self.next_char();
-        let start = self.position;
-        let col = self.col;
-        let row = self.row;
+        let span = self.start_span();
         let value = match self.current {
             Some('\\') => self.eat_escape_char(),
             Some(current) => {
@@ -509,17 +522,17 @@ impl Lexer {
                 Some(current)
             }
             None => {
-                let span = Span::new(start, self.position, col, row);
-                let error = Locatable::new(span, CompilerError::UnclosedCharLiteral(span));
-                self.problems.push(error);
+                let span = self.end_span(span);
+                self.reporter
+                    .report_error(CompilerError::UnclosedCharLiteral(span));
                 None
             }
         }
         .unwrap_or('\0');
         if self.current != Some('\'') {
-            let span = Span::new(start, self.position, col, row);
-            let error = Locatable::new(span, CompilerError::UnclosedCharLiteral(span));
-            self.problems.push(error);
+            let span = self.end_span(span);
+            self.reporter
+                .report_error(CompilerError::UnclosedCharLiteral(span));
         } else {
             self.next_char();
         }
@@ -531,9 +544,7 @@ impl Lexer {
             return None;
         }
         self.next_char();
-        let start = self.position;
-        let col = self.col;
-        let row = self.row;
+        let span = self.start_span();
         while let Some(current) = self.current {
             match current {
                 '"' => {
@@ -544,9 +555,8 @@ impl Lexer {
                     self.eat_escape_char();
                 }
                 '\n' | '\r' | '\0' => {
-                    let span = Span::new(start, self.position, col, row);
-                    let error = Locatable::new(span, CompilerError::UnclosedStringLiteral(span));
-                    self.problems.push(error);
+                    let span = self.end_span(span);
+                    self.report_error(CompilerError::UnclosedStringLiteral(span));
                     break;
                 }
                 _ => {
@@ -554,15 +564,13 @@ impl Lexer {
                 }
             }
         }
-        let end = self.position - 1;
-        let value = self.source.substr(start..end);
+        let span = self.end_span(span);
+        let value = self.source.substr(span.start..span.end - 1);
         Some(Token::Literal(Literal::String { value }))
     }
 
     fn eat_escape_char(&mut self) -> Option<char> {
-        let col = self.col;
-        let row = self.row;
-        let start = self.position;
+        let span = self.start_span();
         debug_assert!(self.current == Some('\\'));
         self.next_char();
         self.next_char().map(|current| match current {
@@ -574,12 +582,8 @@ impl Lexer {
             '\'' => '\'',
             '"' => '"',
             _ => {
-                let span = Span::new(start, self.position, col, row);
-                let error = Locatable::new(
-                    span,
-                    CompilerError::InvalidEscapeSequence(format!("\\{}", current)),
-                );
-                self.problems.push(error);
+                let span = self.end_span(span);
+                self.report_error(CompilerError::InvalidEscapeSequence(span));
                 '\0'
             }
         })
@@ -632,16 +636,20 @@ enum TriviaState {
     End,
 }
 
-impl Iterator for Lexer {
+impl<'a, E> Iterator for Lexer<'a, E>
+where
+    E: ErrorReporter,
+{
     /// the only reason this is a Vec<CompilerError> is for strings with multiple invalid escapes.
     type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.remove_trivial();
         self.current.map(|c| {
-            let start = self.position;
-            let col = self.col;
-            let row = self.row;
+            if self.reporter.get_status().is_err() {
+                return Err(());
+            }
+            let span = self.start_span();
             let kind = match c {
                 '\'' => self.eat_char(),
 
@@ -659,259 +667,303 @@ impl Iterator for Lexer {
                     result
                 }
             };
-            let end = self.position;
-            let location = Span::new(start, end, col, row);
+            let span = self.end_span(span);
+            if self.reporter.get_status().is_err() {
+                return Err(());
+            }
             if let Some(kind) = kind {
-                Ok(Locatable::new(location, kind))
+                Ok(Locatable::new(span, kind))
             } else {
-                Err(mem::take(&mut self.problems))
+                Err(())
             }
         })
     }
 }
 
-// for Testing
-impl Default for Lexer {
-    fn default() -> Self {
-        Self {
-            position: 0,
-            col: 0,
-            row: 0,
-            source: ArcStr::from(""),
-            problems: Vec::new(),
-            current: None,
-            next: None,
+#[cfg(test)]
+mod tests {
+    use crate::error::{CompilerError, CompilerWarning, ErrorReporter};
+    use crate::lex::Lexer;
+    use crate::tokens::{Literal, Symbol, Token};
+
+    struct ErrorReporterMock {
+        status: Result<(), ()>,
+        errors: Vec<CompilerError>,
+        warnings: Vec<CompilerWarning>,
+    }
+
+    impl Default for ErrorReporterMock {
+        fn default() -> Self {
+            Self {
+                status: Ok(()),
+                errors: Vec::new(),
+                warnings: Vec::new(),
+            }
         }
     }
-}
 
-#[test]
-fn test_current_is_first_char() {
-    let lexer = Lexer::new("abc".to_string());
-    assert_eq!(lexer.current, Some('a'));
-    assert_eq!(lexer.next, Some('b'));
-}
+    impl ErrorReporter for ErrorReporterMock {
+        fn get_status(&self) -> Result<(), ()> {
+            self.status
+        }
 
-#[test]
-fn test_next_char_iterates_correctly() {
-    let mut lexer = Lexer::new("abc".to_string());
-    assert_eq!(lexer.current, Some('a'));
-    assert_eq!(lexer.next_char(), Some('b'));
-    assert_eq!(lexer.next_char(), Some('c'));
-    assert_eq!(lexer.next_char(), None);
-}
+        fn report_error(&mut self, error: CompilerError) {
+            self.status = Err(());
+            self.errors.push(error);
+        }
 
-#[test]
-fn test_symbols_lex_correctly() {
-    let symbols = [
-        ("+", Token::Symbol(Symbol::Plus)),
-        ("-", Token::Symbol(Symbol::Minus)),
-        ("*", Token::Symbol(Symbol::Star)),
-        ("/", Token::Symbol(Symbol::Slash)),
-        ("%", Token::Symbol(Symbol::Modulo)),
-        ("==", Token::Symbol(Symbol::EqualEqual)),
-        ("!=", Token::Symbol(Symbol::BangEqual)),
-        (">", Token::Symbol(Symbol::GreaterThan)),
-        (">=", Token::Symbol(Symbol::GreaterThanEqual)),
-        ("<", Token::Symbol(Symbol::LessThan)),
-        ("<=", Token::Symbol(Symbol::LessThanEqual)),
-        ("!", Token::Symbol(Symbol::Bang)),
-        ("&&", Token::Symbol(Symbol::DoubleAmpersand)),
-        ("||", Token::Symbol(Symbol::DoublePipe)),
-        ("&", Token::Symbol(Symbol::Ampersand)),
-        ("|", Token::Symbol(Symbol::Pipe)),
-        ("^", Token::Symbol(Symbol::Caret)),
-        ("~", Token::Symbol(Symbol::Tilde)),
-        ("<<", Token::Symbol(Symbol::LeftShift)),
-        (">>", Token::Symbol(Symbol::RightShift)),
-        ("=", Token::Symbol(Symbol::Equal)),
-        ("+=", Token::Symbol(Symbol::PlusEqual)),
-        ("-=", Token::Symbol(Symbol::MinusEqual)),
-        ("*=", Token::Symbol(Symbol::StarEqual)),
-        ("/=", Token::Symbol(Symbol::SlashEqual)),
-        ("%=", Token::Symbol(Symbol::ModuloEqual)),
-        ("&=", Token::Symbol(Symbol::AmpersandEqual)),
-        ("|=", Token::Symbol(Symbol::PipeEqual)),
-        ("^=", Token::Symbol(Symbol::CaretEqual)),
-        ("<<=", Token::Symbol(Symbol::LeftShiftEqual)),
-        (">>=", Token::Symbol(Symbol::RightShiftEqual)),
-        ("++", Token::Symbol(Symbol::Increment)),
-        ("--", Token::Symbol(Symbol::Decrement)),
-        ("?", Token::Symbol(Symbol::QuestionMark)),
-        (":", Token::Symbol(Symbol::Colon)),
-        (",", Token::Symbol(Symbol::Comma)),
-        (".", Token::Symbol(Symbol::Dot)),
-        ("->", Token::Symbol(Symbol::Arrow)),
-        ("?", Token::Symbol(Symbol::QuestionMark)),
-        ("[", Token::Symbol(Symbol::OpenSquare)),
-        ("]", Token::Symbol(Symbol::CloseSquare)),
-        ("{", Token::Symbol(Symbol::OpenCurly)),
-        ("}", Token::Symbol(Symbol::CloseCurly)),
-        ("(", Token::Symbol(Symbol::OpenParen)),
-        (")", Token::Symbol(Symbol::CloseParen)),
-        (";", Token::Symbol(Symbol::Semicolon)),
-    ];
+        fn report_warning(&mut self, warning: CompilerWarning) {
+            self.warnings.push(warning);
+        }
 
-    for (symbol, kind) in symbols.iter() {
-        let mut lexer = Lexer::new(symbol.to_string());
-        let returned_kind = lexer.eat_symbol().unwrap();
-        if *kind != returned_kind {
-            panic!(
-                "Expected {:?}, got {:?}, input symbol: {}",
-                kind, returned_kind, symbol
+        fn get_errors(&self) -> &Vec<CompilerError> {
+            &self.errors
+        }
+
+        fn get_warnings(&self) -> &Vec<CompilerWarning> {
+            &self.warnings
+        }
+    }
+
+    #[test]
+    fn test_current_is_first_char() {
+        let mut report = ErrorReporterMock::default();
+        let lexer = Lexer::new(&mut report, "abc".into());
+        assert_eq!(lexer.current, Some('a'));
+        assert_eq!(lexer.next, Some('b'));
+    }
+
+    #[test]
+    fn test_next_char_iterates_correctly() {
+        let mut report = ErrorReporterMock::default();
+        let mut lexer = Lexer::new(&mut report, "abc".into());
+        assert_eq!(lexer.current, Some('a'));
+        assert_eq!(lexer.next_char(), Some('b'));
+        assert_eq!(lexer.next_char(), Some('c'));
+        assert_eq!(lexer.next_char(), None);
+    }
+
+    #[test]
+    fn test_symbols_lex_correctly() {
+        let symbols = [
+            ("+", Token::Symbol(Symbol::Plus)),
+            ("-", Token::Symbol(Symbol::Minus)),
+            ("*", Token::Symbol(Symbol::Star)),
+            ("/", Token::Symbol(Symbol::Slash)),
+            ("%", Token::Symbol(Symbol::Modulo)),
+            ("==", Token::Symbol(Symbol::EqualEqual)),
+            ("!=", Token::Symbol(Symbol::BangEqual)),
+            (">", Token::Symbol(Symbol::GreaterThan)),
+            (">=", Token::Symbol(Symbol::GreaterThanEqual)),
+            ("<", Token::Symbol(Symbol::LessThan)),
+            ("<=", Token::Symbol(Symbol::LessThanEqual)),
+            ("!", Token::Symbol(Symbol::Bang)),
+            ("&&", Token::Symbol(Symbol::DoubleAmpersand)),
+            ("||", Token::Symbol(Symbol::DoublePipe)),
+            ("&", Token::Symbol(Symbol::Ampersand)),
+            ("|", Token::Symbol(Symbol::Pipe)),
+            ("^", Token::Symbol(Symbol::Caret)),
+            ("~", Token::Symbol(Symbol::Tilde)),
+            ("<<", Token::Symbol(Symbol::LeftShift)),
+            (">>", Token::Symbol(Symbol::RightShift)),
+            ("=", Token::Symbol(Symbol::Equal)),
+            ("+=", Token::Symbol(Symbol::PlusEqual)),
+            ("-=", Token::Symbol(Symbol::MinusEqual)),
+            ("*=", Token::Symbol(Symbol::StarEqual)),
+            ("/=", Token::Symbol(Symbol::SlashEqual)),
+            ("%=", Token::Symbol(Symbol::ModuloEqual)),
+            ("&=", Token::Symbol(Symbol::AmpersandEqual)),
+            ("|=", Token::Symbol(Symbol::PipeEqual)),
+            ("^=", Token::Symbol(Symbol::CaretEqual)),
+            ("<<=", Token::Symbol(Symbol::LeftShiftEqual)),
+            (">>=", Token::Symbol(Symbol::RightShiftEqual)),
+            ("++", Token::Symbol(Symbol::Increment)),
+            ("--", Token::Symbol(Symbol::Decrement)),
+            ("?", Token::Symbol(Symbol::QuestionMark)),
+            (":", Token::Symbol(Symbol::Colon)),
+            (",", Token::Symbol(Symbol::Comma)),
+            (".", Token::Symbol(Symbol::Dot)),
+            ("->", Token::Symbol(Symbol::Arrow)),
+            ("?", Token::Symbol(Symbol::QuestionMark)),
+            ("[", Token::Symbol(Symbol::OpenSquare)),
+            ("]", Token::Symbol(Symbol::CloseSquare)),
+            ("{", Token::Symbol(Symbol::OpenCurly)),
+            ("}", Token::Symbol(Symbol::CloseCurly)),
+            ("(", Token::Symbol(Symbol::OpenParen)),
+            (")", Token::Symbol(Symbol::CloseParen)),
+            (";", Token::Symbol(Symbol::Semicolon)),
+        ];
+
+        for (symbol, kind) in symbols.iter() {
+            let mut report = ErrorReporterMock::default();
+            #[allow(suspicious_double_ref_op)]
+            let mut lexer = Lexer::new(&mut report, symbol.clone().into());
+            let returned_kind = lexer.eat_symbol().unwrap();
+            if *kind != returned_kind {
+                panic!(
+                    "Expected {:?}, got {:?}, input symbol: {}",
+                    kind, returned_kind, symbol
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_number_works_for_valid_int() {
+        let mut report = ErrorReporterMock::default();
+        let mut lexer = Lexer::new(&mut report, "344".into());
+        let kind = lexer.eat_number();
+        assert_eq!(
+            kind,
+            Some(Token::Literal(Literal::Integer {
+                value: 344,
+                suffix: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_eat_number_for_float_number() {
+        let test = "3.16";
+        let mut report = ErrorReporterMock::default();
+        let mut lexer = Lexer::new(&mut report, test.into());
+        let token = lexer.eat_number();
+        assert_eq!(
+            token,
+            Some(Token::Literal(Literal::Float {
+                value: 3.16,
+                suffix: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_eat_number_leading_zeros_are_still_float() {
+        let test = "003.44";
+        let mut report = ErrorReporterMock::default();
+        let mut lexer = Lexer::new(&mut report, test.into());
+        let token = lexer.eat_number();
+        assert_eq!(
+            token,
+            Some(Token::Literal(Literal::Float {
+                value: 3.44,
+                suffix: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_eat_number_decimal_number() {
+        let test = "123";
+        let mut report = ErrorReporterMock::default();
+        let mut lexer = Lexer::new(&mut report, test.into());
+        let token = lexer.eat_number();
+        assert_eq!(
+            token,
+            Some(Token::Literal(Literal::Integer {
+                value: 123,
+                suffix: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_eat_number_for_hex_number() {
+        let test = "0x1A";
+        let mut report = ErrorReporterMock::default();
+        let mut lexer = Lexer::new(&mut report, test.into());
+        let token = lexer.eat_number();
+        assert_eq!(
+            token,
+            Some(Token::Literal(Literal::Integer {
+                value: 26,
+                suffix: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_eat_number_parses_integer_suffixes_properly() {
+        let tests = [
+            ("123u", "u"),
+            ("123U", "u"),
+            ("123l", "l"),
+            ("123L", "l"),
+            ("123ul", "ul"),
+            ("123UL", "ul"),
+            ("123lu", "lu"),
+            ("123LU", "lu"),
+            ("123LU", "lu"),
+            ("123llu", "llu"),
+            ("123LLu", "llu"),
+            ("123llU", "llu"),
+            ("123LLu", "llu"),
+            ("123ll", "ll"),
+            ("123LL", "ll"),
+        ];
+
+        for (test, control) in tests {
+            let mut report = ErrorReporterMock::default();
+            let mut lexer = Lexer::new(&mut report, test.into());
+            let token = lexer.eat_number().expect("Expected token");
+            assert_eq!(
+                token,
+                Token::Literal(Literal::Integer {
+                    value: 123,
+                    suffix: Some(control.to_string()),
+                })
             );
         }
     }
-}
 
-#[test]
-fn test_parse_number_works_for_valid_int() {
-    let test = "344";
-    let mut lexer = Lexer::new(test.to_string());
-    let kind = lexer.eat_number();
-    assert_eq!(
-        kind,
-        Some(Token::Literal(Literal::Integer {
-            value: 344,
-            suffix: None,
-        }))
-    );
-}
-
-#[test]
-fn test_eat_number_for_float_number() {
-    let test = "3.16";
-    let mut lexer = Lexer::new(test.to_string());
-    let token = lexer.eat_number();
-    assert_eq!(
-        token,
-        Some(Token::Literal(Literal::Float {
-            value: 3.16,
-            suffix: None,
-        }))
-    );
-}
-
-#[test]
-fn test_eat_number_leading_zeros_are_still_float() {
-    let test = "003.44";
-    let mut lexer = Lexer::new(test.to_string());
-    let token = lexer.eat_number();
-    assert_eq!(
-        token,
-        Some(Token::Literal(Literal::Float {
-            value: 3.44,
-            suffix: None,
-        }))
-    );
-}
-
-#[test]
-fn test_eat_number_decimal_number() {
-    let test = "123";
-    let mut lexer = Lexer::new(test.to_string());
-    let token = lexer.eat_number();
-    assert_eq!(
-        token,
-        Some(Token::Literal(Literal::Integer {
-            value: 123,
-            suffix: None,
-        }))
-    );
-}
-
-#[test]
-fn test_eat_number_for_hex_number() {
-    let test = "0x1A";
-    let mut lexer = Lexer::new(test.to_string());
-    let token = lexer.eat_number();
-    assert_eq!(
-        token,
-        Some(Token::Literal(Literal::Integer {
-            value: 26,
-            suffix: None,
-        }))
-    );
-}
-
-#[test]
-fn test_eat_number_parses_integer_suffixes_properly() {
-    let tests = [
-        ("123u", "u"),
-        ("123U", "u"),
-        ("123l", "l"),
-        ("123L", "l"),
-        ("123ul", "ul"),
-        ("123UL", "ul"),
-        ("123lu", "lu"),
-        ("123LU", "lu"),
-        ("123LU", "lu"),
-        ("123llu", "llu"),
-        ("123LLu", "llu"),
-        ("123llU", "llu"),
-        ("123LLu", "llu"),
-        ("123ll", "ll"),
-        ("123LL", "ll"),
-    ];
-
-    for (test, control) in tests {
-        let mut lexer = Lexer::new(test.to_string());
-        let token = lexer.eat_number().expect("Expected token");
-        assert_eq!(
-            token,
-            Token::Literal(Literal::Integer {
-                value: 123,
-                suffix: Some(control.to_string()),
-            })
-        );
+    #[test]
+    fn test_eat_number_properly_catches_problematic_integer_suffix() {
+        let tests = [
+            "123z", "123Z", "123h", "123H", "123m", "123M", "123t", "123T", "123v", "123V",
+        ];
+        for test in tests {
+            let mut report = ErrorReporterMock::default();
+            let mut lexer = Lexer::new(&mut report, test.into());
+            let token = lexer.eat_number();
+            assert!(report.get_status().is_err());
+        }
     }
-}
 
-#[test]
-fn test_eat_number_properly_catches_problematic_integer_suffix() {
-    let tests = [
-        "123z", "123Z", "123h", "123H", "123m", "123M", "123t", "123T", "123v", "123V",
-    ];
-    for test in tests {
-        let mut lexer = Lexer::new(test.to_string());
-        let token = lexer.eat_number();
-        assert!(token.is_none());
-        assert!(!lexer.problems.is_empty());
+    #[test]
+    fn test_eat_number_properly_consumes_float_suffix() {
+        let tests = [
+            ("123.4f", "f"),
+            ("123.4F", "f"),
+            ("123.4l", "l"),
+            ("123.4L", "l"),
+        ];
+        for (test, control) in tests {
+            let mut report = ErrorReporterMock::default();
+            let mut lexer = Lexer::new(&mut report, test.into());
+            let token = lexer.eat_number().expect("Expected token");
+            assert_eq!(
+                token,
+                Token::Literal(Literal::Float {
+                    value: 123.4,
+                    suffix: Some(control.to_string()),
+                })
+            );
+        }
     }
-}
 
-#[test]
-fn test_eat_number_properly_consumes_float_suffix() {
-    let tests = [
-        ("123.4f", "f"),
-        ("123.4F", "f"),
-        ("123.4l", "l"),
-        ("123.4L", "l"),
-    ];
-    for (test, control) in tests {
-        let mut lexer = Lexer::new(test.to_string());
-        let token = lexer.eat_number().expect("Expected token");
-        assert_eq!(
-            token,
-            Token::Literal(Literal::Float {
-                value: 123.4,
-                suffix: Some(control.to_string()),
-            })
-        );
-    }
-}
-
-#[test]
-fn test_eat_string_values_match() {
-    let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$\\\"%^&*()_+"#];
-    for test in tests {
-        let mut lexer = Lexer::new(format!("\"{}\"", test));
-        let token = lexer.eat_string().expect("Expected token");
-        match token {
-            Token::Literal(Literal::String { value }) => {
-                assert_eq!(value.to_string(), test);
+    #[test]
+    fn test_eat_string_values_match() {
+        let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$\\\"%^&*()_+"#];
+        for test in tests {
+            let mut report = ErrorReporterMock::default();
+            let mut lexer = Lexer::new(&mut report, format!("\"{}\"", test).into());
+            let token = lexer.eat_string().expect("Expected token");
+            match token {
+                Token::Literal(Literal::String { value }) => {
+                    assert_eq!(value.to_string(), test);
+                }
+                _ => panic!("Expected string literal, got {:#?}", token),
             }
-            _ => panic!("Expected string literal, got {:#?}", token),
         }
     }
 }
