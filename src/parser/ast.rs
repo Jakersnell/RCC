@@ -1,8 +1,8 @@
-use crate::str_intern::InternedStr;
-use crate::tokens::{Keyword, Literal, Symbol, Token};
-use crate::util::{CompilerResult, Locatable};
 use std::fmt::Display;
-use std::sync::Arc;
+
+use crate::lexer::tokens::{Keyword, Literal, Symbol, Token};
+use crate::util::str_intern::InternedStr;
+use crate::util::Locatable;
 
 /*
 Some things in this AST very closely follow the ANSI C Yacc grammar.
