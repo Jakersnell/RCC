@@ -38,7 +38,7 @@ macro_rules! confirm {
         consume,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
+        $if_err:expr
     ) => {{
         let locatable = $invoker.consume()?;
         let location = locatable.location;
@@ -50,7 +50,7 @@ macro_rules! confirm {
         $invoker:ident,
         consume,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
+        $if_err:expr
     ) => {
         confirm!( $invoker, consume, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
     };
@@ -59,7 +59,7 @@ macro_rules! confirm {
         $invoker:ident,
         consume,
         $pattern:pat $(if $guard:expr)?,
-        $if_err:literal
+        $if_err:expr
     ) => {
         confirm!( $invoker, consume, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
@@ -69,7 +69,7 @@ macro_rules! confirm {
         borrow,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
+        $if_err:expr
     ) => {{
         let locatable = &$invoker.current.as_ref().unwrap();
         let value = &locatable.value;
@@ -81,7 +81,7 @@ macro_rules! confirm {
         $invoker:ident,
         borrow,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
+        $if_err:expr
     ) => {
         confirm!( $invoker, borrow, |x| {x}, $pattern $(if $guard)? => $if_ok, $if_err)
     };
@@ -90,7 +90,7 @@ macro_rules! confirm {
         $invoker:ident,
         borrow,
         $pattern:pat $(if $guard:expr)?,
-        $if_err:literal
+        $if_err:expr
     ) => {
         confirm!( $invoker, borrow, |x| {x}, $pattern $(if $guard)? => (), $if_err)
     };
@@ -101,7 +101,7 @@ macro_rules! confirm {
         $location:ident,
         $closure:expr,
         $pattern:pat $(if $guard:expr)? => $if_ok:expr,
-        $if_err:literal
+        $if_err:expr
     ) => {{
         let formatted = format!("{:#?}", $value);
         #[allow(clippy::redundant_closure_call)]

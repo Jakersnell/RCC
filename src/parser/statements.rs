@@ -1,17 +1,13 @@
-use crate::core::error::{CompilerError, ErrorReporter};
 use crate::lexer::tokens::{Keyword, Symbol, Token};
 use crate::lexer::LexResult;
 use crate::parser::ast::{Block, Expression, Statement};
 use crate::parser::macros::{confirm, is};
 use crate::parser::{ParseResult, Parser};
+use crate::util::error::CompilerError;
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
-impl<'a, L, E> Parser<'a, L, E>
-where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
-{
+impl Parser {
     pub fn parse_compound_statement(&mut self) -> ParseResult<Locatable<Block>> {
         let location = self.current_span()?;
         confirm!(self, consume, Token::Symbol(Symbol::OpenCurly) => (), "{")?;

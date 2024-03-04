@@ -1,17 +1,13 @@
 use super::macros::*;
-use crate::core::error::{CompilerError, ErrorReporter};
 use crate::lexer::tokens::*;
 use crate::lexer::LexResult;
 use crate::parser::ast::*;
 use crate::parser::{ParseResult, Parser};
+use crate::util::error::{CompilerError, ErrorReporter};
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
-impl<'a, L, E> Parser<'a, L, E>
-where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
-{
+impl Parser {
     pub(super) fn parse_init_declaration(&mut self) -> ParseResult<InitDeclaration> {
         let location = self.current_span()?;
         let dec = self.parse_declaration()?;

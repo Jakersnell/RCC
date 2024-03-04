@@ -1,14 +1,16 @@
 use arcstr::ArcStr;
-
 use ast::*;
 use macros::*;
+use rand::RngCore;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::core::error::{CompilerError, ErrorReporter};
 use crate::lexer::tokens::Token;
 use crate::lexer::tokens::{Keyword, Literal};
 use crate::lexer::LexResult;
+use crate::util::error::{CompilerError, ErrorReporter};
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, LocatableToken, Program, Span};
+use crate::util::{Locatable, LocatableToken, Span};
 
 pub mod ast;
 pub(super) mod declarations;
@@ -16,56 +18,17 @@ pub(super) mod expressions;
 pub(super) mod macros;
 pub(super) mod statements;
 
-pub(super) static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof";
+pub(super) static EXPECTED_UNARY: &str = "+, -, !, ~, *, &, sizeof, ++, --";
 pub(super) static EXPECTED_BINARY: &str =
     "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||";
+pub(super) static EXPECTED_ASSIGN: &str = "=, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=";
 pub(super) static EXPECTED_TYPE: &str = "int, long, char, float, double";
 
 pub type ParseResult<T> = Result<T, ()>;
 
-pub trait AstParser<'a, L: Iterator<Item = LexResult> + From<ArcStr>, E: ErrorReporter + 'a>:
-    Iterator<Item = Locatable<InitDeclaration>> + From<&'a mut Program<E>>
-where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
-{
-}
-impl<'a, L, E> Iterator for Parser<'a, L, E>
-where
-    L: From<ArcStr> + Iterator<Item = LexResult>,
-    E: ErrorReporter,
-{
-    type Item = Locatable<InitDeclaration>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-
-impl<'a, L, E> From<&'a mut Program<E>> for Parser<'a, L, E>
-where
-    L: From<ArcStr> + Iterator<Item = LexResult>,
-    E: ErrorReporter,
-{
-    fn from(value: &'a mut Program<E>) -> Self {
-        todo!()
-    }
-}
-
-impl<'a, L, E> AstParser<'a, L, E> for Parser<'a, L, E>
-where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
-{
-}
-
-pub struct Parser<'a, L, E>
-where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
-{
-    lexer: L,
-    reporter: &'a mut E,
+pub struct Parser {
+    lexer: Box<dyn Iterator<Item = LexResult>>,
+    reporter: Rc<RefCell<dyn ErrorReporter>>,
     global: Vec<InitDeclaration>,
     current: Option<LocatableToken>,
     next: Option<LocatableToken>,
@@ -74,16 +37,23 @@ where
     primed: bool,
 }
 
-impl<'a, L, E> Parser<'a, L, E>
-where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
-{
-    #[inline(always)]
-    fn prime(&mut self) -> ParseResult<()> {
-        self.advance()?;
-        self.advance()?;
-        Ok(())
+impl Parser {
+    pub fn new(
+        reporter: Rc<RefCell<dyn ErrorReporter>>,
+        lexer: Box<dyn Iterator<Item = LexResult>>,
+    ) -> Self {
+        let mut parser = Parser {
+            lexer,
+            reporter,
+            global: Vec::new(),
+            current: None,
+            next: None,
+            last_span: Span::default(),
+            current_span: Span::default(),
+            primed: false,
+        };
+        parser.prime().unwrap();
+        parser
     }
 
     #[inline(always)]
@@ -99,6 +69,13 @@ where
         } else {
             Ok(())
         }
+    }
+
+    #[inline(always)]
+    fn prime(&mut self) -> ParseResult<()> {
+        self.advance()?;
+        self.advance()?;
+        Ok(())
     }
 
     #[inline(always)]
@@ -120,15 +97,15 @@ where
     }
 
     pub(super) fn match_binary_op(&mut self) -> ParseResult<Locatable<BinaryOp>> {
-        confirm!(self, borrow, |x| {BinaryOp::try_from(x)}, Ok(op) => op, "+, -, *, /, %, &, |, ^, <<, >>, <, <=, >, >=, ==, !=, &&, ||")
+        confirm!(self, borrow, |x| {BinaryOp::try_from(x)}, Ok(op) => op, EXPECTED_BINARY)
     }
 
     pub(super) fn confirm_unary_op(&mut self) -> ParseResult<Locatable<UnaryOp>> {
-        confirm!(self, consume, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, "+, -, !, ~, *, &, sizeof")
+        confirm!(self, consume, |x| {UnaryOp::try_from(&x)}, Ok(op) => op, EXPECTED_UNARY)
     }
 
     pub(super) fn confirm_type(&mut self) -> ParseResult<Locatable<TypeSpecifier>> {
-        confirm!(self, consume, |x| {TypeSpecifier::try_from(&x)}, Ok(x) => x, "int, long, char, float, double")
+        confirm!(self, consume, |x| {TypeSpecifier::try_from(&x)}, Ok(x) => x, EXPECTED_TYPE)
     }
 
     pub(super) fn match_identifier(&mut self) -> ParseResult<Locatable<InternedStr>> {
@@ -140,7 +117,7 @@ where
     }
 
     pub(super) fn match_assign(&mut self) -> ParseResult<Locatable<AssignOp>> {
-        confirm!(self, borrow, |x| {AssignOp::try_from(x)}, Ok(op) => op, "=, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=")
+        confirm!(self, borrow, |x| {AssignOp::try_from(x)}, Ok(op) => op, EXPECTED_ASSIGN)
     }
 
     pub(super) fn current_span(&mut self) -> ParseResult<Span> {
@@ -165,17 +142,3 @@ where
         Ok(())
     }
 }
-
-//
-// #[test]
-// fn test_advance_advances_tokens_correctly() {
-//     let program = Compiler::new("test".to_string());
-//     let source = "1 * 1".to_string();
-//     let lexer = crate::lex::Lexer::new(source);
-//     let mut parser = Parser::from_lexer(program, lexer);
-//     parser.prime();
-//     assert!(parser.consume().is_ok());
-//     assert!(parser.consume().is_ok());
-//     assert!(parser.consume().is_ok());
-//     assert!(parser.consume().is_err());
-// }
