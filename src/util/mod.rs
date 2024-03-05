@@ -3,8 +3,8 @@ pub mod error;
 pub mod str_intern;
 
 use crate::lexer::tokens::Token as LexToken;
-use crate::lexer::{CompilerWarning, LexResult};
 use crate::parser::ast::InitDeclaration;
+use crate::util::error::CompilerWarning;
 use arcstr::ArcStr;
 use derive_new::new;
 use error::{CompilerError, ErrorReporter, ProgramErrorStatus};

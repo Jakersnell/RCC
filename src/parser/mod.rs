@@ -34,7 +34,6 @@ pub struct Parser {
     next: Option<LocatableToken>,
     last_span: Span,
     current_span: Span,
-    primed: bool,
 }
 
 impl Parser {
@@ -42,7 +41,7 @@ impl Parser {
         reporter: Rc<RefCell<dyn ErrorReporter>>,
         lexer: Box<dyn Iterator<Item = LexResult>>,
     ) -> Self {
-        let mut parser = Parser {
+        Self {
             lexer,
             reporter,
             global: Vec::new(),
@@ -50,15 +49,21 @@ impl Parser {
             next: None,
             last_span: Span::default(),
             current_span: Span::default(),
-            primed: false,
-        };
-        parser.prime().unwrap();
-        parser
+        }
+    }
+
+    pub fn parse_all(mut self) -> ParseResult<Vec<Locatable<InitDeclaration>>> {
+        self.prime()?;
+        let mut global = Vec::new();
+        while self.current.is_some() {
+            global.push(self.parse_init_declaration()?);
+        }
+        Ok(global)
     }
 
     #[inline(always)]
-    pub(super) fn report_error(&mut self, error: CompilerError) {
-        self.reporter.report_error(error);
+    pub(super) fn report_error(&self, error: CompilerError) {
+        self.reporter.borrow_mut().report_error(error);
     }
 
     #[inline(always)]

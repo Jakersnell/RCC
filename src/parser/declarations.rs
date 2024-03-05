@@ -8,10 +8,10 @@ use crate::util::Locatable;
 use arcstr::ArcStr;
 
 impl Parser {
-    pub(super) fn parse_init_declaration(&mut self) -> ParseResult<InitDeclaration> {
+    pub(super) fn parse_init_declaration(&mut self) -> ParseResult<Locatable<InitDeclaration>> {
         let location = self.current_span()?;
         let dec = self.parse_declaration()?;
-        if is!(
+        let init_dec = if is!(
             self,
             current,
             Token::Symbol(Symbol::Semicolon) | Token::Symbol(Symbol::Comma)
@@ -33,7 +33,8 @@ impl Parser {
                 location.merge(self.current_span),
             ));
             Err(())
-        }
+        };
+        init_dec.map(|init_dec| Locatable::new(location, init_dec))
     }
 
     pub(super) fn parse_struct_declaration(

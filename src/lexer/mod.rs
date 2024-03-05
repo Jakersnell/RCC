@@ -4,12 +4,12 @@ pub mod tokens;
 mod trivial;
 
 use crate::lexer::tokens::Token;
-pub(super) use crate::util::error::{CompilerError, CompilerWarning, ErrorReporter};
-pub(super) use crate::util::*;
-pub(super) use crate::util::{Locatable, Span};
-pub(super) use arcstr::ArcStr;
+use crate::util::error::{CompilerError, CompilerWarning, ErrorReporter};
+use crate::util::*;
+use crate::util::{Locatable, Span};
+use arcstr::ArcStr;
 use std::cell::RefCell;
-pub(super) use std::io::Read;
+use std::io::Read;
 use std::rc::Rc;
 
 pub type LexResult = Result<Locatable<Token>, ()>;
@@ -38,18 +38,22 @@ impl Lexer {
             source,
             reporter,
             position: 0,
-            col: 0,
-            line: 0,
+            col: 1,
+            line: 1,
             current,
             next,
         }
+    }
+
+    pub fn lex_all(self) -> Result<Vec<Locatable<Token>>, ()> {
+        self.collect()
     }
 
     #[inline(always)]
     pub(super) fn next_char(&mut self) -> Option<char> {
         if self.current.is_some_and(|c| c == '\n') {
             self.line += 1;
-            self.col = 0;
+            self.col = 1;
         } else {
             self.col += 1;
         }
@@ -60,13 +64,8 @@ impl Lexer {
     }
 
     #[inline(always)]
-    pub(super) fn report_error(&mut self, err: CompilerError) {
-        self.reporter.report_error(err)
-    }
-
-    #[inline(always)]
-    pub(super) fn report_warning(&mut self, warn: CompilerWarning) {
-        self.reporter.report_warning(warn)
+    pub(super) fn report_error(&self, err: CompilerError) {
+        self.reporter.borrow_mut().report_error(err)
     }
 
     #[inline(always)]
@@ -113,7 +112,7 @@ impl Iterator for Lexer {
     fn next(&mut self) -> Option<Self::Item> {
         self.remove_trivial();
         self.current.map(|c| {
-            if self.reporter.get_status().is_err() {
+            if self.reporter.borrow().get_status().is_err() {
                 return Err(());
             }
             let span = self.start_span();
@@ -135,7 +134,7 @@ impl Iterator for Lexer {
                 }
             };
             let span = self.end_span(span);
-            if self.reporter.get_status().is_err() {
+            if self.reporter.borrow().get_status().is_err() {
                 return Err(());
             }
             if let Some(kind) = kind {
@@ -392,9 +391,9 @@ mod tests {
         ];
         for test in tests {
             let mut report = Rc::new(RefCell::new(ErrorReporterMock::default()));
-            let mut lexer = Lexer::new(report, test.into());
+            let mut lexer = Lexer::new(report.clone(), test.into());
             let token = lexer.eat_number();
-            assert!(report.get_status().is_err());
+            assert!(report.borrow().get_status().is_err());
         }
     }
 
@@ -432,6 +431,58 @@ mod tests {
                     assert_eq!(value.to_string(), test);
                 }
                 _ => panic!("Expected string literal, got {:#?}", token),
+            }
+        }
+    }
+
+    macro_rules! advancement_test {
+        ($test:ident, $item:ident, $evaluation:expr) => {{
+            let mut report = Rc::new(RefCell::new(ErrorReporterMock::default()));
+            let mut lexer = Lexer::new(report, $test.into());
+            for (i, token) in lexer.enumerate() {
+                #[allow(clippy::redundant_closure_call)]
+                match token {
+                    Ok(token) => {
+                        assert_eq!(token.location.$item, $evaluation(i));
+                    }
+                    Err(_) => panic!("Error in lexer"),
+                }
+            }
+        }};
+    }
+
+    #[test]
+    fn test_line_number_advances_correctly() {
+        let test = "
+            break
+            while
+            continue 
+            return 
+        ";
+        advancement_test!(test, line, |i| { i + 2 })
+    }
+
+    #[test]
+    fn test_column_advances_correctly() {
+        let test = "123 123 123 123 123";
+        advancement_test!(test, line, |i| { i * 4 })
+    }
+
+    #[test]
+    fn test_column_and_line_numbers_advance_correctly() {
+        let test = "123 123 
+123 123
+123 123
+123 123";
+        let mut report = Rc::new(RefCell::new(ErrorReporterMock::default()));
+        let mut lexer = Lexer::new(report, test.into());
+        for (i, token) in lexer.enumerate() {
+            match token {
+                Ok(token) => {
+                    assert_eq!(token.location.col, i % 2 * 4 + 1);
+                    assert_eq!(token.location.line, i / 2 + 1)
+                }
+                Err(_) => panic!("Error in lexer"),
             }
         }
     }

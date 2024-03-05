@@ -176,16 +176,14 @@ impl Lexer {
             }
             None => {
                 let span = self.end_span(span);
-                self.reporter
-                    .report_error(CompilerError::UnclosedCharLiteral(span));
+                self.report_error(CompilerError::UnclosedCharLiteral(span));
                 None
             }
         }
         .unwrap_or('\0');
         if self.current != Some('\'') {
             let span = self.end_span(span);
-            self.reporter
-                .report_error(CompilerError::UnclosedCharLiteral(span));
+            self.report_error(CompilerError::UnclosedCharLiteral(span));
         } else {
             self.next_char();
         }
