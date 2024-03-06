@@ -108,7 +108,7 @@ macro_rules! confirm {
         match $closure($value) {
             $pattern $(if $guard)? => Ok(Locatable::new($location, $if_ok)),
             _ => {
-                $invoker.report_error(CompilerError::ExpectedVariety($if_err.to_string(), formatted, $location));
+                $invoker.report_error( CompilerError::ExpectedVariety($if_err.to_string(), formatted, $location));
                 Err(())
             }
         }

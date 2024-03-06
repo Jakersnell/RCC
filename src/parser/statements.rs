@@ -7,7 +7,10 @@ use crate::util::error::CompilerError;
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
-impl Parser {
+impl<L> Parser<L>
+where
+    L: Iterator<Item = LexResult>,
+{
     pub fn parse_compound_statement(&mut self) -> ParseResult<Locatable<Block>> {
         let location = self.current_span()?;
         confirm!(self, consume, Token::Symbol(Symbol::OpenCurly) => (), "{")?;
@@ -26,8 +29,16 @@ impl Parser {
         let location = self.current_span()?;
         match self.current.as_ref().unwrap().value {
             Token::Symbol(Symbol::Semicolon) => Ok(self.consume()?.map(|_| Statement::Empty)),
-            Token::Keyword(Keyword::Continue) => Ok(self.consume()?.map(|_| Statement::Continue)),
-            Token::Keyword(Keyword::Break) => Ok(self.consume()?.map(|_| Statement::Break)),
+            Token::Keyword(Keyword::Continue) => {
+                let stmt = self.consume()?.map(|_| Statement::Continue);
+                self.confirm_semicolon()?;
+                Ok(stmt)
+            }
+            Token::Keyword(Keyword::Break) => {
+                let stmt = self.consume()?.map(|_| Statement::Break);
+                self.confirm_semicolon()?;
+                Ok(stmt)
+            }
             Token::Symbol(Symbol::OpenCurly) => {
                 let block = self.parse_compound_statement()?;
                 let location = block.location;
@@ -36,7 +47,7 @@ impl Parser {
             Token::Keyword(keyword) if keyword.is_for_type() => {
                 let dec = self.parse_declaration()?;
                 let variable_declaration = self.parse_variable_declaration(dec)?;
-                confirm!(self, consume, Token::Symbol(Symbol::Semicolon) => (), ";")?;
+                let res = self.confirm_semicolon()?;
                 let location = variable_declaration.location.merge(self.last_span);
                 Ok(Locatable::new(
                     location,

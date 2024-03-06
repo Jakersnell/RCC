@@ -7,7 +7,7 @@ use crate::parser::ast::InitDeclaration;
 use crate::util::error::CompilerWarning;
 use arcstr::ArcStr;
 use derive_new::new;
-use error::{CompilerError, ErrorReporter, ProgramErrorStatus};
+use error::CompilerError;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
