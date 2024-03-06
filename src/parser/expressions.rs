@@ -3,11 +3,14 @@ use crate::lexer::tokens::{Symbol, Token};
 use crate::lexer::LexResult;
 use crate::parser::ast::{BinaryOp, Expression, PostfixOp, TypeOrExpression, UnaryOp};
 use crate::parser::{ParseResult, Parser};
-use crate::util::error::{CompilerError, ErrorReporter};
+use crate::util::error::CompilerError;
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
-impl Parser {
+impl<L> Parser<L>
+where
+    L: Iterator<Item = LexResult>,
+{
     pub(super) fn parse_initializer(&mut self) -> ParseResult<Locatable<Expression>> {
         if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
             let location = self.current_span()?;

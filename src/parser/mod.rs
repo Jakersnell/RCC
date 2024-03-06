@@ -5,10 +5,10 @@ use rand::RngCore;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::lexer::tokens::Token;
 use crate::lexer::tokens::{Keyword, Literal};
-use crate::lexer::LexResult;
-use crate::util::error::{CompilerError, ErrorReporter};
+use crate::lexer::tokens::{Symbol, Token};
+use crate::lexer::{LexResult, Lexer};
+use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, LocatableToken, Span};
 
@@ -26,9 +26,12 @@ pub(super) static EXPECTED_TYPE: &str = "int, long, char, float, double";
 
 pub type ParseResult<T> = Result<T, ()>;
 
-pub struct Parser {
-    lexer: Box<dyn Iterator<Item = LexResult>>,
-    reporter: Rc<RefCell<dyn ErrorReporter>>,
+pub struct Parser<L>
+where
+    L: Iterator<Item = LexResult>,
+{
+    tokens: L,
+    errors: Vec<CompilerError>,
     global: Vec<InitDeclaration>,
     current: Option<LocatableToken>,
     next: Option<LocatableToken>,
@@ -36,14 +39,14 @@ pub struct Parser {
     current_span: Span,
 }
 
-impl Parser {
-    pub fn new(
-        reporter: Rc<RefCell<dyn ErrorReporter>>,
-        lexer: Box<dyn Iterator<Item = LexResult>>,
-    ) -> Self {
+impl<L> Parser<L>
+where
+    L: Iterator<Item = LexResult>,
+{
+    pub fn new(lexer: L) -> Self {
         Self {
-            lexer,
-            reporter,
+            tokens: lexer,
+            errors: Vec::new(),
             global: Vec::new(),
             current: None,
             next: None,
@@ -52,18 +55,26 @@ impl Parser {
         }
     }
 
-    pub fn parse_all(mut self) -> ParseResult<Vec<Locatable<InitDeclaration>>> {
-        self.prime()?;
+    pub fn parse_all(mut self) -> Result<Vec<Locatable<InitDeclaration>>, Vec<CompilerError>> {
+        let primer = self.prime();
+        if primer.is_err() {
+            return Err(self.errors);
+        }
         let mut global = Vec::new();
         while self.current.is_some() {
-            global.push(self.parse_init_declaration()?);
+            let init_dec = self.parse_init_declaration();
+            if init_dec.is_err() {
+                return Err(self.errors);
+            }
+            global.push(init_dec.unwrap());
         }
         Ok(global)
     }
 
     #[inline(always)]
-    pub(super) fn report_error(&self, error: CompilerError) {
-        self.reporter.borrow_mut().report_error(error);
+    pub(super) fn report_error(&mut self, error: CompilerError) -> ParseResult<()> {
+        self.errors.push(error);
+        Err(())
     }
 
     #[inline(always)]
@@ -86,9 +97,8 @@ impl Parser {
     #[inline(always)]
     fn consume(&mut self) -> ParseResult<LocatableToken> {
         self.check_for_eof("token")?;
-        let locatable = self.current.take();
+        let locatable = self.current.take().expect("This should never EOF");
         self.advance()?;
-        let locatable = locatable.unwrap();
         self.last_span = locatable.location;
         Ok(locatable)
     }
@@ -101,8 +111,8 @@ impl Parser {
         confirm!(self, consume, Token::Literal(literal) => literal,  "<literal>")
     }
 
-    pub(super) fn match_binary_op(&mut self) -> ParseResult<Locatable<BinaryOp>> {
-        confirm!(self, borrow, |x| {BinaryOp::try_from(x)}, Ok(op) => op, EXPECTED_BINARY)
+    pub(super) fn confirm_semicolon(&mut self) -> ParseResult<Locatable<()>> {
+        confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";")
     }
 
     pub(super) fn confirm_unary_op(&mut self) -> ParseResult<Locatable<UnaryOp>> {
@@ -125,6 +135,10 @@ impl Parser {
         confirm!(self, borrow, |x| {AssignOp::try_from(x)}, Ok(op) => op, EXPECTED_ASSIGN)
     }
 
+    pub(super) fn match_binary_op(&mut self) -> ParseResult<Locatable<BinaryOp>> {
+        confirm!(self, borrow, |x| {BinaryOp::try_from(x)}, Ok(op) => op, EXPECTED_BINARY)
+    }
+
     pub(super) fn current_span(&mut self) -> ParseResult<Span> {
         match self.current.as_ref() {
             Some(locatable) => Ok(locatable.location),
@@ -137,7 +151,7 @@ impl Parser {
 
     pub(super) fn advance(&mut self) -> ParseResult<()> {
         self.current = self.next.take();
-        self.next = match self.lexer.next() {
+        self.next = match self.tokens.next() {
             Some(Ok(token)) => Some(token),
             Some(Err(errors)) => {
                 return Err(());

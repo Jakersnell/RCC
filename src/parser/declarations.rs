@@ -3,11 +3,14 @@ use crate::lexer::tokens::*;
 use crate::lexer::LexResult;
 use crate::parser::ast::*;
 use crate::parser::{ParseResult, Parser};
-use crate::util::error::{CompilerError, ErrorReporter};
+use crate::util::error::CompilerError;
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
-impl Parser {
+impl<L> Parser<L>
+where
+    L: Iterator<Item = LexResult>,
+{
     pub(super) fn parse_init_declaration(&mut self) -> ParseResult<Locatable<InitDeclaration>> {
         let location = self.current_span()?;
         let dec = self.parse_declaration()?;
@@ -189,7 +192,6 @@ impl Parser {
                 break;
             }
         }
-        // note to self: parse varargs here
         confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
         let body = self.parse_compound_statement()?;
         let location = declaration.location.merge(body.location);
@@ -207,16 +209,13 @@ impl Parser {
         &mut self,
         declaration: Locatable<Declaration>,
     ) -> ParseResult<Locatable<VariableDeclaration>> {
-        // debug_assert!(declaration.name.is_some());
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
             Some(self.parse_initializer()?)
         } else {
             None
         };
-        let location = initializer.as_ref().map_or(declaration.location, |init| {
-            declaration.location.merge(init.location)
-        });
+        let location = declaration.location.merge(self.last_span);
         Ok(Locatable::new(
             location,
             VariableDeclaration {
