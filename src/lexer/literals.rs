@@ -1,35 +1,10 @@
 use super::*;
+use crate::lexer::tokens::Literal;
 
-impl<'a, E> Lexer<'a, E>
-where
-    E: ErrorReporter,
-{
+impl Lexer {
     pub(super) fn eat_number(&mut self) -> Option<Token> {
         if !self.current.is_some_and(|c| c.is_ascii_digit()) {
             return None;
-        }
-
-        macro_rules! consume_suffix {
-            ($($pattern:literal)|+, $error_type:expr) => {
-                {
-                    let span = self.start_span();
-                    let mut invalid_text = None;
-                    let suffix = self.consume_alphanumeric_text().map(|text| {
-                        let lowercased = text.to_lowercase();
-                        match lowercased.as_str() {
-                            $($pattern)|+ => Some(lowercased),
-                            _ => {
-                                invalid_text = Some(text);
-                                None
-                            }
-                        }
-                    }).flatten();
-                    if let Some(text) = invalid_text {
-                        self.report_error($error_type(text, span));
-                    }
-                    suffix
-                }
-            };
         }
 
         let span = self.start_span();
@@ -135,6 +110,29 @@ where
             _ => number,
         };
 
+        macro_rules! consume_suffix {
+            ($($pattern:literal)|+, $error_type:expr) => {
+                {
+                    let span = self.start_span();
+                    let mut invalid_text = None;
+                    let suffix = self.consume_alphanumeric_text().map(|text| {
+                        let lowercased = text.to_lowercase();
+                        match lowercased.as_str() {
+                            $($pattern)|+ => Some(lowercased),
+                            _ => {
+                                invalid_text = Some(text);
+                                None
+                            }
+                        }
+                    }).flatten();
+                    if let Some(text) = invalid_text {
+                        self.report_error($error_type(text, span));
+                    }
+                    suffix
+                }
+            };
+        }
+
         let literal = match state {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
                 let result = u128::from_str_radix(&number, base);
@@ -178,16 +176,14 @@ where
             }
             None => {
                 let span = self.end_span(span);
-                self.reporter
-                    .report_error(CompilerError::UnclosedCharLiteral(span));
+                self.report_error(CompilerError::UnclosedCharLiteral(span));
                 None
             }
         }
         .unwrap_or('\0');
         if self.current != Some('\'') {
             let span = self.end_span(span);
-            self.reporter
-                .report_error(CompilerError::UnclosedCharLiteral(span));
+            self.report_error(CompilerError::UnclosedCharLiteral(span));
         } else {
             self.next_char();
         }

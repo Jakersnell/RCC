@@ -1,14 +1,19 @@
 pub mod ast_pretty_print;
+pub mod error;
 pub mod str_intern;
 
-use crate::core::error::{CompilerError, ErrorReporter, ProgramErrorStatus};
 use crate::lexer::tokens::Token as LexToken;
-use crate::lexer::LexResult;
 use crate::parser::ast::InitDeclaration;
+use crate::util::error::CompilerWarning;
 use arcstr::ArcStr;
 use derive_new::new;
+use error::CompilerError;
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
+use std::io::Read;
 use std::ops::Deref;
+use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub type LocatableToken = Locatable<LexToken>;
@@ -57,7 +62,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, new, Clone, Copy)]
+#[derive(Debug, PartialEq, new, Clone, Copy, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -93,33 +98,5 @@ impl Display for Span {
             self.col,
             self.end - self.start
         )
-    }
-}
-
-#[derive(Debug)]
-pub struct Program<E: ErrorReporter> {
-    file_name: Arc<str>,
-    source: Option<ArcStr>,
-    reporter: E,
-}
-
-impl<E> Program<E>
-where
-    E: ErrorReporter,
-{
-    pub fn new(file_name: &str) -> Self {
-        Self {
-            file_name: file_name.into(),
-            source: None,
-            reporter: E::default(),
-        }
-    }
-
-    pub fn read_source(mut self) -> Result<Self, ()> {
-        let source = std::fs::read_to_string(&*self.file_name).map_err(|err| {
-            self.reporter.report_error(err.into());
-        })?;
-        self.source = Some(source.into());
-        Ok(self)
     }
 }

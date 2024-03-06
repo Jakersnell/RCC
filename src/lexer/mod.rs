@@ -3,46 +3,43 @@ mod symbols;
 pub mod tokens;
 mod trivial;
 
-pub(super) use crate::core::error::{CompilerError, CompilerWarning, ErrorReporter};
-pub(super) use crate::util::*;
-pub(super) use crate::util::{Locatable, Span};
-pub(super) use arcstr::ArcStr;
-pub(super) use std::io::Read;
+use crate::lexer::tokens::Token;
+use crate::util::error::{CompilerError, CompilerWarning};
+use crate::util::*;
+use crate::util::{Locatable, Span};
+use arcstr::ArcStr;
+use std::cell::RefCell;
+use std::io::Read;
+use std::rc::Rc;
 
-pub type LexResult = Result<Locatable<Token>, ()>;
+pub type LexResult = Result<Locatable<Token>, Vec<CompilerError>>;
 
-pub struct Lexer<'a, E: ErrorReporter> {
-    reporter: &'a mut E,
+pub struct Lexer {
     source: ArcStr,
+    errors: Vec<CompilerError>,
     position: usize,
     line: usize,
     col: usize,
     current: Option<char>,
     next: Option<char>,
 }
-impl<'a, E> From<(&'a mut E, ArcStr)> for Lexer<'a, E>
-where
-    E: ErrorReporter,
-{
-    fn from(value: (&'a mut E, ArcStr)) -> Self {
-        Lexer::new(value.0, value.1)
+impl From<(ArcStr)> for Lexer {
+    fn from(value: (ArcStr)) -> Self {
+        Lexer::new(value)
     }
 }
 
-impl<'a, E> Lexer<'a, E>
-where
-    E: ErrorReporter,
-{
-    pub fn new(reporter: &'a mut E, source: ArcStr) -> Self {
+impl Lexer {
+    pub fn new(source: ArcStr) -> Self {
         let mut chars = source.chars();
         let current = chars.next();
         let next = chars.next();
         Self {
-            reporter,
             source,
+            errors: Vec::new(),
             position: 0,
-            col: 0,
-            line: 0,
+            col: 1,
+            line: 1,
             current,
             next,
         }
@@ -52,7 +49,7 @@ where
     pub(super) fn next_char(&mut self) -> Option<char> {
         if self.current.is_some_and(|c| c == '\n') {
             self.line += 1;
-            self.col = 0;
+            self.col = 1;
         } else {
             self.col += 1;
         }
@@ -64,12 +61,7 @@ where
 
     #[inline(always)]
     pub(super) fn report_error(&mut self, err: CompilerError) {
-        self.reporter.report_error(err)
-    }
-
-    #[inline(always)]
-    pub(super) fn report_warning(&mut self, warn: CompilerWarning) {
-        self.reporter.report_warning(warn)
+        self.errors.push(err)
     }
 
     #[inline(always)]
@@ -110,18 +102,12 @@ where
     }
 }
 
-impl<'a, E> Iterator for Lexer<'a, E>
-where
-    E: ErrorReporter,
-{
+impl Iterator for Lexer {
     type Item = LexResult;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.remove_trivial();
         self.current.map(|c| {
-            if self.reporter.get_status().is_err() {
-                return Err(());
-            }
             let span = self.start_span();
             let kind = match c {
                 '\'' => self.eat_char(),
@@ -141,13 +127,12 @@ where
                 }
             };
             let span = self.end_span(span);
-            if self.reporter.get_status().is_err() {
-                return Err(());
-            }
-            if let Some(kind) = kind {
+            if !self.errors.is_empty() {
+                Err(std::mem::take(&mut self.errors))
+            } else if let Some(kind) = kind {
                 Ok(Locatable::new(span, kind))
             } else {
-                Err(())
+                Err(std::mem::take(&mut self.errors))
             }
         })
     }
@@ -156,60 +141,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::Lexer;
-    use crate::core::error::{CompilerError, CompilerWarning, ErrorReporter};
     use crate::lexer::tokens::{Literal, Symbol, Token};
-
-    struct ErrorReporterMock {
-        status: Result<(), ()>,
-        errors: Vec<CompilerError>,
-        warnings: Vec<CompilerWarning>,
-    }
-
-    impl Default for ErrorReporterMock {
-        fn default() -> Self {
-            Self {
-                status: Ok(()),
-                errors: Vec::new(),
-                warnings: Vec::new(),
-            }
-        }
-    }
-
-    impl ErrorReporter for ErrorReporterMock {
-        fn get_status(&self) -> Result<(), ()> {
-            self.status
-        }
-
-        fn report_error(&mut self, error: CompilerError) {
-            self.status = Err(());
-            self.errors.push(error);
-        }
-
-        fn report_warning(&mut self, warning: CompilerWarning) {
-            self.warnings.push(warning);
-        }
-
-        fn get_errors(&self) -> &Vec<CompilerError> {
-            &self.errors
-        }
-
-        fn get_warnings(&self) -> &Vec<CompilerWarning> {
-            &self.warnings
-        }
-    }
+    use crate::util::error::{CompilerError, CompilerWarning};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[test]
     fn test_current_is_first_char() {
-        let mut report = ErrorReporterMock::default();
-        let lexer = Lexer::new(&mut report, "abc".into());
+        let lexer = Lexer::new("abc".into());
         assert_eq!(lexer.current, Some('a'));
         assert_eq!(lexer.next, Some('b'));
     }
 
     #[test]
     fn test_next_char_iterates_correctly() {
-        let mut report = ErrorReporterMock::default();
-        let mut lexer = Lexer::new(&mut report, "abc".into());
+        let mut lexer = Lexer::new("abc".into());
         assert_eq!(lexer.current, Some('a'));
         assert_eq!(lexer.next_char(), Some('b'));
         assert_eq!(lexer.next_char(), Some('c'));
@@ -268,9 +214,8 @@ mod tests {
         ];
 
         for (symbol, kind) in symbols.iter() {
-            let mut report = ErrorReporterMock::default();
             #[allow(suspicious_double_ref_op)]
-            let mut lexer = Lexer::new(&mut report, symbol.clone().into());
+            let mut lexer = Lexer::new(symbol.clone().into());
             let returned_kind = lexer.eat_symbol().unwrap();
             if *kind != returned_kind {
                 panic!(
@@ -283,8 +228,7 @@ mod tests {
 
     #[test]
     fn test_parse_number_works_for_valid_int() {
-        let mut report = ErrorReporterMock::default();
-        let mut lexer = Lexer::new(&mut report, "344".into());
+        let mut lexer = Lexer::new("344".into());
         let kind = lexer.eat_number();
         assert_eq!(
             kind,
@@ -298,8 +242,7 @@ mod tests {
     #[test]
     fn test_eat_number_for_float_number() {
         let test = "3.16";
-        let mut report = ErrorReporterMock::default();
-        let mut lexer = Lexer::new(&mut report, test.into());
+        let mut lexer = Lexer::new(test.into());
         let token = lexer.eat_number();
         assert_eq!(
             token,
@@ -313,8 +256,7 @@ mod tests {
     #[test]
     fn test_eat_number_leading_zeros_are_still_float() {
         let test = "003.44";
-        let mut report = ErrorReporterMock::default();
-        let mut lexer = Lexer::new(&mut report, test.into());
+        let mut lexer = Lexer::new(test.into());
         let token = lexer.eat_number();
         assert_eq!(
             token,
@@ -328,8 +270,7 @@ mod tests {
     #[test]
     fn test_eat_number_decimal_number() {
         let test = "123";
-        let mut report = ErrorReporterMock::default();
-        let mut lexer = Lexer::new(&mut report, test.into());
+        let mut lexer = Lexer::new(test.into());
         let token = lexer.eat_number();
         assert_eq!(
             token,
@@ -343,8 +284,7 @@ mod tests {
     #[test]
     fn test_eat_number_for_hex_number() {
         let test = "0x1A";
-        let mut report = ErrorReporterMock::default();
-        let mut lexer = Lexer::new(&mut report, test.into());
+        let mut lexer = Lexer::new(test.into());
         let token = lexer.eat_number();
         assert_eq!(
             token,
@@ -376,8 +316,7 @@ mod tests {
         ];
 
         for (test, control) in tests {
-            let mut report = ErrorReporterMock::default();
-            let mut lexer = Lexer::new(&mut report, test.into());
+            let mut lexer = Lexer::new(test.into());
             let token = lexer.eat_number().expect("Expected token");
             assert_eq!(
                 token,
@@ -395,10 +334,9 @@ mod tests {
             "123z", "123Z", "123h", "123H", "123m", "123M", "123t", "123T", "123v", "123V",
         ];
         for test in tests {
-            let mut report = ErrorReporterMock::default();
-            let mut lexer = Lexer::new(&mut report, test.into());
+            let mut lexer = Lexer::new(test.into());
             let token = lexer.eat_number();
-            assert!(report.get_status().is_err());
+            assert!(!lexer.errors.is_empty());
         }
     }
 
@@ -411,8 +349,7 @@ mod tests {
             ("123.4L", "l"),
         ];
         for (test, control) in tests {
-            let mut report = ErrorReporterMock::default();
-            let mut lexer = Lexer::new(&mut report, test.into());
+            let mut lexer = Lexer::new(test.into());
             let token = lexer.eat_number().expect("Expected token");
             assert_eq!(
                 token,
@@ -428,14 +365,63 @@ mod tests {
     fn test_eat_string_values_match() {
         let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$\\\"%^&*()_+"#];
         for test in tests {
-            let mut report = ErrorReporterMock::default();
-            let mut lexer = Lexer::new(&mut report, format!("\"{}\"", test).into());
+            let mut lexer = Lexer::new(format!("\"{}\"", test).into());
             let token = lexer.eat_string().expect("Expected token");
             match token {
                 Token::Literal(Literal::String { value }) => {
                     assert_eq!(value.to_string(), test);
                 }
                 _ => panic!("Expected string literal, got {:#?}", token),
+            }
+        }
+    }
+
+    macro_rules! advancement_test {
+        ($test:ident, $item:ident, $evaluation:expr) => {{
+            let mut lexer = Lexer::new($test.into());
+            for (i, token) in lexer.enumerate() {
+                #[allow(clippy::redundant_closure_call)]
+                match token {
+                    Ok(token) => {
+                        assert_eq!(token.location.$item, $evaluation(i));
+                    }
+                    Err(_) => panic!("Error in lexer"),
+                }
+            }
+        }};
+    }
+
+    #[test]
+    fn test_line_number_advances_correctly() {
+        let test = "
+            break
+            while
+            continue 
+            return 
+        ";
+        advancement_test!(test, line, |i| { i + 2 })
+    }
+
+    #[test]
+    fn test_column_advances_correctly() {
+        let test = "123 123 123 123 123";
+        advancement_test!(test, col, |i| { i * 4 + 1 })
+    }
+
+    #[test]
+    fn test_column_and_line_numbers_advance_correctly() {
+        let test = "123 123 
+123 123
+123 123
+123 123";
+        let mut lexer = Lexer::new(test.into());
+        for (i, token) in lexer.enumerate() {
+            match token {
+                Ok(token) => {
+                    assert_eq!(token.location.col, i % 2 * 4 + 1);
+                    assert_eq!(token.location.line, i / 2 + 1)
+                }
+                Err(_) => panic!("Error in lexer"),
             }
         }
     }

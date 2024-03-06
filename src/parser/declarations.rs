@@ -1,21 +1,20 @@
 use super::macros::*;
-use crate::core::error::{CompilerError, ErrorReporter};
 use crate::lexer::tokens::*;
 use crate::lexer::LexResult;
 use crate::parser::ast::*;
 use crate::parser::{ParseResult, Parser};
+use crate::util::error::CompilerError;
 use crate::util::Locatable;
 use arcstr::ArcStr;
 
-impl<'a, L, E> Parser<'a, L, E>
+impl<L> Parser<L>
 where
-    L: Iterator<Item = LexResult> + From<ArcStr>,
-    E: ErrorReporter,
+    L: Iterator<Item = LexResult>,
 {
-    pub(super) fn parse_init_declaration(&mut self) -> ParseResult<InitDeclaration> {
+    pub(super) fn parse_init_declaration(&mut self) -> ParseResult<Locatable<InitDeclaration>> {
         let location = self.current_span()?;
         let dec = self.parse_declaration()?;
-        if is!(
+        let init_dec = if is!(
             self,
             current,
             Token::Symbol(Symbol::Semicolon) | Token::Symbol(Symbol::Comma)
@@ -37,7 +36,8 @@ where
                 location.merge(self.current_span),
             ));
             Err(())
-        }
+        };
+        init_dec.map(|init_dec| Locatable::new(location, init_dec))
     }
 
     pub(super) fn parse_struct_declaration(
@@ -192,7 +192,6 @@ where
                 break;
             }
         }
-        // note to self: parse varargs here
         confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
         let body = self.parse_compound_statement()?;
         let location = declaration.location.merge(body.location);
@@ -210,16 +209,13 @@ where
         &mut self,
         declaration: Locatable<Declaration>,
     ) -> ParseResult<Locatable<VariableDeclaration>> {
-        // debug_assert!(declaration.name.is_some());
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
             Some(self.parse_initializer()?)
         } else {
             None
         };
-        let location = initializer.as_ref().map_or(declaration.location, |init| {
-            declaration.location.merge(init.location)
-        });
+        let location = declaration.location.merge(self.last_span);
         Ok(Locatable::new(
             location,
             VariableDeclaration {

@@ -1,57 +1,6 @@
 use crate::util::Span;
 use thiserror::Error;
 
-pub trait ErrorReporter: Default + Sized {
-    fn get_status(&self) -> Result<(), ()>;
-    fn report_error(&mut self, error: CompilerError);
-    fn report_warning(&mut self, warning: CompilerWarning);
-    fn get_errors(&self) -> &Vec<CompilerError>;
-    fn get_warnings(&self) -> &Vec<CompilerWarning>;
-}
-
-pub enum ProgramErrorStatus {
-    MustStop, // must stop immediately
-    Current,  // can continue this phase but not next
-    Lexer,
-    Parser,
-    Analysis,
-    Codegen,
-}
-
-#[derive(Default)]
-pub struct ErrorReporterImpl {
-    errors: Vec<CompilerError>,
-    warnings: Vec<CompilerWarning>,
-}
-
-impl ErrorReporter for ErrorReporterImpl {
-    fn get_status(&self) -> Result<(), ()> {
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    fn report_error(&mut self, error: CompilerError) {
-        println!("{}", error);
-        self.errors.push(error);
-    }
-
-    fn report_warning(&mut self, warning: CompilerWarning) {
-        println!("{}", warning);
-        self.warnings.push(warning);
-    }
-
-    fn get_errors(&self) -> &Vec<CompilerError> {
-        &self.errors
-    }
-
-    fn get_warnings(&self) -> &Vec<CompilerWarning> {
-        &self.warnings
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum CompilerError {
     #[error("{0}")]
