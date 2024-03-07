@@ -201,15 +201,22 @@ impl Display for InitDeclaration {
 
 impl Display for VariableDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.initializer {
-            Some(expr) => write!(
-                f,
-                "{} = <init-expr> (\n{})",
-                self.declaration,
-                indent_string(format!("{}", expr), 0, 4)
-            ),
-            None => write!(f, "{}", self.declaration),
+        write!(f, "{}", *self.declaration);
+        if self.is_array {
+            write!(f, "[")?;
+            if let Some(array_size) = self.array_size {
+                write!(f, "{}", array_size)?;
+            }
+            write!(f, "]")?;
         }
+        if let Some(expr) = &self.initializer {
+            write!(
+                f,
+                " = <init-expr> (\n{})",
+                indent_string(format!("{}", expr), 0, 4)
+            );
+        }
+        Ok(())
     }
 }
 
@@ -239,27 +246,11 @@ impl Display for FunctionDeclaration {
 
 impl Display for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let dec_is_base = **self.declarator == DeclaratorType::Base;
-        let spacer = if dec_is_base { "" } else { " " };
-        write!(f, "({}{}{})", self.specifier, spacer, self.declarator)?;
+        write!(f, "{}", self.specifier)?;
         if let Some(ident) = &self.ident {
             write!(f, " {}", ident)?;
         }
         Ok(())
-    }
-}
-
-impl Display for DeclaratorType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::DeclaratorType::*;
-        match self {
-            Pointer { to } => write!(f, "*{}", to),
-            Array { of, size } => match size {
-                Some(size) => write!(f, "{}[{}]", of, size),
-                any => write!(f, "{}[]", of),
-            },
-            Base => Ok(()),
-        }
     }
 }
 
