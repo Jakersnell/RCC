@@ -1,3 +1,4 @@
+use crate::analysis::hlir::HlirType;
 use crate::util::Span;
 use thiserror::Error;
 
@@ -81,11 +82,26 @@ pub enum CompilerError {
     #[error("'This identifier already exists in this scope and cannot be redeclared.")]
     IdentifierExists(Span),
 
+    #[error("Identifier cannot be found in the current scope: {0}")]
+    IdentNotFound(Span),
+
     #[error("{0}")]
     CustomError(String, Span),
 
     #[error("Else without if")]
     ElseWithNoIf(Span),
+
+    #[error("The arguments to this function are of incorrect types.")]
+    FunctionTypeMismatch(Span),
+
+    #[error("This is not a function.")]
+    NotAFunction(Span),
+
+    #[error("This is not a variable.")]
+    NotAVariable(Span),
+
+    #[error("Variable type mismatch. Cannot assign {0} to type {1}")]
+    VariableTypeMismatch(Span, HlirType, HlirType),
 }
 
 #[derive(Error, Debug)]
