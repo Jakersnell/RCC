@@ -1,7 +1,41 @@
 use crate::analysis::hlir::HlirType;
 use crate::util::Span;
 use thiserror::Error;
+pub struct Reporter {
+    errors: Vec<CompilerError>,
+    warnings: Vec<CompilerWarning>,
+}
+impl Default for Reporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl Reporter {
+    fn new() -> Self {
+        Self {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
 
+    fn report_error(&mut self, error: CompilerError) {
+        println!("Error: {}", error);
+        self.errors.push(error);
+    }
+
+    fn report_warning(&mut self, warning: CompilerWarning) {
+        println!("Warning: {}", warning);
+        self.warnings.push(warning);
+    }
+
+    fn status(&self) -> Result<(), ()> {
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
 #[derive(Error, Debug)]
 pub enum CompilerError {
     #[error("{0}")]
