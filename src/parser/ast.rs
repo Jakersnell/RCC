@@ -11,6 +11,8 @@ The majority does not. Enjoy.
 
 pub type ASTRoot = Vec<InitDeclaration>;
 
+pub struct AbstractSyntaxTree(Vec<InitDeclaration>);
+
 #[derive(Debug)]
 pub struct Block(pub Vec<Locatable<Statement>>);
 
@@ -37,27 +39,15 @@ pub struct FunctionDeclaration {
 #[derive(Debug)]
 pub struct VariableDeclaration {
     pub declaration: Locatable<Declaration>,
+    pub is_array: bool,
+    pub array_size: Option<usize>,
     pub initializer: Option<Locatable<Expression>>,
 }
 
 #[derive(Debug)]
 pub struct Declaration {
     pub specifier: Locatable<DeclarationSpecifier>,
-    pub declarator: Locatable<Box<DeclaratorType>>,
     pub ident: Option<Locatable<InternedStr>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DeclaratorType {
-    // not supporting function pointers
-    Pointer {
-        to: Locatable<Box<DeclaratorType>>,
-    },
-    Array {
-        of: Locatable<Box<DeclaratorType>>,
-        size: Option<usize>,
-    },
-    Base,
 }
 
 #[derive(Debug)]
@@ -65,6 +55,7 @@ pub struct DeclarationSpecifier {
     pub specifiers: Vec<StorageSpecifier>,
     pub qualifiers: Vec<TypeQualifier>,
     pub ty: Vec<TypeSpecifier>,
+    pub pointer: bool, // only supporting one pointer depth
 }
 
 #[derive(Debug)]
