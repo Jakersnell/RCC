@@ -31,7 +31,13 @@ mod tests {
         let source = std::fs::read_to_string(path).expect("Could not read file.");
         let lexer = lexer::Lexer::new(source.into());
         let parser = parser::Parser::new(lexer);
-        parser.parse_all()
+        let result = parser.parse_all();
+        if let Ok(resul) = &result {
+            for init in resul {
+                println!("{}", &init.value);
+            }
+        }
+        result
     }
 
     #[test]
