@@ -11,7 +11,7 @@ use std::{
 // This is a simple implementation of a string interner.
 // You might be asking why I implemented one myself rather than using a crate like lasso.
 // The answer is, I wanted to learn how to implement a string interner myself, and I had a few ideas I wanted to test out.
-// I don't know if this is the best implementation, it was more just a creative exercise for me.
+// I don't know if this is the best implementation. But it was a fun learning experience.
 
 pub type InternedStr = Arc<str>;
 
@@ -47,7 +47,8 @@ impl Entry {
     }
 }
 
-// really just a hashmap with some custom implementation that I couldn't do with the standard hashmap
+// really just a hashmap with some custom implementation that I didn't know
+// how to do with the standard hashmap
 // for O(1) lookups and O(1) insertions, and learning purposes
 struct Interner<H: BuildHasher> {
     hash_builder: H,
