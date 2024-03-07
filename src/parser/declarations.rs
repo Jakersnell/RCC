@@ -66,71 +66,17 @@ where
     pub(super) fn parse_declaration(&mut self) -> ParseResult<Locatable<Declaration>> {
         let location = self.current_span()?;
         let specifier = self.parse_declaration_specifier()?;
-        let declarator = self.parse_pre_declarator()?;
         let mut ident = match_token!(self, current, Token::Identifier(ident) => ident.clone());
         if ident.is_some() {
             self.advance()?;
         }
-        let declarator = self.parse_array_declarator(declarator)?;
         let location = ident
             .as_ref()
             .map_or(location, |locatable| location.merge(locatable.location));
         Ok(Locatable {
             location,
-            value: Declaration {
-                specifier,
-                declarator,
-                ident,
-            },
+            value: Declaration { specifier, ident },
         })
-    }
-
-    pub(super) fn parse_array_declarator(
-        &mut self,
-        dec: Locatable<Box<DeclaratorType>>,
-    ) -> ParseResult<Locatable<Box<DeclaratorType>>> {
-        if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
-            let location = self.current_span()?;
-            self.advance()?;
-            let size = if let Some(Locatable {
-                location,
-                value: (integer, suffix),
-            }) = match_token!(self, current, Token::Literal(Literal::Integer {value, suffix}) => (*value, suffix.clone()))
-            {
-                if suffix.is_some() {
-                    self.report_error(CompilerError::CustomError(
-                        "Suffixes in array sizes are not currently supported.".to_string(),
-                        location,
-                    ));
-                    return Err(());
-                }
-                self.advance()?;
-                Some(integer as usize)
-            } else {
-                None
-            };
-            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
-            let location = location.merge(self.current_span()?);
-            let dec = Box::new(DeclaratorType::Array { of: dec, size });
-            let dec = Locatable::new(location, dec);
-            Ok(self.parse_array_declarator(dec)?)
-        } else {
-            Ok(dec)
-        }
-    }
-
-    pub(super) fn parse_pre_declarator(&mut self) -> ParseResult<Locatable<Box<DeclaratorType>>> {
-        let location = self.current_span()?;
-        if is!(self, current, Token::Symbol(Symbol::Star)) {
-            self.advance()?;
-            let to = self.parse_pre_declarator()?;
-            Ok(Locatable::new(
-                location,
-                Box::new(DeclaratorType::Pointer { to }),
-            ))
-        } else {
-            Ok(Locatable::new(location, Box::new(DeclaratorType::Base)))
-        }
     }
 
     pub(super) fn parse_declaration_specifier(
@@ -166,6 +112,18 @@ where
                 break;
             }
         }
+        let mut pointer = false;
+        while is!(self, current, Token::Symbol(Symbol::Star)) {
+            if pointer {
+                self.report_error(CompilerError::CustomError(
+                    "Pointer depth greater than one is not currently supported!".to_string(),
+                    span,
+                ));
+                return Err(());
+            }
+            self.advance()?;
+            pointer = true;
+        }
         let span = span.extend(self.current_span()?);
         Ok(Locatable {
             location: span,
@@ -173,6 +131,7 @@ where
                 specifiers: storage_specifiers,
                 qualifiers: type_qualifiers,
                 ty: type_specifiers,
+                pointer,
             },
         })
     }
@@ -209,6 +168,38 @@ where
         &mut self,
         declaration: Locatable<Declaration>,
     ) -> ParseResult<Locatable<VariableDeclaration>> {
+        let is_array = is!(self, current, Token::Symbol(Symbol::OpenSquare));
+        let array_size = if is_array {
+            self.advance()?;
+            let size = if let Some(Locatable {
+                location,
+                value: (integer, suffix),
+            }) = match_token!(self, current, Token::Literal(Literal::Integer {value, suffix}) => (*value, suffix.clone()))
+            {
+                if suffix.is_some() {
+                    self.report_error(CompilerError::CustomError(
+                        "Suffixes in array sizes are not currently supported.".to_string(),
+                        location,
+                    ));
+                    return Err(());
+                }
+                self.advance()?;
+                Some(integer as usize)
+            } else {
+                None
+            };
+            confirm!(self, consume, Token::Symbol(Symbol::CloseSquare) => (), "]")?;
+            size
+        } else {
+            None
+        };
+        if is!(self, current, Token::Symbol(Symbol::OpenSquare)) {
+            self.report_error(CompilerError::CustomError(
+                "Nested arrays are not currently supported!".to_string(),
+                declaration.location,
+            ));
+            return Err(());
+        }
         let initializer = if is!(self, current, Token::Symbol(Symbol::Equal)) {
             self.advance()?;
             Some(self.parse_initializer()?)
@@ -219,6 +210,8 @@ where
         Ok(Locatable::new(
             location,
             VariableDeclaration {
+                is_array,
+                array_size,
                 declaration,
                 initializer,
             },
