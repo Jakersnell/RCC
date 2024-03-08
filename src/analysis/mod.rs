@@ -122,7 +122,7 @@ impl<'a> GlobalValidator<'a> {
         &mut self,
         specifiers: &[TypeSpecifier],
         location: Span,
-    ) -> Result<HlirType, ()> {
+    ) -> Result<HlirTypeKind, ()> {
         enum State {
             Start,
             SeenUnsigned,
@@ -134,6 +134,58 @@ impl<'a> GlobalValidator<'a> {
         let mut hlir_type: Option<HlirTypeKind> = None;
         let mut state = State::Start;
         let mut iter = specifiers.iter();
+        macro_rules! seen_signed_or_unsigned {
+            ($ty_spec:ident, $unsigned:literal, $long:expr) => {
+                match $ty_spec {
+                    Some(TypeSpecifier::Char) => {
+                        hlir_type = Some(HlirTypeKind::Char($unsigned));
+                        state = State::End;
+                    }
+                    Some(TypeSpecifier::Int) => {
+                        hlir_type = Some(HlirTypeKind::Int($unsigned));
+                        state = State::End;
+                    }
+                    Some(TypeSpecifier::Long) => {
+                        state = $long;
+                    }
+                    Some(ty) => {
+                        let err =
+                            CompilerError::TypeCannotBeSignedOrUnsigned(ty.to_string(), location);
+                        self.report_error(err);
+                        return Err(());
+                    }
+                    None => {
+                        let err = CompilerError::ExpectedTypeSpecifier(location);
+                        self.report_error(err);
+                        return Err(());
+                    }
+                }
+            };
+        }
+        macro_rules! seen_signed_or_unsigned_long {
+            ($ty_spec:ident, $unsigned:literal) => {
+                match $ty_spec {
+                    Some(TypeSpecifier::Int) => {
+                        hlir_type = Some(HlirTypeKind::Long($unsigned));
+                        state = State::End;
+                    }
+                    Some(TypeSpecifier::Long) => {
+                        hlir_type = Some(HlirTypeKind::LLong($unsigned));
+                        state = State::End;
+                    }
+                    Some(ty) => {
+                        let err =
+                            CompilerError::TypeCannotBeSignedOrUnsigned(ty.to_string(), location);
+                        self.report_error(err);
+                        return Err(());
+                    }
+                    None => {
+                        hlir_type = Some(HlirTypeKind::Long($unsigned));
+                        state = State::End;
+                    }
+                }
+            };
+        }
         loop {
             let ty_spec = iter.next();
             match state {
@@ -172,88 +224,17 @@ impl<'a> GlobalValidator<'a> {
                         location
                     ),
                 },
-                State::SeenUnsigned => match ty_spec {
-                    Some(TypeSpecifier::Char) => {
-                        hlir_type = Some(HlirTypeKind::Char(true));
-                        state = State::End;
-                    }
-                    Some(TypeSpecifier::Int) => {
-                        hlir_type = Some(HlirTypeKind::Int(true));
-                        state = State::End;
-                    }
-                    Some(TypeSpecifier::Long) => {
-                        state = State::SeenUnsignedLong;
-                    }
-                    Some(ty) => {
-                        let err = CompilerError::TypeCannotBeSignedOrUnsigned(
-                            ty.to_string(),
-                            location,
-                        );
-                        self.report_error(err);
-                        return Err(());
-                    }
-                    None => {
-                        let err = CompilerError::ExpectedTypeSpecifier(location);
-                        self.report_error(err);
-                        return Err(());
-                    }
-
-                },
-                State::SeenUnsignedLong => match ty_spec {
-                    Some(TypeSpecifier::Int) => {
-                        hlir_type = Some(HlirTypeKind::Long(true));
-                        state = State::End;
-                    }
-                    Some(TypeSpecifier::Long) => {
-                        hlir_type = Some(HlirTypeKind::LLong(true));
-                        state = State::End;
-                    }
-                    Some(ty) => {
-                            let err = CompilerError::TypeCannotBeSignedOrUnsigned(
-                                ty.to_string(),
-                                location,
-                            );
-                            self.report_error(err);
-                        return Err(());
-                    }
-                    None => {
-                        hlir_type = Some(HlirTypeKind::Long(true));
-                        state = State::End;
-                    }
-                },
-                State::SeenSigned => match ty_spec {
-                    Some(TypeSpecifier::Char) => {
-                        hlir_type = Some(HlirTypeKind::Char(false));
-                        state = State::End;
-                    }
-                    Some(TypeSpecifier::Int) => {
-                        hlir_type = Some(HlirTypeKind::Int(false));
-                        state = State::End;
-                    }
-                    Some(TypeSpecifier::Long) => {
-                        state = State::SeenSignedLong;
-                    }
-                    Some(ty) => {
-                        let err = CompilerError::TypeCannotBeSignedOrUnsigned(
-                            ty.to_string(),
-                            location,
-                        );
-                        self.report_error(err);
-                        return Err(());
-                    }
-                    None => {
-                        let err = CompilerError::ExpectedTypeSpecifier(location);
-                        self.report_error(err);
-                        return Err(());
-                    }
-                },
-                State::SeenSignedLong => {}
+                State::SeenUnsigned => seen_signed_or_unsigned!(ty_spec, true, State::SeenUnsignedLong),
+                State::SeenSigned => seen_signed_or_unsigned!(ty_spec, false, State::SeenSignedLong),
+                State::SeenUnsignedLong => seen_signed_or_unsigned_long!(ty_spec, true),
+                State::SeenSignedLong => seen_signed_or_unsigned_long!(ty_spec, false),
                 State::End => {
                     debug_assert!(hlir_type.is_some());
                     break;
                 }
             }
         }
-        todo!()
+        let ty = hlir_type.expect("Fatal compiler error: Type specifier not set");
+        Ok(ty)
     }
 }
