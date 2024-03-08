@@ -32,11 +32,18 @@ pub struct HlirFunction {
 
 #[derive(Debug)]
 pub struct HlirVariable {
-    pub ty: HlirType,
+    pub ty: HlirTypeKind,
+    pub kind: HlirVarKind,
     pub ident: InternedStr,
-    pub is_array: bool,
     pub is_const: bool,
     pub initializer: Option<HlirVarInit>,
+}
+
+#[derive(Debug)]
+pub enum HlirVarKind {
+    Pointer,
+    Array,
+    Basic,
 }
 #[derive(Debug)]
 pub enum HlirVarInit {
