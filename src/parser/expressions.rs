@@ -182,11 +182,6 @@ where
         }
     }
 
-    /// This function parses call syntax and is initiated by an open parenthesis placed immediately
-    /// after a primary expression. It is placed in its own function to keep "parse_postfix_unary_expression"
-    /// more concise. This expects a primary_expr as input in order to nest the original
-    /// expression into the AST node. This currently only parses calls on identifiers because the
-    /// compiler does not support function pointers yet.
     fn parse_function_call(
         &mut self,
         primary_expr: Locatable<Expression>,
