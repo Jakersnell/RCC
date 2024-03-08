@@ -32,9 +32,11 @@ pub struct HlirFunction {
 
 #[derive(Debug)]
 pub struct HlirVariable {
-    ty: HlirType,
-    ident: InternedStr,
-    initializer: Option<HlirVarInit>,
+    pub ty: HlirType,
+    pub ident: InternedStr,
+    pub is_array: bool,
+    pub is_const: bool,
+    pub initializer: Option<HlirVarInit>,
 }
 #[derive(Debug)]
 pub enum HlirVarInit {
@@ -45,28 +47,23 @@ pub enum HlirVarInit {
 #[derive(Debug, Clone, PartialEq)]
 pub struct HlirType {
     pub(crate) pointer: bool,
-    pub(crate) is_const: bool,
+    pub is_const: bool,
     pub(crate) kind: HlirTypeKind,
 }
 
 impl Display for HlirType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}{}{}",
-            if self.is_const { "const " } else { "" },
-            self.kind,
-            if self.pointer { " *" } else { "" }
-        )
+        write!(f, "{}{}", self.kind, if self.pointer { " *" } else { "" })
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HlirTypeKind {
     Void,
-    Char(bool),
-    Int(bool), // signed/unsigned
-    Long(bool),
+    Char(bool),  // 8
+    Int(bool),   // signed/unsigned
+    Long(bool),  // i64
+    LLong(bool), // i128
     Float,
     Double,
     Struct(InternedStr),
@@ -85,12 +82,13 @@ impl Display for HlirTypeKind {
         }
         match self {
             HlirTypeKind::Void => write!(f, "void"),
-            HlirTypeKind::Char(signed) => write_signed!("char", *signed),
-            HlirTypeKind::Int(signed) => write_signed!("int", *signed),
-            HlirTypeKind::Long(signed) => write_signed!("long", *signed),
+            HlirTypeKind::Char(unsigned) => write_signed!("char", *unsigned),
+            HlirTypeKind::Int(unsigned) => write_signed!("int", *unsigned),
+            HlirTypeKind::Long(unsigned) => write_signed!("long", *unsigned),
             HlirTypeKind::Float => write!(f, "float"),
             HlirTypeKind::Double => write!(f, "double"),
             HlirTypeKind::Struct(ident) => write!(f, "struct {}", ident),
+            HlirTypeKind::LLong(unsigned) => write_signed!("long long", *unsigned),
         }
     }
 }
