@@ -51,43 +51,47 @@ pub struct HlirType {
     pub(crate) pointer: bool,
 }
 impl HlirType {
-    pub fn can_implicitly_cast_to(&self, other: &HlirType) -> bool {
+    pub fn try_implicit_cast(&self, other: &HlirType) -> Option<HlirType> {
         if self == other {
-            return true;
+            return None;
         }
         use HlirTypeKind::*;
-        match (&self.kind, &other.kind, self.pointer, other.pointer) {
-            (Char(_), Int(_), false, false) => true,
-            (Char(_), Long(_), false, false) => true,
-            (Char(_), Double, false, false) => true,
-            (Int(_), Long(_), false, false) => true,
-            (Int(_), LLong(_), false, false) => true,
-            (Int(_), Double, false, false) => true,
-            (Char(_), LLong(_), false, false) => true,
-            (Long(_), LLong(_), false, false) => true,
-            _ => false,
-        }
+        let ty_kind = match (&self.kind, &other.kind, self.pointer, other.pointer) {
+            (Char(_), Int(unsigned), false, false) => Some(Int(*unsigned)),
+            (Char(_), Long(unsigned), false, false) => Some(Long(*unsigned)),
+            (Char(_), Double, false, false) => Some(Double),
+            (Int(_), Long(unsigned), false, false) => Some(Long(*unsigned)),
+            (Int(_), LLong(unsigned), false, false) => Some(LLong(*unsigned)),
+            (Int(_), Double, false, false) => Some(Double),
+            (Char(_), LLong(unsigned), false, false) => Some(LLong(*unsigned)),
+            (Long(_), LLong(unsigned), false, false) => Some(LLong(*unsigned)),
+            _ => None,
+        };
+        ty_kind.map(|kind| HlirType::new(kind, false))
     }
+    pub fn try_explicit_cast(&self, other: &HlirType) -> Option<HlirType> {
+        let implicit = self.try_implicit_cast(other);
+        if implicit.is_some() {
+            return implicit;
+        }
 
-    pub fn can_explicitly_cast_to(&self, other: &HlirType) -> bool {
-        if self.can_implicitly_cast_to(other) {
-            return true;
-        }
         use HlirTypeKind::*;
-        match (&self.kind, &other.kind, self.pointer, other.pointer) {
-            (Int(_), Char(_), false, false) => true,
-            (Long(_), Char(_), false, false) => true,
-            (LLong(_), Char(_), false, false) => true,
-            (Double, Char(_), false, false) => true,
-            (Long(_), Int(_), false, false) => true,
-            (LLong(_), Int(_), false, false) => true,
-            (Int(_), Double, false, false) => true,
-            (Long(_), Double, false, false) => true,
-            (LLong(_), Double, false, false) => true,
-            (_, Long(_), true, false) => true, // all pointers can cast to long
-            (_, LLong(_), true, false) => true, // all pointers can cast to long long
-            _ => false,
-        }
+        let ty_kind = match (&self.kind, &other.kind, self.pointer, other.pointer) {
+            (Int(_), Char(unsigned), false, false) => Some(Char(*unsigned)),
+            (Long(_), Char(unsigned), false, false) => Some(Char(*unsigned)),
+            (LLong(_), Char(unsigned), false, false) => Some(Char(*unsigned)),
+            (Double, Char(unsigned), false, false) => Some(Char(*unsigned)),
+            (Long(_), Int(unsigned), false, false) => Some(Int(*unsigned)),
+            (LLong(_), Int(unsigned), false, false) => Some(Int(*unsigned)),
+            (Int(_), Double, false, false) => Some(Double),
+            (Long(_), Double, false, false) => Some(Double),
+            (LLong(_), Double, false, false) => Some(Double),
+            (_, Long(unsigned), true, false) => Some(Long(*unsigned)), // all pointers can cast to long
+            (_, LLong(unsigned), true, false) => Some(LLong(*unsigned)), // all pointers can cast to long long
+            _ => None,
+        };
+
+        ty_kind.map(|kind| HlirType::new(kind, false))
     }
 }
 impl Display for HlirType {
