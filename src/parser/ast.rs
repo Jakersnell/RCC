@@ -1,17 +1,20 @@
 use std::fmt::Display;
+use std::ops::Deref;
 
 use crate::lexer::tokens::{Keyword, Literal, Symbol, Token};
 use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
 
-/*
-Some things in this AST very closely follow the ANSI C Yacc grammar.
-The majority does not. Enjoy.
-*/
-
 pub type ASTRoot = Vec<InitDeclaration>;
 
 pub struct AbstractSyntaxTree(Vec<InitDeclaration>);
+
+impl Deref for AbstractSyntaxTree {
+    type Target = Vec<InitDeclaration>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct Block(pub Vec<Locatable<Statement>>);
@@ -105,7 +108,7 @@ impl TryFrom<&Token> for StorageSpecifier {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TypeQualifier {
     Const,
 }
