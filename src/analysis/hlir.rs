@@ -1,3 +1,4 @@
+use crate::analysis::hlir::HlirTypeKind::Double;
 use crate::parser::ast::TypeSpecifier;
 use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
@@ -32,32 +33,63 @@ pub struct HlirFunction {
 
 #[derive(Debug)]
 pub struct HlirVariable {
-    pub ty: HlirTypeKind,
-    pub kind: HlirVarKind,
+    pub ty: HlirType,
     pub ident: InternedStr,
-    pub is_const: bool,
+    pub is_array: bool,
     pub initializer: Option<HlirVarInit>,
 }
 
-#[derive(Debug)]
-pub enum HlirVarKind {
-    Pointer,
-    Array,
-    Basic,
-}
 #[derive(Debug)]
 pub enum HlirVarInit {
     Expr(HlirExpr),
     Array(Vec<HlirExpr>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, new)]
 pub struct HlirType {
-    pub(crate) pointer: bool,
-    pub is_const: bool,
     pub(crate) kind: HlirTypeKind,
+    pub(crate) pointer: bool,
 }
+impl HlirType {
+    pub fn can_implicitly_cast_to(&self, other: &HlirType) -> bool {
+        if self == other {
+            return true;
+        }
+        use HlirTypeKind::*;
+        match (&self.kind, &other.kind, self.pointer, other.pointer) {
+            (Char(_), Int(_), false, false) => true,
+            (Char(_), Long(_), false, false) => true,
+            (Char(_), Double, false, false) => true,
+            (Int(_), Long(_), false, false) => true,
+            (Int(_), LLong(_), false, false) => true,
+            (Int(_), Double, false, false) => true,
+            (Char(_), LLong(_), false, false) => true,
+            (Long(_), LLong(_), false, false) => true,
+            _ => false,
+        }
+    }
 
+    pub fn can_explicitly_cast_to(&self, other: &HlirType) -> bool {
+        if self.can_implicitly_cast_to(other) {
+            return true;
+        }
+        use HlirTypeKind::*;
+        match (&self.kind, &other.kind, self.pointer, other.pointer) {
+            (Int(_), Char(_), false, false) => true,
+            (Long(_), Char(_), false, false) => true,
+            (LLong(_), Char(_), false, false) => true,
+            (Double, Char(_), false, false) => true,
+            (Long(_), Int(_), false, false) => true,
+            (LLong(_), Int(_), false, false) => true,
+            (Int(_), Double, false, false) => true,
+            (Long(_), Double, false, false) => true,
+            (LLong(_), Double, false, false) => true,
+            (_, Long(_), true, false) => true, // all pointers can cast to long
+            (_, LLong(_), true, false) => true, // all pointers can cast to long long
+            _ => false,
+        }
+    }
+}
 impl Display for HlirType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.kind, if self.pointer { " *" } else { "" })
@@ -87,15 +119,16 @@ impl Display for HlirTypeKind {
                 )
             };
         }
+        use HlirTypeKind::*;
         match self {
-            HlirTypeKind::Void => write!(f, "void"),
-            HlirTypeKind::Char(unsigned) => write_signed!("char", *unsigned),
-            HlirTypeKind::Int(unsigned) => write_signed!("int", *unsigned),
-            HlirTypeKind::Long(unsigned) => write_signed!("long", *unsigned),
-            HlirTypeKind::Float => write!(f, "float"),
-            HlirTypeKind::Double => write!(f, "double"),
-            HlirTypeKind::Struct(ident) => write!(f, "struct {}", ident),
-            HlirTypeKind::LLong(unsigned) => write_signed!("long long", *unsigned),
+            Void => write!(f, "void"),
+            Char(unsigned) => write_signed!("char", *unsigned),
+            Int(unsigned) => write_signed!("int", *unsigned),
+            Long(unsigned) => write_signed!("long", *unsigned),
+            Float => write!(f, "float"),
+            Double => write!(f, "double"),
+            Struct(ident) => write!(f, "struct {}", ident),
+            LLong(unsigned) => write_signed!("long long", *unsigned),
         }
     }
 }
