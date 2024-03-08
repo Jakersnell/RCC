@@ -2,11 +2,11 @@ mod flow;
 pub mod hlir;
 mod symbols;
 
-use crate::analysis::hlir::{HighLevelIR, HlirType, HlirTypeKind};
+use crate::analysis::hlir::{HighLevelIR, HlirExpr, HlirType, HlirTypeKind, HlirVariable};
 use crate::analysis::symbols::SymbolResolver;
 use crate::parser::ast::{
-    ASTRoot, AbstractSyntaxTree, Block, DeclarationSpecifier, InitDeclaration, TypeQualifier,
-    TypeSpecifier, VariableDeclaration,
+    ASTRoot, AbstractSyntaxTree, Block, DeclarationSpecifier, Expression, InitDeclaration,
+    TypeQualifier, TypeSpecifier, VariableDeclaration,
 };
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
@@ -21,6 +21,7 @@ pub type SharedReporter = Rc<RefCell<Reporter>>;
 pub struct GlobalValidator<'a> {
     ast: AbstractSyntaxTree,
     scope: SymbolResolver<'a>,
+    function_scope: Option<SymbolResolver<'a>>,
     reporter: SharedReporter,
 }
 
@@ -29,6 +30,7 @@ impl<'a> GlobalValidator<'a> {
         Self {
             ast,
             scope: SymbolResolver::create_root(),
+            function_scope: None,
             reporter: Rc::new(RefCell::new(Reporter::default())),
         }
     }
@@ -41,39 +43,35 @@ impl<'a> GlobalValidator<'a> {
         self.reporter.borrow_mut().report_warning(warning);
     }
 
-    pub fn validate(mut self) -> Result<HighLevelIR, Reporter> {
+    pub fn validate(mut self) -> Result<HighLevelIR, SharedReporter> {
         let hlir = HighLevelIR::default();
         for node in &*self.ast {
             use crate::parser::ast::InitDeclaration::*;
             match node {
-                Declaration(locatable_variable) => {}
-                Function(locatable_function) => {}
-                Struct(locatable_struct) => {}
+                Declaration(locatable_variable) => {
+                    todo!("validation")
+                }
+                Function(locatable_function) => {
+                    todo!("validation")
+                }
+                Struct(locatable_struct) => {
+                    todo!("validation")
+                }
             }
         }
-        todo!("validation")
+        if self.reporter.borrow().status().is_err() {
+            Err(self.reporter)
+        } else {
+            Ok(hlir)
+        }
     }
 
     fn validate_variable(
         &mut self,
         locatable_variable: &Locatable<VariableDeclaration>,
-    ) -> Result<(), ()> {
+    ) -> Result<HlirVariable, ()> {
         let span = locatable_variable.location;
         let var = &locatable_variable.value;
-
-        // validate declaration for the variable
-        // the declaration must have an ident.
-        // validate the declaration specifier
-        // for now all storage specifiers are ignored, report a warning displaying this
-        // the only type qualifier is const, if we see it, it is counted, anything after is redundant
-        // type specifier feels like it may be similar to a finite state machine
-        // if we see signed or unsigned we expect one of the following after, char, int, long,
-        // anything else is an error
-        // anything coming after a type otherwise is an error, except for Long, because of Long long
-
-        // if is array it will probably need a size
-        // if is array with no size the size must be calculated via the assignment,
-        // and thus requires an assignment
 
         let declaration = &var.declaration;
         if declaration.value.ident.is_none() {
@@ -82,19 +80,45 @@ impl<'a> GlobalValidator<'a> {
             return Err(());
         }
 
-        let ident = declaration.value.ident.as_ref().unwrap();
+        let ident = declaration
+            .value
+            .ident
+            .as_ref()
+            .expect("Fatal compiler error: Identifier not set");
         let ident_span = ident.location;
         let ident = ident.value.clone();
 
-        let specifier = &declaration.specifier;
-        let specifier_span = specifier.location;
-        let specifier = &specifier.value;
+        let ty = self.validate_variable_specifier(&declaration.value.specifier, span)?;
+        if var.is_array && var.array_size.is_none() && var.initializer.is_none() {
+            let err = CompilerError::ArraySizeNotSpecified(span);
+            self.report_error(err);
+            return Err(());
+        }
 
+        let initializer = if let Some(init) = &var.initializer {
+            todo!("Validate variable initializer here!");
+        } else {
+            None
+        };
+
+        Ok(HlirVariable {
+            ty,
+            ident,
+            is_array: var.is_array,
+            initializer,
+        })
+    }
+
+    fn validate_variable_specifier(
+        &mut self,
+        specifier: &DeclarationSpecifier,
+        span: Span,
+    ) -> Result<HlirType, ()> {
         for storage_spec in &specifier.specifiers {
             // need to change this span to the specific storage spec location
             self.report_warning(CompilerWarning::UnsupportedStorageSpecifier(
                 storage_spec.to_string(),
-                specifier_span,
+                span,
             ))
         }
 
@@ -104,8 +128,7 @@ impl<'a> GlobalValidator<'a> {
             match ty_qual {
                 TypeQualifier::Const => {
                     if is_const {
-                        let warning =
-                            CompilerWarning::RedundantUsage(ty_qual.to_string(), specifier_span);
+                        let warning = CompilerWarning::RedundantUsage(ty_qual.to_string(), span);
                         self.report_warning(warning);
                     } else {
                         is_const = true;
@@ -113,12 +136,15 @@ impl<'a> GlobalValidator<'a> {
                 }
             }
         }
-        let is_const = is_const; // remove mutability
 
-        Ok(())
+        let ty_kind = self.validate_type(&specifier.ty, span)?;
+        Ok(HlirType {
+            kind: ty_kind,
+            pointer: specifier.pointer,
+        })
     }
 
-    fn validate_type_specifiers(
+    fn validate_type(
         &mut self,
         specifiers: &[TypeSpecifier],
         location: Span,
@@ -229,12 +255,22 @@ impl<'a> GlobalValidator<'a> {
                 State::SeenUnsignedLong => seen_signed_or_unsigned_long!(ty_spec, true),
                 State::SeenSignedLong => seen_signed_or_unsigned_long!(ty_spec, false),
                 State::End => {
-                    debug_assert!(hlir_type.is_some());
                     break;
                 }
             }
         }
+        debug_assert!(hlir_type.is_some());
         let ty = hlir_type.expect("Fatal compiler error: Type specifier not set");
         Ok(ty)
+    }
+
+    // Expression Validation
+
+    fn validate_primary_expression(
+        &mut self,
+        expr: &Expression,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        todo!();
     }
 }
