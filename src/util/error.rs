@@ -1,6 +1,8 @@
 use crate::analysis::hlir::HlirType;
+use crate::parser::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
 use crate::util::Span;
 use thiserror::Error;
+
 pub struct Reporter {
     errors: Vec<CompilerError>,
     warnings: Vec<CompilerWarning>,
@@ -11,24 +13,24 @@ impl Default for Reporter {
     }
 }
 impl Reporter {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             errors: Vec::new(),
             warnings: Vec::new(),
         }
     }
 
-    fn report_error(&mut self, error: CompilerError) {
+    pub fn report_error(&mut self, error: CompilerError) {
         println!("Error: {}", error);
         self.errors.push(error);
     }
 
-    fn report_warning(&mut self, warning: CompilerWarning) {
+    pub fn report_warning(&mut self, warning: CompilerWarning) {
         println!("Warning: {}", warning);
         self.warnings.push(warning);
     }
 
-    fn status(&self) -> Result<(), ()> {
+    pub fn status(&self) -> Result<(), ()> {
         if self.errors.is_empty() {
             Ok(())
         } else {
@@ -135,7 +137,19 @@ pub enum CompilerError {
     NotAVariable(Span),
 
     #[error("Variable type mismatch. Cannot assign {0} to type {1}")]
-    VariableTypeMismatch(Span, HlirType, HlirType),
+    VariableTypeMismatch(Span, String, String),
+
+    #[error("Declaration is missing identifier: {0}")]
+    DeclarationMissingIdentifier(Span),
+
+    #[error("Type '{0}' can not be signed or unsigned: {1}")]
+    TypeCannotBeSignedOrUnsigned(String, Span),
+
+    #[error("Cannot combine signed and unsigned: {0}")]
+    CannotCombineSignedAndUnsigned(Span),
+
+    #[error("Expected a full type specifier here: {0}")]
+    ExpectedTypeSpecifier(Span),
 }
 
 #[derive(Error, Debug)]
@@ -160,4 +174,13 @@ pub enum CompilerWarning {
 
     #[error("Variable is not initialized at this point: {0}")]
     UninitializedVariable(Span),
+
+    #[error("This storage specifier '{0}' is currently not supported: {1}")]
+    UnsupportedStorageSpecifier(String, Span),
+
+    #[error("This type qualifier '{0}' is currently not supported: {1}")]
+    UnsupportedTypeQualifier(String, Span),
+
+    #[error("Redundant usage of qualifier '{0}: {1}'")]
+    RedundantUsage(String, Span),
 }
