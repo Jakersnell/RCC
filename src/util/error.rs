@@ -150,6 +150,9 @@ pub enum CompilerError {
 
     #[error("Expected a full type specifier here: {0}")]
     ExpectedTypeSpecifier(Span),
+
+    #[error("Array needs a size: {0}")]
+    ArraySizeNotSpecified(Span),
 }
 
 #[derive(Error, Debug)]
