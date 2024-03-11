@@ -1,4 +1,4 @@
-use crate::analysis::hlir::{HlirType, HlirTypeKind, HlirVariable};
+use crate::analysis::hlir::{HlirType, HlirTypeDecl, HlirTypeKind, HlirVariable};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{str_intern, Locatable, Span};
@@ -21,15 +21,13 @@ thread_local! {
             location: "stdio.h",
             ident: "printf",
             params: vec![HlirType {
-                pointer: false,
-                is_const: true,
                 kind: HlirTypeKind::Char(true),
+                decl: HlirTypeDecl::Pointer(false),
             }],
             varargs: true,
             return_ty: HlirType {
-                pointer: false,
-                is_const: false,
                 kind: HlirTypeKind::Void,
+                decl: HlirTypeDecl::Basic,
             },
         },
         BuiltinFunctionSymbol {
@@ -37,15 +35,13 @@ thread_local! {
             location: "stdlib.h",
             ident: "malloc",
             params: vec![HlirType {
-                pointer: false,
-                is_const: false,
                 kind: HlirTypeKind::Int(true),
+                decl: HlirTypeDecl::Basic,
             }],
             varargs: false,
             return_ty: HlirType {
-                pointer: true,
-                is_const: false,
                 kind: HlirTypeKind::Void,
+                decl: HlirTypeDecl::Basic,
             },
         },
         BuiltinFunctionSymbol {
@@ -53,15 +49,13 @@ thread_local! {
             location: "stdlib.h",
             ident: "free",
             params: vec![HlirType {
-                pointer: true,
-                is_const: false,
                 kind: HlirTypeKind::Void,
+                decl: HlirTypeDecl::Pointer(false),
             }],
             varargs: false,
             return_ty: HlirType {
-                pointer: false,
-                is_const: false,
                 kind: HlirTypeKind::Void,
+                decl: HlirTypeDecl::Basic,
             },
         },
     ];

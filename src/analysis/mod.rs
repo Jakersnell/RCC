@@ -443,20 +443,18 @@ impl<'a> GlobalValidator<'a> {
             AssignOp::LeftShift => Some(BinaryOp::LeftShift),
             AssignOp::RightShift => Some(BinaryOp::RightShift),
         };
-        if let Some(op) = op {
+        let ty = left.ty.clone();
+        let kind = if let Some(op) = op {
             let expr = self.validate_binary_hlir_expression(&op, left.clone(), right, span)?;
-            Ok(HlirExpr {
-                kind: Box::new(HlirExprKind::Assign(left, expr)),
-                ty: left.ty.clone(),
-                is_lval: false,
-            })
+            HlirExprKind::Assign(left, expr)
         } else {
-            Ok(HlirExpr {
-                kind: Box::new(HlirExprKind::Assign(left, right)),
-                ty: left.ty.clone(),
-                is_lval: false,
-            })
-        }
+            HlirExprKind::Assign(left, right)
+        };
+        Ok(HlirExpr {
+            kind: Box::new(kind),
+            ty,
+            is_lval: false,
+        })
     }
 
     fn validate_binary_equivalence_expression(

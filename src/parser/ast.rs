@@ -230,10 +230,10 @@ impl TryFrom<&Token> for UnaryOp {
 #[derive(Debug)]
 pub enum BinaryOp {
     Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Modulo,
+    Sub,
+    Mul,
+    Div,
+    Mod,
 
     Equal,
     NotEqual,
@@ -259,8 +259,8 @@ impl BinaryOp {
     pub fn precedence(&self) -> u8 {
         use BinaryOp::*;
         match self {
-            Multiply | Divide | Modulo => 11,
-            Add | Subtract => 10,
+            Mul | Div | Mod => 11,
+            Add | Sub => 10,
             LeftShift | RightShift => 9,
             GreaterThan | GreaterThanEqual | LessThan | LessThanEqual => 8,
             Equal | NotEqual => 7,
@@ -281,10 +281,10 @@ impl TryFrom<&Token> for BinaryOp {
         use BinaryOp::*;
         match value {
             Token::Symbol(Symbol::Plus) => Ok(Add),
-            Token::Symbol(Symbol::Minus) => Ok(Subtract),
-            Token::Symbol(Symbol::Star) => Ok(Multiply),
-            Token::Symbol(Symbol::Slash) => Ok(Divide),
-            Token::Symbol(Symbol::Modulo) => Ok(Modulo),
+            Token::Symbol(Symbol::Minus) => Ok(Sub),
+            Token::Symbol(Symbol::Star) => Ok(Mul),
+            Token::Symbol(Symbol::Slash) => Ok(Div),
+            Token::Symbol(Symbol::Modulo) => Ok(Mod),
 
             Token::Symbol(Symbol::EqualEqual) => Ok(Equal),
             Token::Symbol(Symbol::BangEqual) => Ok(NotEqual),

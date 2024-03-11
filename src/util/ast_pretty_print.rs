@@ -344,10 +344,10 @@ impl Display for BinaryOp {
         use crate::parser::ast::BinaryOp::*;
         match self {
             Add => write!(f, "+"),
-            Subtract => write!(f, "-"),
-            Multiply => write!(f, "*"),
-            Divide => write!(f, "/"),
-            Modulo => write!(f, "%"),
+            Sub => write!(f, "-"),
+            Mul => write!(f, "*"),
+            Div => write!(f, "/"),
+            Mod => write!(f, "%"),
             Equal => write!(f, "=="),
             NotEqual => write!(f, "!="),
             GreaterThan => write!(f, ">"),
