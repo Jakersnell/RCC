@@ -388,9 +388,14 @@ impl<'a> GlobalValidator<'a> {
             ));
             return Err(());
         } else if left.ty.is_pointer() && right.ty.is_numeric() {
-            // operator can be addition or subtraction
+            // operator can be add/sub only
+            let left = cast!(
+                left,
+                HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic)
+            );
             match op {
                 BinaryOp::Add => HlirExprKind::Add(left, right),
+                BinaryOp::Sub => HlirExprKind::Sub(left, right),
                 _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
             }
         } else if left.ty.is_numeric() && right.ty.is_numeric() {
