@@ -7,8 +7,13 @@ use crate::util::Locatable;
 
 pub type ASTRoot = Vec<InitDeclaration>;
 
+#[derive(Debug, Default)]
 pub struct AbstractSyntaxTree(Vec<InitDeclaration>);
-
+impl AbstractSyntaxTree {
+    pub fn new(declarations: Vec<InitDeclaration>) -> Self {
+        AbstractSyntaxTree(declarations)
+    }
+}
 impl Deref for AbstractSyntaxTree {
     type Target = Vec<InitDeclaration>;
     fn deref(&self) -> &Self::Target {
@@ -19,6 +24,7 @@ impl Deref for AbstractSyntaxTree {
 #[derive(Debug)]
 pub struct Block(pub Vec<Locatable<Statement>>);
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum InitDeclaration {
     Declaration(Locatable<VariableDeclaration>), // (declaration,  initializer)
