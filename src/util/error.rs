@@ -21,12 +21,16 @@ impl Reporter {
     }
 
     pub fn report_error(&mut self, error: CompilerError) {
-        println!("Error: {}", error);
+        if cfg!(not(test)) {
+            println!("Error: {}", error);
+        }
         self.errors.push(error);
     }
 
     pub fn report_warning(&mut self, warning: CompilerWarning) {
-        println!("Warning: {}", warning);
+        if cfg!(not(test)) {
+            println!("Warning: {}", warning);
+        }
         self.warnings.push(warning);
     }
 
@@ -162,6 +166,12 @@ pub enum CompilerError {
 
     #[error("Left hand operand is not assignable: {0}")]
     LeftHandNotLVal(Span),
+
+    #[error("Invalid type specifier: {0}")]
+    InvalidTypeSpecifier(Span),
+
+    #[error("Type specifier '{0}' is invalid in this position: {1}")]
+    InvalidTypeSpecifierOrder(String, Span),
 }
 
 #[derive(Error, Debug)]
