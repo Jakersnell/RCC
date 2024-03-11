@@ -64,7 +64,13 @@ thread_local! {
 pub enum SymbolKind {
     BuiltinFunction(BuiltinFunctionSymbol),
     UserFunction(UserFunctionSymbol),
+    Struct(StructSymbol),
     Variable(VariableSymbol),
+}
+
+pub struct StructSymbol {
+    size: usize,
+    fields: HashMap<InternedStr, HlirType>,
 }
 
 pub struct UserFunctionSymbol {
@@ -169,7 +175,7 @@ impl<'a> SymbolResolver<'a> {
                 Self::validate_function_params(false, &user.parameters, args, span)?;
                 Ok(user.return_ty.clone())
             }
-            SymbolKind::Variable(_) => Err(CompilerError::NotAFunction(span)),
+            _ => Err(CompilerError::NotAFunction(span)),
         }
     }
 
@@ -200,9 +206,7 @@ impl<'a> SymbolResolver<'a> {
     ) -> Result<HlirType, CompilerError> {
         match self.retrieve(ident, span)? {
             SymbolKind::Variable(var_ty) => Ok(var_ty.ty.clone()),
-            SymbolKind::BuiltinFunction(_) | SymbolKind::UserFunction(_) => {
-                Err(CompilerError::NotAVariable(span))
-            }
+            _ => Err(CompilerError::NotAVariable(span)),
         }
     }
 
