@@ -153,6 +153,15 @@ pub enum CompilerError {
 
     #[error("Array needs a size: {0}")]
     ArraySizeNotSpecified(Span),
+
+    #[error("Invalid array operation: {0}")]
+    InvalidArrayOperation(Span),
+
+    #[error("Invalid binary operation between {0} and {1}: {2}")]
+    InvalidBinaryOperation(String, String, Span),
+
+    #[error("Left hand operand is not assignable: {0}")]
+    LeftHandNotLVal(Span),
 }
 
 #[derive(Error, Debug)]
