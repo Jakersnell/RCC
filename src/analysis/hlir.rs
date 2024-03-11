@@ -1,5 +1,6 @@
-use crate::analysis::hlir::HlirTypeKind::Double;
-use crate::parser::ast::TypeSpecifier;
+use crate::analysis::hlir::HlirTypeKind::{Double, Float};
+use crate::parser::ast::{BinaryOp, TypeSpecifier};
+use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
 use arcstr::ArcStr;
@@ -35,7 +36,7 @@ pub struct HlirFunction {
 pub struct HlirVariable {
     pub ty: HlirType,
     pub ident: InternedStr,
-    pub is_array: bool,
+    pub array: Option<usize>,
     pub initializer: Option<HlirVarInit>,
 }
 
@@ -48,26 +49,60 @@ pub enum HlirVarInit {
 #[derive(Debug, Clone, PartialEq, new)]
 pub struct HlirType {
     pub(crate) kind: HlirTypeKind,
-    pub(crate) pointer: bool,
+    pub(crate) decl: HlirTypeDecl,
 }
+
 impl HlirType {
-    pub fn try_implicit_cast(&self, other: &HlirType) -> Option<HlirType> {
-        if self == other {
+    pub fn is_array(&self) -> bool {
+        matches!(self.decl, HlirTypeDecl::Array)
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        matches!(self.decl, HlirTypeDecl::Pointer(_))
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        self.kind.is_numeric()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HlirTypeDecl {
+    Basic,
+    Pointer(bool), // true if pointer is const
+    Array,
+}
+
+impl Display for HlirTypeDecl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use HlirTypeDecl::*;
+        match self {
+            Basic => Ok(()),
+            Pointer(constant) => write!(f, "*{}", if *constant { "const " } else { "" }),
+            Array => write!(f, "[]"),
+        }
+    }
+}
+
+impl HlirType {
+    pub fn try_implicit_cast(&self, to: &HlirType) -> Option<HlirType> {
+        if self == to {
             return None;
         }
+        use HlirTypeDecl::*;
         use HlirTypeKind::*;
-        let ty_kind = match (&self.kind, &other.kind, self.pointer, other.pointer) {
-            (Char(_), Int(unsigned), false, false) => Some(Int(*unsigned)),
-            (Char(_), Long(unsigned), false, false) => Some(Long(*unsigned)),
-            (Char(_), Double, false, false) => Some(Double),
-            (Int(_), Long(unsigned), false, false) => Some(Long(*unsigned)),
-            (Int(_), LLong(unsigned), false, false) => Some(LLong(*unsigned)),
-            (Int(_), Double, false, false) => Some(Double),
-            (Char(_), LLong(unsigned), false, false) => Some(LLong(*unsigned)),
-            (Long(_), LLong(unsigned), false, false) => Some(LLong(*unsigned)),
+        let ty_kind = match (&self.kind, &to.kind, &self.decl, &to.decl) {
+            (Char(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
+            (Char(_), Long(unsigned), Basic, Basic) => Some(Long(*unsigned)),
+            (Char(_), Double, Basic, Basic) => Some(Double),
+            (Int(_), Long(unsigned), Basic, Basic) => Some(Long(*unsigned)),
+            (Int(_), LLong(unsigned), Basic, Basic) => Some(LLong(*unsigned)),
+            (Int(_), Double, Basic, Basic) => Some(Double),
+            (Char(_), LLong(unsigned), Basic, Basic) => Some(LLong(*unsigned)),
+            (Long(_), LLong(unsigned), Basic, Basic) => Some(LLong(*unsigned)),
             _ => None,
         };
-        ty_kind.map(|kind| HlirType::new(kind, false))
+        ty_kind.map(|kind| HlirType::new(kind, Basic))
     }
     pub fn try_explicit_cast(&self, other: &HlirType) -> Option<HlirType> {
         let implicit = self.try_implicit_cast(other);
@@ -75,28 +110,29 @@ impl HlirType {
             return implicit;
         }
 
+        use HlirTypeDecl::*;
         use HlirTypeKind::*;
-        let ty_kind = match (&self.kind, &other.kind, self.pointer, other.pointer) {
-            (Int(_), Char(unsigned), false, false) => Some(Char(*unsigned)),
-            (Long(_), Char(unsigned), false, false) => Some(Char(*unsigned)),
-            (LLong(_), Char(unsigned), false, false) => Some(Char(*unsigned)),
-            (Double, Char(unsigned), false, false) => Some(Char(*unsigned)),
-            (Long(_), Int(unsigned), false, false) => Some(Int(*unsigned)),
-            (LLong(_), Int(unsigned), false, false) => Some(Int(*unsigned)),
-            (Int(_), Double, false, false) => Some(Double),
-            (Long(_), Double, false, false) => Some(Double),
-            (LLong(_), Double, false, false) => Some(Double),
-            (_, Long(unsigned), true, false) => Some(Long(*unsigned)), // all pointers can cast to long
-            (_, LLong(unsigned), true, false) => Some(LLong(*unsigned)), // all pointers can cast to long long
+        let ty_kind = match (&self.kind, &other.kind, &self.decl, &other.decl) {
+            (Int(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
+            (Long(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
+            (LLong(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
+            (Double, Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
+            (Long(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
+            (LLong(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
+            (Int(_), Double, Basic, Basic) => Some(Double),
+            (Long(_), Double, Basic, Basic) => Some(Double),
+            (LLong(_), Double, Basic, Basic) => Some(Double),
+            (_, Long(unsigned), Pointer(_), Basic) => Some(Long(*unsigned)), // all pointers can cast to long
+            (_, LLong(unsigned), Pointer(_), Basic) => Some(LLong(*unsigned)), // all pointers can cast to long long
             _ => None,
         };
 
-        ty_kind.map(|kind| HlirType::new(kind, false))
+        ty_kind.map(|kind| HlirType::new(kind, Basic))
     }
 }
 impl Display for HlirType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.kind, if self.pointer { " *" } else { "" })
+        write!(f, "{}{}", self.kind, self.decl)
     }
 }
 
@@ -110,6 +146,24 @@ pub enum HlirTypeKind {
     Float,
     Double,
     Struct(InternedStr),
+}
+
+impl HlirTypeKind {
+    pub fn is_numeric(&self) -> bool {
+        use HlirTypeKind::*;
+        match self {
+            Char(_) | Int(_) | Long(_) | LLong(_) | Float | Double => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_integer(&self) -> bool {
+        use HlirTypeKind::*;
+        match self {
+            Char(_) | Int(_) | Long(_) | LLong(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for HlirTypeKind {
@@ -137,21 +191,42 @@ impl Display for HlirTypeKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HlirLiteral {
-    Char(char),
     Integer(isize),
     Floating(f64),
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Clone, new)]
 pub struct HlirExpr {
-    kind: Box<HlirExprKind>,
-    ty: HlirType,
-    lval: bool,
+    pub kind: Box<HlirExprKind>,
+    pub ty: HlirType,
+    pub is_lval: bool,
 }
 
-#[derive(Debug)]
+impl HlirExpr {
+    pub fn is_integer_or_pointer(&self) -> bool {
+        self.ty.kind.is_integer() || self.ty.is_pointer()
+    }
+
+    pub fn is_integer(&self) -> bool {
+        self.ty.kind.is_integer()
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        self.ty.is_pointer()
+    }
+
+    pub fn is_array(&self) -> bool {
+        self.ty.is_array()
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        self.ty.is_numeric()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum HlirExprKind {
     Literal(HlirLiteral),
     Variable(InternedStr),
@@ -204,7 +279,36 @@ pub enum HlirExprKind {
     Cast(HlirType, HlirExpr),
 }
 
-#[derive(Debug)]
+impl HlirExprKind {
+    pub fn is_literal(&self) -> bool {
+        matches!(self, HlirExprKind::Literal(_))
+    }
+    pub fn try_from_binop(op: BinaryOp, left: HlirExpr, right: HlirExpr) -> Result<Self, ()> {
+        match op {
+            BinaryOp::Add => Ok(HlirExprKind::Add(left, right)),
+            BinaryOp::Sub => Ok(HlirExprKind::Sub(left, right)),
+            BinaryOp::Mul => Ok(HlirExprKind::Mul(left, right)),
+            BinaryOp::Div => Ok(HlirExprKind::Div(left, right)),
+            BinaryOp::Mod => Ok(HlirExprKind::Mod(left, right)),
+            BinaryOp::Equal => Ok(HlirExprKind::Equal(left, right)),
+            BinaryOp::NotEqual => Ok(HlirExprKind::NotEqual(left, right)),
+            BinaryOp::GreaterThan => Ok(HlirExprKind::GreaterThan(left, right)),
+            BinaryOp::GreaterThanEqual => Ok(HlirExprKind::GreaterThanEqual(left, right)),
+            BinaryOp::LessThan => Ok(HlirExprKind::LessThan(left, right)),
+            BinaryOp::LessThanEqual => Ok(HlirExprKind::LessThanEqual(left, right)),
+            BinaryOp::LogicalAnd => Ok(HlirExprKind::LogicalAnd(left, right)),
+            BinaryOp::LogicalOr => Ok(HlirExprKind::LogicalOr(left, right)),
+            BinaryOp::BitwiseAnd => Ok(HlirExprKind::BitwiseAnd(left, right)),
+            BinaryOp::BitwiseOr => Ok(HlirExprKind::BitwiseOr(left, right)),
+            BinaryOp::BitwiseXor => Ok(HlirExprKind::BitwiseXor(left, right)),
+            BinaryOp::LeftShift => Ok(HlirExprKind::LeftShift(left, right)),
+            BinaryOp::RightShift => Ok(HlirExprKind::RightShift(left, right)),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum CallType {
     FunctionCall {
         ident: InternedStr,

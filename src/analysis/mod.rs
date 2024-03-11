@@ -2,11 +2,14 @@ mod flow;
 pub mod hlir;
 mod symbols;
 
-use crate::analysis::hlir::{HighLevelIR, HlirExpr, HlirType, HlirTypeKind, HlirVariable};
+use crate::analysis::hlir::{
+    HighLevelIR, HlirExpr, HlirExprKind, HlirType, HlirTypeDecl, HlirTypeKind, HlirVarInit,
+    HlirVariable,
+};
 use crate::analysis::symbols::SymbolResolver;
 use crate::parser::ast::{
-    ASTRoot, AbstractSyntaxTree, Block, DeclarationSpecifier, Expression, InitDeclaration,
-    TypeQualifier, TypeSpecifier, VariableDeclaration,
+    ASTRoot, AbstractSyntaxTree, AssignOp, BinaryOp, Block, DeclarationSpecifier, Expression,
+    InitDeclaration, TypeQualifier, TypeSpecifier, VariableDeclaration,
 };
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
@@ -17,6 +20,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub type SharedReporter = Rc<RefCell<Reporter>>;
+
+macro_rules! cast {
+    ($hlir:expr, $to:expr) => {{
+        let ty = $hlir.ty.clone();
+        HlirExpr {
+            kind: Box::new(HlirExprKind::Cast($to, $hlir)),
+            ty,
+            is_lval: false,
+        }
+    }};
+}
 
 pub struct GlobalValidator<'a> {
     ast: AbstractSyntaxTree,
@@ -35,8 +49,9 @@ impl<'a> GlobalValidator<'a> {
         }
     }
 
-    fn report_error(&mut self, error: CompilerError) {
+    fn report_error(&mut self, error: CompilerError) -> Result<(), ()> {
         self.reporter.borrow_mut().report_error(error);
+        Err(())
     }
 
     fn report_warning(&mut self, warning: CompilerWarning) {
@@ -95,18 +110,13 @@ impl<'a> GlobalValidator<'a> {
             return Err(());
         }
 
-        let initializer = if let Some(init) = &var.initializer {
+        let initializer: Option<HlirVarInit> = if let Some(init) = &var.initializer {
             todo!("Validate variable initializer here!");
         } else {
             None
         };
 
-        Ok(HlirVariable {
-            ty,
-            ident,
-            is_array: var.is_array,
-            initializer,
-        })
+        todo!("get size of array and create variable");
     }
 
     fn validate_variable_specifier(
@@ -138,9 +148,14 @@ impl<'a> GlobalValidator<'a> {
         }
 
         let ty_kind = self.validate_type(&specifier.ty, span)?;
+        let ty_dec = if specifier.pointer {
+            HlirTypeDecl::Pointer(false)
+        } else {
+            HlirTypeDecl::Basic
+        };
         Ok(HlirType {
             kind: ty_kind,
-            pointer: specifier.pointer,
+            decl: ty_dec,
         })
     }
 
@@ -265,6 +280,266 @@ impl<'a> GlobalValidator<'a> {
     }
 
     // Expression Validation
+    fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
+        todo!()
+    }
+
+    fn try_cast_together(
+        &mut self,
+        left: HlirExpr,
+        right: HlirExpr,
+        span: Span,
+    ) -> Result<(HlirExpr, HlirExpr), ()> {
+        let mut left = left;
+        let mut right = right;
+        if left.ty != right.ty {
+            if let Some(cast) = left.ty.try_implicit_cast(&right.ty) {
+                let casted = HlirExprKind::Cast(cast, left);
+                left = HlirExpr {
+                    kind: Box::new(casted),
+                    ty: right.ty.clone(),
+                    is_lval: false,
+                };
+            } else if let Some(cast) = right.ty.try_implicit_cast(&left.ty) {
+                let casted = HlirExprKind::Cast(cast, right);
+                right = HlirExpr {
+                    kind: Box::new(casted),
+                    ty: left.ty.clone(),
+                    is_lval: false,
+                };
+            } else {
+                let err = CompilerError::InvalidBinaryOperation(
+                    left.ty.to_string(),
+                    right.ty.to_string(),
+                    span,
+                );
+                self.report_error(err);
+                return Err(());
+            };
+        }
+        Ok((left, right))
+    }
+
+    fn validate_binary_expression(
+        &mut self,
+        op: &BinaryOp,
+        left: &Expression,
+        right: &Expression,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        let mut left = self.validate_expression(left)?;
+        let mut right = self.validate_expression(right)?;
+        if left.ty.is_array() || right.ty.is_array() {
+            let err = CompilerError::InvalidArrayOperation(span);
+            self.report_error(err);
+            return Err(());
+        }
+        self.validate_binary_hlir_expression(op, left, right, span)
+    }
+
+    fn validate_binary_hlir_expression(
+        &mut self,
+        op: &BinaryOp,
+        left: HlirExpr,
+        right: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
+                self.validate_arithmetic_binary_op(op, left, right, span)
+            }
+
+            BinaryOp::Assign(assign_op) => self.validate_assign_op(assign_op, left, right, span),
+
+            BinaryOp::Equal
+            | BinaryOp::NotEqual
+            | BinaryOp::GreaterThan
+            | BinaryOp::GreaterThanEqual
+            | BinaryOp::LessThan
+            | BinaryOp::LessThanEqual => {
+                self.validate_binary_equivalence_expression(op, left, right, span)
+            }
+
+            BinaryOp::LogicalAnd
+            | BinaryOp::LogicalOr
+            | BinaryOp::BitwiseAnd
+            | BinaryOp::BitwiseOr
+            | BinaryOp::BitwiseXor
+            | BinaryOp::LeftShift
+            | BinaryOp::RightShift => {
+                self.validate_binary_bitwise_expression(op, left, right, span)
+            }
+        }
+    }
+
+    fn validate_arithmetic_binary_op(
+        &mut self,
+        op: &BinaryOp,
+        left: HlirExpr,
+        right: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        let ty = left.ty.clone();
+        let kind = if left.ty.is_pointer() && right.ty.is_pointer() {
+            // pointers can add and subtract from each other, resulting in a long.
+            self.report_error(CompilerError::CustomError(
+                "Pointer arithmetic not supported".into(),
+                span,
+            ));
+            return Err(());
+        } else if left.ty.is_pointer() && right.ty.is_numeric() {
+            // operator can be addition or subtraction
+            match op {
+                BinaryOp::Add => HlirExprKind::Add(left, right),
+                BinaryOp::Sub => HlirExprKind::Sub(left, right),
+                _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
+            }
+        } else if left.ty.is_numeric() && right.ty.is_numeric() {
+            let (left, right) = self.try_cast_together(left, right, span)?;
+            match op {
+                BinaryOp::Add => HlirExprKind::Add(left, right),
+                BinaryOp::Sub => HlirExprKind::Sub(left, right),
+                BinaryOp::Mul => HlirExprKind::Mul(left, right),
+                BinaryOp::Div => HlirExprKind::Div(left, right),
+                BinaryOp::Mod => HlirExprKind::Mod(left, right),
+                _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
+            }
+        } else {
+            self.report_error(CompilerError::InvalidBinaryOperation(
+                left.ty.to_string(),
+                right.ty.to_string(),
+                span,
+            ));
+            return Err(());
+        };
+        Ok(HlirExpr {
+            kind: Box::new(kind),
+            ty,
+            is_lval: false,
+        })
+    }
+    fn validate_assign_op(
+        &mut self,
+        op: &AssignOp,
+        left: HlirExpr,
+        right: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        if !left.is_lval {
+            let err = CompilerError::LeftHandNotLVal(span);
+            self.report_error(err);
+            return Err(());
+        }
+        let op = match op {
+            AssignOp::Assign => None,
+            AssignOp::Plus => Some(BinaryOp::Add),
+            AssignOp::Minus => Some(BinaryOp::Sub),
+            AssignOp::Multiply => Some(BinaryOp::Mul),
+            AssignOp::Divide => Some(BinaryOp::Div),
+            AssignOp::Modulo => Some(BinaryOp::Mod),
+            AssignOp::BitwiseAnd => Some(BinaryOp::BitwiseAnd),
+            AssignOp::BitwiseOr => Some(BinaryOp::BitwiseOr),
+            AssignOp::BitwiseXor => Some(BinaryOp::BitwiseXor),
+            AssignOp::LeftShift => Some(BinaryOp::LeftShift),
+            AssignOp::RightShift => Some(BinaryOp::RightShift),
+        };
+        if let Some(op) = op {
+            let expr = self.validate_binary_hlir_expression(&op, left.clone(), right, span)?;
+            Ok(HlirExpr {
+                kind: Box::new(HlirExprKind::Assign(left, expr)),
+                ty: left.ty.clone(),
+                is_lval: false,
+            })
+        } else {
+            Ok(HlirExpr {
+                kind: Box::new(HlirExprKind::Assign(left, right)),
+                ty: left.ty.clone(),
+                is_lval: false,
+            })
+        }
+    }
+
+    fn validate_binary_equivalence_expression(
+        &mut self,
+        op: &BinaryOp,
+        left: HlirExpr,
+        right: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        debug_assert!(!left.ty.is_array());
+        debug_assert!(!right.ty.is_array());
+        if (left.ty.is_pointer() && !right.ty.is_pointer())
+            || (!left.ty.is_pointer() && right.ty.is_pointer())
+        {
+            let err = CompilerError::InvalidBinaryOperation(
+                left.ty.to_string(),
+                right.ty.to_string(),
+                span,
+            );
+            self.report_error(err);
+            return Err(());
+        }
+        let (left, right) = if left.ty != right.ty {
+            self.try_cast_together(left, right, span)?
+        } else {
+            (left, right)
+        };
+        let kind = match op {
+            BinaryOp::Equal => HlirExprKind::Equal(left, right),
+            BinaryOp::NotEqual => HlirExprKind::NotEqual(left, right),
+            BinaryOp::GreaterThan => HlirExprKind::GreaterThan(left, right),
+            BinaryOp::GreaterThanEqual => HlirExprKind::GreaterThanEqual(left, right),
+            BinaryOp::LessThan => HlirExprKind::LessThan(left, right),
+            BinaryOp::LessThanEqual => HlirExprKind::LessThanEqual(left, right),
+            _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
+        };
+        Ok(HlirExpr {
+            kind: Box::new(kind),
+            ty: HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+            is_lval: false,
+        })
+    }
+
+    fn validate_binary_bitwise_expression(
+        &mut self,
+        op: &BinaryOp,
+        left: HlirExpr,
+        right: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        if (left.is_integer() && right.is_pointer()) || (left.is_pointer() && right.is_integer()) {
+            let err = CompilerError::InvalidBinaryOperation(
+                left.ty.to_string(),
+                right.ty.to_string(),
+                span,
+            );
+            self.report_error(err);
+            return Err(());
+        }
+        let (left, right) = if left.is_pointer() && right.is_pointer() {
+            (
+                cast!(
+                    left,
+                    HlirType::new(HlirTypeKind::Long(false), HlirTypeDecl::Basic)
+                ),
+                cast!(
+                    right,
+                    HlirType::new(HlirTypeKind::Long(false), HlirTypeDecl::Basic)
+                ),
+            )
+        } else {
+            self.try_cast_together(left, right, span)?
+        };
+        let kind = match op {
+            BinaryOp::BitwiseAnd => HlirExprKind::BitwiseAnd(left, right),
+            BinaryOp::BitwiseOr => HlirExprKind::BitwiseOr(left, right),
+            BinaryOp::BitwiseXor => HlirExprKind::BitwiseXor(left, right),
+            BinaryOp::LeftShift => HlirExprKind::LeftShift(left, right),
+            BinaryOp::RightShift => HlirExprKind::RightShift(left, right),
+            _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
+        };
+        todo!();
+    }
 
     fn validate_primary_expression(
         &mut self,
