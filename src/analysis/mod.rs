@@ -293,54 +293,49 @@ impl<'a> GlobalValidator<'a> {
     // Expression Validation
     fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
         match expr {
-            Expression::Literal(literal) => match &literal.value {
-                Literal::Integer { .. } => {}
-                Literal::Float { .. } => {}
-                Literal::Char { .. } => {}
-                Literal::String { .. } => {}
-            },
+            Expression::Literal(literal) => {
+                todo!("match on literal types and validate / convert to HlirExpr");
+            }
             Expression::Variable(variable) => {
-                // validate variable exists, return HlirExpr with the type of the variable and is_lval
+                todo!("validate variable exists, return HlirExpr with the type of the variable and is_lval");
             }
             Expression::Sizeof(ty_or_expr) => {
-                // validate type or expression and return HlirExpr as an Int
+                todo!("validate type or expression and return HlirExpr as an Int");
             }
             Expression::Parenthesized(expr) => {
-                // just remove the parentheses and validate the expression
+                todo!("just remove the parentheses and validate the expression");
             }
             Expression::PostFix(op, expr) => {
-                // validate op can be performed on expr, return valid op
+                todo!("validate op can be performed on expr, return valid op");
             }
             Expression::Unary(op, expr) => {
-                // validate op can be performed on expr, return valid op
+                todo!("validate op can be performed on expr, return valid op");
             }
             Expression::Binary(op, left, right) => {
-                let left_span = left.location;
-                let right_span = right.location;
+                let span = left.location.merge(right.location);
                 let left = self.validate_expression(left)?;
                 let right = self.validate_expression(right)?;
-                self.validate_binary_expression(op, left, right, left_span);
+                self.validate_binary_expression(op, left, right, span)
             }
             Expression::FunctionCall(ident, args) => {
-                // validate function exists and validate args
+                todo!("validate function exists and validate args");
             }
             Expression::Index(left, index) => {
-                // validate left can be indexed into and validate index is integer type
+                todo!("validate left can be indexed into and validate index is integer type");
             }
             Expression::Member(body, member) => {
-                // validate body is a struct and member exists
+                todo!("validate body is a struct and member exists");
             }
             Expression::PointerMember(body, member) => {
-                // validate body is a struct pointer and member exists
+                todo!("validate body is a struct pointer and member exists");
             }
             Expression::Cast(dec, expr) => {
-                // validate cast is valid and expr is valid
+                todo!("validate cast is valid and expr is valid");
             }
             Expression::ArrayInitializer(arr) => {
-                // validate all elements are of the same type
+                todo!("validate all elements are of the same type");
             }
         }
-        todo!()
     }
 
     fn try_cast_together(
