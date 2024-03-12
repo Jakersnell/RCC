@@ -172,6 +172,15 @@ pub enum CompilerError {
 
     #[error("Type specifier '{0}' is invalid in this position: {1}")]
     InvalidTypeSpecifierOrder(String, Span),
+
+    #[error("Not a struct: {0}")]
+    NotAStruct(Span),
+
+    #[error("Not a member for this struct: {0}")]
+    MemberNotFound(Span),
+
+    #[error("Cannot assign to a const variable: {0}")]
+    ConstAssignment(Span),
 }
 
 #[derive(Error, Debug)]
