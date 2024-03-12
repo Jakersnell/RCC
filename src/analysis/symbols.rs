@@ -1,4 +1,4 @@
-use crate::analysis::hlir::{HlirType, HlirTypeDecl, HlirTypeKind, HlirVariable};
+use crate::analysis::hlir::{HlirStruct, HlirType, HlirTypeDecl, HlirTypeKind, HlirVariable};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{str_intern, Locatable, Span};
@@ -15,77 +15,82 @@ pub struct BuiltinFunctionSymbol {
     return_ty: HlirType,
 }
 thread_local! {
-    static BUILTINS: [BuiltinFunctionSymbol; 3] = [
-        BuiltinFunctionSymbol {
-            ty: "C",
-            location: "stdio.h",
-            ident: "printf",
-            params: vec![HlirType {
-                kind: HlirTypeKind::Char(true),
-                decl: HlirTypeDecl::Pointer(false),
-            }],
-            varargs: true,
-            return_ty: HlirType {
-                kind: HlirTypeKind::Void,
-                decl: HlirTypeDecl::Basic,
-            },
-        },
-        BuiltinFunctionSymbol {
-            ty: "C",
-            location: "stdlib.h",
-            ident: "malloc",
-            params: vec![HlirType {
-                kind: HlirTypeKind::Int(true),
-                decl: HlirTypeDecl::Basic,
-            }],
-            varargs: false,
-            return_ty: HlirType {
-                kind: HlirTypeKind::Void,
-                decl: HlirTypeDecl::Basic,
-            },
-        },
-        BuiltinFunctionSymbol {
-            ty: "C",
-            location: "stdlib.h",
-            ident: "free",
-            params: vec![HlirType {
-                kind: HlirTypeKind::Void,
-                decl: HlirTypeDecl::Pointer(false),
-            }],
-            varargs: false,
-            return_ty: HlirType {
-                kind: HlirTypeKind::Void,
-                decl: HlirTypeDecl::Basic,
-            },
-        },
+    static BUILTINS: [(&'static str, FunctionSymbol); 3] = [
+        (
+            "printf",
+            FunctionSymbol {
+                location: Some("stdio.h"),
+                params: vec![HlirType {
+                    kind: HlirTypeKind::Char(true),
+                    decl: HlirTypeDecl::Pointer(false),
+                }],
+                varargs: true,
+                return_ty: HlirType {
+                    kind: HlirTypeKind::Void,
+                    decl: HlirTypeDecl::Basic,
+                },
+            }
+        ),
+        (
+            "malloc",
+            FunctionSymbol {
+                location: Some("stdlib.h"),
+                  params: vec![HlirType {
+                    kind: HlirTypeKind::Int(true),
+                    decl: HlirTypeDecl::Basic,
+                }],
+                varargs: false,
+                return_ty: HlirType {
+                    kind: HlirTypeKind::Void,
+                    decl: HlirTypeDecl::Basic,
+                },
+            }
+        ),
+        (
+            "free",
+            FunctionSymbol {
+                location: Some("stdlib.h"),
+                params: vec![HlirType {
+                    kind: HlirTypeKind::Void,
+                    decl: HlirTypeDecl::Pointer(false),
+                }],
+                varargs: false,
+                return_ty: HlirType {
+                    kind: HlirTypeKind::Void,
+                    decl: HlirTypeDecl::Basic,
+                },
+            }
+        ),
     ];
 }
 
-pub enum SymbolKind {
-    BuiltinFunction(BuiltinFunctionSymbol),
-    UserFunction(UserFunctionSymbol),
-    Struct(StructSymbol),
+pub(super) enum SymbolKind<'a> {
+    Function(FunctionSymbol),
+    Struct(StructSymbol<'a>),
     Variable(VariableSymbol),
 }
 
-pub struct StructSymbol {
-    size: usize,
-    fields: HashMap<InternedStr, HlirType>,
+pub(super) struct StructSymbol<'a> {
+    pub(super) size: usize,
+    pub(super) body: SymbolResolver<'a>,
 }
 
-pub struct UserFunctionSymbol {
-    return_ty: HlirType,
-    parameters: Vec<HlirType>,
+#[derive(Clone)]
+pub(super) struct FunctionSymbol {
+    pub(super) location: Option<&'static str>,
+    pub(super) return_ty: HlirType,
+    pub(super) varargs: bool,
+    pub(super) params: Vec<HlirType>,
 }
 
-pub struct VariableSymbol {
-    ty: HlirType,
-    is_const: bool,
-    is_initialized: bool,
+pub(super) struct VariableSymbol {
+    pub(super) ty: HlirType,
+    pub(super) is_const: bool,
+    pub(super) is_initialized: bool,
 }
 
 pub struct SymbolResolver<'a> {
-    symbols: HashMap<InternedStr, SymbolKind>,
+    symbols: HashMap<InternedStr, SymbolKind<'a>>,
     parent: Option<&'a SymbolResolver<'a>>,
 }
 
@@ -104,8 +109,8 @@ impl<'a> SymbolResolver<'a> {
         BUILTINS.with(|builtins| {
             for builtin in builtins.iter() {
                 self.symbols.insert(
-                    str_intern::intern(builtin.ident),
-                    SymbolKind::BuiltinFunction(builtin.clone()),
+                    str_intern::intern(builtin.0),
+                    SymbolKind::Function(builtin.1.clone()),
                 );
             }
         });
@@ -122,12 +127,14 @@ impl<'a> SymbolResolver<'a> {
         &mut self,
         ident: &InternedStr,
         return_ty: HlirType,
-        parameters: Vec<HlirType>,
+        params: Vec<HlirType>,
         span: Span,
     ) -> SymbolResult {
-        let symbol = SymbolKind::UserFunction(UserFunctionSymbol {
+        let symbol = SymbolKind::Function(FunctionSymbol {
+            location: None,
             return_ty,
-            parameters,
+            varargs: false,
+            params,
         });
         self.add_symbol(ident, symbol, span)
     }
@@ -150,8 +157,13 @@ impl<'a> SymbolResolver<'a> {
     }
 
     #[inline]
-    fn add_symbol(&mut self, ident: &InternedStr, kind: SymbolKind, span: Span) -> SymbolResult {
-        if self.symbols.contains_key(ident) {
+    fn add_symbol(
+        &mut self,
+        ident: &InternedStr,
+        kind: SymbolKind<'a>,
+        span: Span,
+    ) -> SymbolResult {
+        if self.retrieve(ident, span).is_ok() {
             Err(CompilerError::IdentifierExists(span))
         } else {
             self.symbols.insert(ident.clone(), kind);
@@ -159,7 +171,7 @@ impl<'a> SymbolResolver<'a> {
         }
     }
 
-    pub fn get_function_call(
+    pub fn validate_function_call(
         &self,
         ident: &InternedStr,
         args: &[HlirType],
@@ -167,12 +179,12 @@ impl<'a> SymbolResolver<'a> {
     ) -> Result<HlirType, CompilerError> {
         let kind = self.retrieve(ident, span)?;
         match kind {
-            SymbolKind::BuiltinFunction(builtin) => {
+            SymbolKind::Function(builtin) => {
                 Self::validate_function_params(builtin.varargs, &builtin.params, args, span)?;
                 Ok(builtin.return_ty.clone())
             }
-            SymbolKind::UserFunction(user) => {
-                Self::validate_function_params(false, &user.parameters, args, span)?;
+            SymbolKind::Function(user) => {
+                Self::validate_function_params(false, &user.params, args, span)?;
                 Ok(user.return_ty.clone())
             }
             _ => Err(CompilerError::NotAFunction(span)),
@@ -199,30 +211,33 @@ impl<'a> SymbolResolver<'a> {
         Ok(())
     }
 
-    pub fn get_variable_type(
-        &self,
-        ident: &InternedStr,
-        span: Span,
-    ) -> Result<HlirType, CompilerError> {
-        match self.retrieve(ident, span)? {
-            SymbolKind::Variable(var_ty) => Ok(var_ty.ty.clone()),
-            _ => Err(CompilerError::NotAVariable(span)),
-        }
-    }
-
     pub fn check_valid_assignment(
         &self,
         ident: &InternedStr,
         ty: &HlirType,
         span: Span,
     ) -> SymbolResult {
-        let var_ty = self.get_variable_type(ident, span)?;
-        if var_ty != *ty {
+        let var = match self.retrieve(ident, span)? {
+            SymbolKind::Variable(var_ty) => Ok(var_ty),
+            _ => Err(CompilerError::LeftHandNotLVal(span)),
+        }?;
+        self.verify_for_variable_symbol_assignment(ty, var, span)
+    }
+
+    fn verify_for_variable_symbol_assignment(
+        &self,
+        ty: &HlirType,
+        var: &VariableSymbol,
+        span: Span,
+    ) -> Result<(), CompilerError> {
+        if &var.ty != ty {
             Err(CompilerError::VariableTypeMismatch(
                 span,
                 ty.to_string(),
-                var_ty.to_string(),
+                var.ty.to_string(),
             ))
+        } else if var.is_const {
+            Err(CompilerError::ConstAssignment(span))
         } else {
             Ok(())
         }
@@ -236,6 +251,36 @@ impl<'a> SymbolResolver<'a> {
             parent.retrieve(ident, span)
         } else {
             Err(CompilerError::IdentNotFound(span))
+        }
+    }
+
+    pub fn add_struct(&mut self, _struct: &HlirStruct, span: Span) -> SymbolResult {
+        let ident = _struct.ident.clone();
+        let mut symbol = StructSymbol {
+            size: _struct.size,
+            body: SymbolResolver::new(None),
+        };
+        for field in &_struct.fields {
+            symbol.body.add_variable(
+                &ident,
+                &field.ty,
+                field.is_const,
+                field.initializer.is_some(),
+                span,
+            )?;
+        }
+        let symbol = SymbolKind::Struct(symbol);
+        self.add_symbol(&ident, symbol, span)
+    }
+
+    pub fn get_struct(
+        &self,
+        ident: &InternedStr,
+        span: Span,
+    ) -> Result<&StructSymbol, CompilerError> {
+        match self.retrieve(ident, span)? {
+            SymbolKind::Struct(s) => Ok(s),
+            _ => Err(CompilerError::NotAStruct(span)),
         }
     }
 }
