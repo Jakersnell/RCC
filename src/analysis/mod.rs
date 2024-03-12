@@ -294,6 +294,22 @@ impl<'a> GlobalValidator<'a> {
     fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
         match expr {
             Expression::Literal(literal) => {
+                match &literal.value {
+                    Literal::Integer { value, suffix } => {
+                        let kind = suffix.as_ref().map(|suffix| match suffix.as_str() {
+                            "l" => HlirTypeKind::Long(false), // check here for conversion issues
+                            "ll" => HlirTypeKind::LLong(false),
+                            "u" => HlirTypeKind::Int(true),
+                            "ul" => HlirTypeKind::Long(true),
+                            "ull" => HlirTypeKind::LLong(true),
+                            s => panic!("No other suffixes should be present. suffix: `{}`", s),
+                        });
+                        let kind = kind.unwrap_or(HlirTypeKind::Int(false));
+                    }
+                    Literal::Float { value, suffix } => {}
+                    Literal::Char { value } => {}
+                    Literal::String { value } => {}
+                };
                 todo!("match on literal types and validate / convert to HlirExpr");
             }
             Expression::Variable(variable) => {

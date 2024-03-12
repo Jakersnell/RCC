@@ -135,7 +135,7 @@ impl Lexer {
 
         let literal = match state {
             State::Zero | State::Decimal | State::Hex | State::Binary | State::Octal => {
-                let result = u128::from_str_radix(&number, base);
+                let result = isize::from_str_radix(&number, base);
                 let value = result.unwrap_or_else(|error| {
                     self.report_error(CompilerError::ParseIntError(span));
                     0

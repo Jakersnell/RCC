@@ -33,10 +33,20 @@ impl Token {
 
 #[derive(Debug, PartialEq)]
 pub enum Literal {
-    Integer { value: u128, suffix: Option<String> },
-    Float { value: f64, suffix: Option<String> },
-    Char { value: char },
-    String { value: Substr },
+    Integer {
+        value: isize,
+        suffix: Option<String>,
+    },
+    Float {
+        value: f64,
+        suffix: Option<String>,
+    },
+    Char {
+        value: char,
+    },
+    String {
+        value: Substr,
+    },
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
