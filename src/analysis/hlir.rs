@@ -21,14 +21,15 @@ pub struct HighLevelIR {
 #[derive(Debug)]
 pub struct HlirStruct {
     pub ident: InternedStr,
-    pub fields: HashMap<InternedStr, HlirType>,
+    pub fields: Vec<HlirVariable>,
+    pub size: usize,
 }
 
 #[derive(Debug)]
 pub struct HlirFunction {
     pub ty: HlirType,
     pub ident: InternedStr,
-    pub parameters: HashMap<InternedStr, HlirType>,
+    pub parameters: Vec<HlirVariable>,
     pub body: HlirBlock,
 }
 
@@ -37,6 +38,7 @@ pub struct HlirVariable {
     pub ty: HlirType,
     pub ident: InternedStr,
     pub array: Option<usize>,
+    pub is_const: bool,
     pub initializer: Option<HlirVarInit>,
 }
 
@@ -70,7 +72,7 @@ impl HlirType {
 pub enum HlirTypeDecl {
     Basic,
     Pointer(bool), // true if pointer is const
-    Array,
+    Array,         // TODO: support array size
 }
 
 impl Display for HlirTypeDecl {
@@ -151,18 +153,12 @@ pub enum HlirTypeKind {
 impl HlirTypeKind {
     pub fn is_numeric(&self) -> bool {
         use HlirTypeKind::*;
-        match self {
-            Char(_) | Int(_) | Long(_) | LLong(_) | Float | Double => true,
-            _ => false,
-        }
+        matches!(self, Char(_) | Int(_) | Long(_) | LLong(_) | Float | Double)
     }
 
     pub fn is_integer(&self) -> bool {
         use HlirTypeKind::*;
-        match self {
-            Char(_) | Int(_) | Long(_) | LLong(_) => true,
-            _ => false,
-        }
+        matches!(self, Char(_) | Int(_) | Long(_) | LLong(_))
     }
 }
 
