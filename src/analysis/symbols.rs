@@ -87,6 +87,7 @@ pub(super) struct VariableSymbol {
     pub(super) ty: HlirType,
     pub(super) is_const: bool,
     pub(super) is_initialized: bool,
+    pub(super) array_size: Option<u64>,
 }
 
 pub struct SymbolResolver<'a> {
@@ -146,12 +147,14 @@ impl<'a> SymbolResolver<'a> {
         ty: &HlirType,
         is_const: bool,
         is_initialized: bool,
+        array_size: Option<u64>,
         span: Span,
     ) -> SymbolResult {
         let symbol = SymbolKind::Variable(VariableSymbol {
             ty: ty.clone(),
             is_const,
             is_initialized,
+            array_size,
         });
         self.add_symbol(ident, symbol, span)
     }
@@ -224,6 +227,17 @@ impl<'a> SymbolResolver<'a> {
         self.verify_for_variable_symbol_assignment(ty, var, span)
     }
 
+    pub fn get_variable_type(
+        &self,
+        ident: &InternedStr,
+        span: Span,
+    ) -> Result<HlirType, CompilerError> {
+        match self.retrieve(ident, span)? {
+            SymbolKind::Variable(var) => Ok(var.ty.clone()),
+            _ => Err(CompilerError::NotAVariable(span)),
+        }
+    }
+
     fn verify_for_variable_symbol_assignment(
         &self,
         ty: &HlirType,
@@ -261,11 +275,17 @@ impl<'a> SymbolResolver<'a> {
             body: SymbolResolver::new(None),
         };
         for field in &_struct.fields {
+            let array_size = if let HlirTypeDecl::Array(size) = &field.ty.decl {
+                Some(*size)
+            } else {
+                None
+            };
             symbol.body.add_variable(
                 &ident,
                 &field.ty,
                 field.is_const,
                 field.initializer.is_some(),
+                array_size,
                 span,
             )?;
         }
