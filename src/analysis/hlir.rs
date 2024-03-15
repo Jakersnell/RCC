@@ -37,7 +37,6 @@ pub struct HlirFunction {
 pub struct HlirVariable {
     pub ty: HlirType,
     pub ident: InternedStr,
-    pub array: Option<usize>,
     pub is_const: bool,
     pub initializer: Option<HlirVarInit>,
 }
@@ -56,7 +55,7 @@ pub struct HlirType {
 
 impl HlirType {
     pub fn is_array(&self) -> bool {
-        matches!(self.decl, HlirTypeDecl::Array)
+        matches!(self.decl, HlirTypeDecl::Array(_))
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -72,7 +71,7 @@ impl HlirType {
 pub enum HlirTypeDecl {
     Basic,
     Pointer(bool), // true if pointer is const
-    Array,         // TODO: support array size
+    Array(u64),
 }
 
 impl Display for HlirTypeDecl {
@@ -81,7 +80,7 @@ impl Display for HlirTypeDecl {
         match self {
             Basic => Ok(()),
             Pointer(constant) => write!(f, "*{}", if *constant { "const " } else { "" }),
-            Array => write!(f, "[]"),
+            Array(size) => write!(f, "[{}]", size),
         }
     }
 }
@@ -98,10 +97,7 @@ impl HlirType {
             (Char(_), Long(unsigned), Basic, Basic) => Some(Long(*unsigned)),
             (Char(_), Double, Basic, Basic) => Some(Double),
             (Int(_), Long(unsigned), Basic, Basic) => Some(Long(*unsigned)),
-            (Int(_), LLong(unsigned), Basic, Basic) => Some(LLong(*unsigned)),
             (Int(_), Double, Basic, Basic) => Some(Double),
-            (Char(_), LLong(unsigned), Basic, Basic) => Some(LLong(*unsigned)),
-            (Long(_), LLong(unsigned), Basic, Basic) => Some(LLong(*unsigned)),
             _ => None,
         };
         ty_kind.map(|kind| HlirType::new(kind, Basic))
@@ -117,15 +113,11 @@ impl HlirType {
         let ty_kind = match (&self.kind, &other.kind, &self.decl, &other.decl) {
             (Int(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
             (Long(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
-            (LLong(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
             (Double, Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
             (Long(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
-            (LLong(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
             (Int(_), Double, Basic, Basic) => Some(Double),
             (Long(_), Double, Basic, Basic) => Some(Double),
-            (LLong(_), Double, Basic, Basic) => Some(Double),
             (_, Long(unsigned), Pointer(_), Basic) => Some(Long(*unsigned)), // all pointers can cast to long
-            (_, LLong(unsigned), Pointer(_), Basic) => Some(LLong(*unsigned)), // all pointers can cast to long long
             _ => None,
         };
 
@@ -141,10 +133,9 @@ impl Display for HlirType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum HlirTypeKind {
     Void,
-    Char(bool),  // 8
-    Int(bool),   // signed/unsigned
-    Long(bool),  // i64
-    LLong(bool), // i128
+    Char(bool), // 8
+    Int(bool),  // signed/unsigned
+    Long(bool), // i64
     Float,
     Double,
     Struct(InternedStr),
@@ -153,12 +144,12 @@ pub enum HlirTypeKind {
 impl HlirTypeKind {
     pub fn is_numeric(&self) -> bool {
         use HlirTypeKind::*;
-        matches!(self, Char(_) | Int(_) | Long(_) | LLong(_) | Float | Double)
+        matches!(self, Char(_) | Int(_) | Long(_) | Float | Double)
     }
 
     pub fn is_integer(&self) -> bool {
         use HlirTypeKind::*;
-        matches!(self, Char(_) | Int(_) | Long(_) | LLong(_))
+        matches!(self, Char(_) | Int(_) | Long(_))
     }
 }
 
@@ -182,15 +173,17 @@ impl Display for HlirTypeKind {
             Float => write!(f, "float"),
             Double => write!(f, "double"),
             Struct(ident) => write!(f, "struct {}", ident),
-            LLong(unsigned) => write_signed!("long long", *unsigned),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum HlirLiteral {
-    Integer(isize),
-    Floating(f64),
+    Int(i64),
+    UInt(u64),
+    Float(f64),
+    String(Vec<u8>),
+    Char(u8),
 }
 
 #[derive(Debug, Clone, new)]
@@ -201,6 +194,15 @@ pub struct HlirExpr {
 }
 
 impl HlirExpr {
+    pub fn is_literal(&self) -> bool {
+        matches!(self.kind.as_ref(), HlirExprKind::Literal(_))
+    }
+    pub fn is_string(&self) -> bool {
+        matches!(
+            self.kind.as_ref(),
+            HlirExprKind::Literal(HlirLiteral::String(_))
+        )
+    }
     pub fn is_integer_or_pointer(&self) -> bool {
         self.ty.kind.is_integer() || self.ty.is_pointer()
     }
