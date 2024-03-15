@@ -22,7 +22,7 @@ pub struct HighLevelIR {
 pub struct HlirStruct {
     pub ident: InternedStr,
     pub fields: Vec<HlirVariable>,
-    pub size: usize,
+    pub size: u64,
 }
 
 #[derive(Debug)]
