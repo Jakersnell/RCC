@@ -1,3 +1,4 @@
+pub mod arch;
 pub mod ast_pretty_print;
 pub mod error;
 pub mod str_intern;
