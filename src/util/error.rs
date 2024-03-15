@@ -181,10 +181,19 @@ pub enum CompilerError {
 
     #[error("Cannot assign to a const variable: {0}")]
     ConstAssignment(Span),
+
+    #[error("Number to large to be represented with any type: {0}")]
+    NumberTooLarge(Span),
 }
 
 #[derive(Error, Debug)]
 pub enum CompilerWarning {
+    #[error("This expression has no effect: {0}")]
+    ExprNoEffect(Span),
+
+    #[error("Suffixes are currently ignored: {0}")]
+    SuffixIgnored(Span),
+
     #[error("Unused variable: {0}")]
     UnusedVariable(Span),
 
