@@ -2,6 +2,7 @@ mod flow;
 pub mod hlir;
 mod symbols;
 
+use crate::analysis::hlir::HlirLiteral::Char;
 use crate::analysis::hlir::{
     HighLevelIR, HlirExpr, HlirExprKind, HlirLiteral, HlirType, HlirTypeDecl, HlirTypeKind,
     HlirVarInit, HlirVariable,
@@ -10,7 +11,7 @@ use crate::analysis::symbols::SymbolResolver;
 use crate::lexer::tokens::Literal;
 use crate::parser::ast::{
     ASTRoot, AbstractSyntaxTree, AssignOp, BinaryOp, Block, DeclarationSpecifier, Expression,
-    InitDeclaration, TypeQualifier, TypeSpecifier, VariableDeclaration,
+    InitDeclaration, TypeOrExpression, TypeQualifier, TypeSpecifier, VariableDeclaration,
 };
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
@@ -169,16 +170,14 @@ impl<'a> GlobalValidator<'a> {
         enum State {
             Start,
             SeenUnsigned,
-            SeenUnsignedLong,
             SeenSigned,
-            SeenSignedLong,
             End,
         }
         let mut hlir_type: Option<HlirTypeKind> = None;
         let mut state = State::Start;
         let mut iter = specifiers.iter();
         macro_rules! seen_signed_or_unsigned {
-            ($ty_spec:ident, $unsigned:literal, $long:expr) => {
+            ($ty_spec:ident, $unsigned:literal) => {
                 match $ty_spec {
                     Some(TypeSpecifier::Char) => {
                         hlir_type = Some(HlirTypeKind::Char($unsigned));
@@ -189,7 +188,8 @@ impl<'a> GlobalValidator<'a> {
                         state = State::End;
                     }
                     Some(TypeSpecifier::Long) => {
-                        state = $long;
+                        hlir_type = Some(HlirTypeKind::Long($unsigned));
+                        state = State::End;
                     }
                     Some(ty) => {
                         let err =
@@ -205,30 +205,7 @@ impl<'a> GlobalValidator<'a> {
                 }
             };
         }
-        macro_rules! seen_signed_or_unsigned_long {
-            ($ty_spec:ident, $unsigned:literal) => {{
-                match $ty_spec {
-                    Some(TypeSpecifier::Int) => {
-                        hlir_type = Some(HlirTypeKind::Long($unsigned));
-                        state = State::End;
-                    }
-                    Some(TypeSpecifier::Long) => {
-                        hlir_type = Some(HlirTypeKind::LLong($unsigned));
-                        state = State::End;
-                    }
-                    Some(ty) => {
-                        let err =
-                            CompilerError::InvalidTypeSpecifierOrder(ty.to_string(), location);
-                        self.report_error(err);
-                        return Err(());
-                    }
-                    None => {
-                        hlir_type = Some(HlirTypeKind::Long($unsigned));
-                        state = State::End;
-                    }
-                }
-            }};
-        }
+
         loop {
             let mut ty_spec = if state != State::End {
                 iter.next()
@@ -251,7 +228,8 @@ impl<'a> GlobalValidator<'a> {
                         state = State::End;
                     }
                     Some(TypeSpecifier::Long) => {
-                        state = State::SeenSignedLong;
+                        hlir_type = Some(HlirTypeKind::Long(false));
+                        state = State::End;
                     }
                     Some(TypeSpecifier::Double) => {
                         hlir_type = Some(HlirTypeKind::Double);
@@ -269,14 +247,8 @@ impl<'a> GlobalValidator<'a> {
                     }
                     None => panic!("Span: {:?}", location),
                 },
-                State::SeenUnsigned => {
-                    seen_signed_or_unsigned!(ty_spec, true, State::SeenUnsignedLong)
-                }
-                State::SeenSigned => {
-                    seen_signed_or_unsigned!(ty_spec, false, State::SeenSignedLong)
-                }
-                State::SeenUnsignedLong => seen_signed_or_unsigned_long!(ty_spec, true),
-                State::SeenSignedLong => seen_signed_or_unsigned_long!(ty_spec, false),
+                State::SeenUnsigned => seen_signed_or_unsigned!(ty_spec, true),
+                State::SeenSigned => seen_signed_or_unsigned!(ty_spec, false),
                 State::End => break,
             }
         }
@@ -290,37 +262,88 @@ impl<'a> GlobalValidator<'a> {
         Ok(ty)
     }
 
+    fn validate_literal(&mut self, literal: &Literal, span: Span) -> Result<HlirExpr, ()> {
+        let (literal, kind) = match literal {
+            Literal::Integer { value, suffix } => {
+                if suffix.is_some() {
+                    let warning = CompilerWarning::SuffixIgnored(span);
+                    self.report_warning(warning);
+                }
+                if *value <= i64::MAX as isize {
+                    (HlirLiteral::Int(*value as i64), HlirTypeKind::Int(false))
+                } else if *value <= u64::MAX as isize {
+                    (HlirLiteral::UInt(*value as u64), HlirTypeKind::Int(true))
+                } else {
+                    let err = CompilerError::NumberTooLarge(span);
+                    self.report_error(err);
+                    (HlirLiteral::Int(0), HlirTypeKind::Int(false))
+                }
+            }
+            Literal::Float { value, suffix } => {
+                if suffix.is_some() {
+                    let warning = CompilerWarning::SuffixIgnored(span);
+                    self.report_warning(warning);
+                }
+                (HlirLiteral::Float(*value), HlirTypeKind::Double)
+            }
+            Literal::Char { value } => (HlirLiteral::Char(*value as u8), HlirTypeKind::Char(false)),
+            Literal::String { value } => {
+                let value = value.as_str().bytes().collect();
+                (HlirLiteral::String(value), HlirTypeKind::Char(false))
+            }
+        };
+        let ty = HlirType::new(kind, HlirTypeDecl::Basic);
+        Ok(HlirExpr {
+            kind: Box::new(HlirExprKind::Literal(literal)),
+            ty,
+            is_lval: false,
+        })
+    }
+
     // Expression Validation
     fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
         match expr {
-            Expression::Literal(literal) => {
-                match &literal.value {
-                    Literal::Integer { value, suffix } => {
-                        let kind = suffix.as_ref().map(|suffix| match suffix.as_str() {
-                            "l" => HlirTypeKind::Long(false), // check here for conversion issues
-                            "ll" => HlirTypeKind::LLong(false),
-                            "u" => HlirTypeKind::Int(true),
-                            "ul" => HlirTypeKind::Long(true),
-                            "ull" => HlirTypeKind::LLong(true),
-                            s => panic!("No other suffixes should be present. suffix: `{}`", s),
-                        });
-                        let kind = kind.unwrap_or(HlirTypeKind::Int(false));
-                    }
-                    Literal::Float { value, suffix } => {}
-                    Literal::Char { value } => {}
-                    Literal::String { value } => {}
-                };
-                todo!("match on literal types and validate / convert to HlirExpr");
-            }
-            Expression::Variable(variable) => {
-                todo!("validate variable exists, return HlirExpr with the type of the variable and is_lval");
-            }
+            Expression::Literal(literal) => self.validate_literal(literal, literal.location),
+            Expression::Variable(variable) => self
+                .function_scope
+                .as_ref()
+                .expect("Fatal compiler error: Function scope not set")
+                .get_variable_type(&variable.value, variable.location)
+                .map(|ty| HlirExpr {
+                    kind: Box::new(HlirExprKind::Variable(variable.value.clone())),
+                    ty,
+                    is_lval: true,
+                })
+                .map_err(|err| {
+                    self.report_error(err);
+                }),
             Expression::Sizeof(ty_or_expr) => {
-                todo!("validate type or expression and return HlirExpr as an Int");
+                let size = match &ty_or_expr.value {
+                    TypeOrExpression::Type(ty) => {
+                        let ty =
+                            self.validate_variable_specifier(&ty.specifier, ty_or_expr.location)?;
+                        self.sizeof(&ty)
+                    }
+                    TypeOrExpression::Expr(expr) => {
+                        let expr = self.validate_expression(expr)?;
+                        if !matches!(
+                            &*expr.kind,
+                            HlirExprKind::Variable(_) | HlirExprKind::Literal(_)
+                        ) {
+                            let warning = CompilerWarning::ExprNoEffect(ty_or_expr.location);
+                            self.report_warning(warning);
+                        }
+                        self.sizeof(&expr.ty)
+                    }
+                };
+                let ty = HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic);
+                Ok(HlirExpr {
+                    kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(size as i64))),
+                    ty,
+                    is_lval: false,
+                })
             }
-            Expression::Parenthesized(expr) => {
-                todo!("just remove the parentheses and validate the expression");
-            }
+            Expression::Parenthesized(expr) => self.validate_expression(expr),
             Expression::PostFix(op, expr) => {
                 todo!("validate op can be performed on expr, return valid op");
             }
@@ -352,6 +375,31 @@ impl<'a> GlobalValidator<'a> {
                 todo!("validate all elements are of the same type");
             }
         }
+    }
+
+    fn sizeof(&mut self, ty: &HlirType) -> u32 {
+        use crate::util::arch::*;
+        if ty.is_pointer() {
+            return POINTER_SIZE;
+        }
+
+        let size = match &ty.kind {
+            HlirTypeKind::Char(_) => CHAR_SIZE,
+            HlirTypeKind::Int(_) => INT_SIZE,
+            HlirTypeKind::Long(_) => LONG_SIZE,
+            HlirTypeKind::Double => DOUBLE_SIZE,
+            HlirTypeKind::Void => 0,
+            HlirTypeKind::Float => FLOAT_SIZE,
+            HlirTypeKind::Struct(ident) => {
+                todo!("get size of struct from symbol table")
+            }
+        };
+
+        if ty.is_array() {
+            todo!("get size of array")
+        }
+
+        size
     }
 
     fn try_cast_together(
@@ -397,8 +445,12 @@ impl<'a> GlobalValidator<'a> {
         right: HlirExpr,
         span: Span,
     ) -> Result<HlirExpr, ()> {
-        if left.ty.is_array() || right.ty.is_array() {
-            let err = CompilerError::InvalidArrayOperation(span);
+        if left.is_array() || right.is_array() || left.is_string() || right.is_string() {
+            let err = CompilerError::InvalidBinaryOperation(
+                left.ty.to_string(),
+                right.ty.to_string(),
+                span,
+            );
             self.report_error(err);
             return Err(());
         }
@@ -611,12 +663,12 @@ impl<'a> GlobalValidator<'a> {
 #[test]
 fn test_try_cast_together_results_in_correct_higher_type_for_valid_types() {
     let test_left = HlirExpr {
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Integer(1))),
+        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
         ty: HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
         is_lval: false,
     };
     let test_right = HlirExpr {
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Integer(1))),
+        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
         ty: HlirType::new(HlirTypeKind::Long(false), HlirTypeDecl::Basic),
         is_lval: false,
     };
@@ -679,9 +731,9 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
 fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
     let test_cases = [
         (
-            HlirTypeKind::Int(false),  // left
-            HlirTypeKind::Long(false), // right
-            HlirTypeKind::Long(false), // expected back
+            HlirTypeKind::Int(false), // left
+            HlirTypeKind::Long(true), // right
+            HlirTypeKind::Long(true), // expected back
         ),
         (
             HlirTypeKind::Int(false),
@@ -702,7 +754,7 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
     macro_rules! make_expr {
         ($kind:expr) => {
             HlirExpr {
-                kind: Box::new(HlirExprKind::Literal(HlirLiteral::Integer(1))),
+                kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
                 ty: HlirType::new($kind, HlirTypeDecl::Basic),
                 is_lval: false,
             }
