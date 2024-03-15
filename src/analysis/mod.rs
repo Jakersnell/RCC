@@ -34,19 +34,17 @@ macro_rules! cast {
     }};
 }
 
-pub struct GlobalValidator<'a> {
+pub struct GlobalValidator {
     ast: AbstractSyntaxTree,
-    scope: SymbolResolver<'a>,
-    function_scope: Option<SymbolResolver<'a>>,
+    scope: SymbolResolver,
     reporter: SharedReporter,
 }
 
-impl<'a> GlobalValidator<'a> {
+impl GlobalValidator {
     pub fn new(ast: AbstractSyntaxTree) -> Self {
         Self {
             ast,
             scope: SymbolResolver::create_root(),
-            function_scope: None,
             reporter: Rc::new(RefCell::new(Reporter::default())),
         }
     }
@@ -105,6 +103,21 @@ impl<'a> GlobalValidator<'a> {
         let ident_span = ident.location;
         let ident = ident.value.clone();
 
+        let mut is_const = false;
+        for ty_qual in &declaration.value.specifier.qualifiers {
+            // this is set up for expansion
+            match ty_qual {
+                TypeQualifier::Const => {
+                    if is_const {
+                        let warning = CompilerWarning::RedundantUsage(ty_qual.to_string(), span);
+                        self.report_warning(warning);
+                    } else {
+                        is_const = true;
+                    }
+                }
+            }
+        }
+
         let ty = self.validate_variable_specifier(&declaration.value.specifier, span)?;
         if var.is_array && var.array_size.is_none() && var.initializer.is_none() {
             let err = CompilerError::ArraySizeNotSpecified(span);
@@ -113,12 +126,49 @@ impl<'a> GlobalValidator<'a> {
         }
 
         let initializer: Option<HlirVarInit> = if let Some(init) = &var.initializer {
-            todo!("Validate variable initializer here!");
+            Some(self.validate_initializer(init, init.location)?)
         } else {
             None
         };
 
-        todo!("get size of array and create variable");
+        let array_size = var.array_size.map(|size| size as u64).or_else(|| {
+            initializer.as_ref().and_then(|init| match init {
+                HlirVarInit::Array(arr) => Some(arr.len() as u64),
+                HlirVarInit::Expr(_) => None,
+            })
+        });
+
+        let ty = if let Some(array_size) = array_size {
+            let mut ty = ty;
+            if matches!(ty.decl, HlirTypeDecl::Pointer(_)) {
+                panic!("Fatal compiler error: Array of pointers not supported");
+            }
+            ty.decl = HlirTypeDecl::Array(array_size);
+            ty
+        } else {
+            ty
+        };
+
+        Ok(HlirVariable {
+            ty,
+            ident,
+            is_const,
+            initializer,
+        })
+    }
+
+    fn validate_initializer(&mut self, expr: &Expression, span: Span) -> Result<HlirVarInit, ()> {
+        if let Expression::ArrayInitializer(arr) = expr {
+            let mut inits = Vec::with_capacity(arr.len());
+            for init in arr {
+                let init = self.validate_expression(expr)?;
+                inits.push(init);
+            }
+            Ok(HlirVarInit::Array(inits))
+        } else {
+            let expr = self.validate_expression(expr)?;
+            Ok(HlirVarInit::Expr(expr))
+        }
     }
 
     fn validate_variable_specifier(
@@ -135,19 +185,6 @@ impl<'a> GlobalValidator<'a> {
         }
 
         let mut is_const = false;
-        for ty_qual in &specifier.qualifiers {
-            // this is set up for expansion
-            match ty_qual {
-                TypeQualifier::Const => {
-                    if is_const {
-                        let warning = CompilerWarning::RedundantUsage(ty_qual.to_string(), span);
-                        self.report_warning(warning);
-                    } else {
-                        is_const = true;
-                    }
-                }
-            }
-        }
 
         let ty_kind = self.validate_type(&specifier.ty, span)?;
         let ty_dec = if specifier.pointer {
@@ -305,9 +342,7 @@ impl<'a> GlobalValidator<'a> {
         match expr {
             Expression::Literal(literal) => self.validate_literal(literal, literal.location),
             Expression::Variable(variable) => self
-                .function_scope
-                .as_ref()
-                .expect("Fatal compiler error: Function scope not set")
+                .scope
                 .get_variable_type(&variable.value, variable.location)
                 .map(|ty| HlirExpr {
                     kind: Box::new(HlirExprKind::Variable(variable.value.clone())),
@@ -322,7 +357,7 @@ impl<'a> GlobalValidator<'a> {
                     TypeOrExpression::Type(ty) => {
                         let ty =
                             self.validate_variable_specifier(&ty.specifier, ty_or_expr.location)?;
-                        self.sizeof(&ty)
+                        self.sizeof(&ty, ty_or_expr.location)
                     }
                     TypeOrExpression::Expr(expr) => {
                         let expr = self.validate_expression(expr)?;
@@ -333,7 +368,7 @@ impl<'a> GlobalValidator<'a> {
                             let warning = CompilerWarning::ExprNoEffect(ty_or_expr.location);
                             self.report_warning(warning);
                         }
-                        self.sizeof(&expr.ty)
+                        self.sizeof(&expr.ty, ty_or_expr.location)
                     }
                 };
                 let ty = HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic);
@@ -377,7 +412,7 @@ impl<'a> GlobalValidator<'a> {
         }
     }
 
-    fn sizeof(&mut self, ty: &HlirType) -> u32 {
+    fn sizeof(&mut self, ty: &HlirType, span: Span) -> u64 {
         use crate::util::arch::*;
         if ty.is_pointer() {
             return POINTER_SIZE;
@@ -391,15 +426,20 @@ impl<'a> GlobalValidator<'a> {
             HlirTypeKind::Void => 0,
             HlirTypeKind::Float => FLOAT_SIZE,
             HlirTypeKind::Struct(ident) => {
-                todo!("get size of struct from symbol table")
+                self.scope
+                    .get_struct_size(ident, span)
+                    .unwrap_or_else(|err| {
+                        self.report_error(err);
+                        0
+                    })
             }
         };
 
-        if ty.is_array() {
-            todo!("get size of array")
+        if let HlirTypeDecl::Array(array_size) = &ty.decl {
+            size * array_size
+        } else {
+            size
         }
-
-        size
     }
 
     fn try_cast_together(
