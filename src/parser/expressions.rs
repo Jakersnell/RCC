@@ -113,6 +113,14 @@ where
         {
             self.advance()?;
             let ty = self.parse_declaration()?;
+            if ty.ident.is_some() {
+                self.report_error(CompilerError::ExpectedButFound(
+                    "Type".to_string(),
+                    "Identifier".to_string(),
+                    ty.location,
+                ));
+                return Err(());
+            }
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
             Expression::Sizeof(ty.map(TypeOrExpression::Type))
         } else {
