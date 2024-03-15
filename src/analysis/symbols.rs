@@ -3,6 +3,7 @@ use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{str_intern, Locatable, Span};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub type SymbolResult = Result<(), CompilerError>;
 #[derive(Debug, Clone)]
@@ -64,15 +65,15 @@ thread_local! {
     ];
 }
 
-pub(super) enum SymbolKind<'a> {
+pub(super) enum SymbolKind {
     Function(FunctionSymbol),
-    Struct(StructSymbol<'a>),
+    Struct(StructSymbol),
     Variable(VariableSymbol),
 }
 
-pub(super) struct StructSymbol<'a> {
-    pub(super) size: usize,
-    pub(super) body: SymbolResolver<'a>,
+pub(super) struct StructSymbol {
+    pub(super) size: u64,
+    pub(super) body: SymbolResolver,
 }
 
 #[derive(Clone)]
@@ -90,12 +91,12 @@ pub(super) struct VariableSymbol {
     pub(super) array_size: Option<u64>,
 }
 
-pub struct SymbolResolver<'a> {
-    symbols: HashMap<InternedStr, SymbolKind<'a>>,
-    parent: Option<&'a SymbolResolver<'a>>,
+pub struct SymbolResolver {
+    symbols: HashMap<InternedStr, SymbolKind>,
+    parent: Option<Box<SymbolResolver>>,
 }
 
-impl<'a> SymbolResolver<'a> {
+impl SymbolResolver {
     pub fn create_root() -> Self {
         let mut root = Self {
             symbols: HashMap::new(),
@@ -116,7 +117,7 @@ impl<'a> SymbolResolver<'a> {
             }
         });
     }
-    pub fn new(parent: Option<&'a SymbolResolver<'_>>) -> Self {
+    pub fn new(parent: Option<Box<SymbolResolver>>) -> Self {
         Self {
             symbols: HashMap::new(),
             parent,
@@ -160,12 +161,7 @@ impl<'a> SymbolResolver<'a> {
     }
 
     #[inline]
-    fn add_symbol(
-        &mut self,
-        ident: &InternedStr,
-        kind: SymbolKind<'a>,
-        span: Span,
-    ) -> SymbolResult {
+    fn add_symbol(&mut self, ident: &InternedStr, kind: SymbolKind, span: Span) -> SymbolResult {
         if self.retrieve(ident, span).is_ok() {
             Err(CompilerError::IdentifierExists(span))
         } else {
@@ -261,7 +257,7 @@ impl<'a> SymbolResolver<'a> {
         let symbol = self.symbols.get(ident);
         if let Some(symbol) = symbol {
             Ok(symbol)
-        } else if let Some(parent) = self.parent {
+        } else if let Some(parent) = self.parent.as_ref() {
             parent.retrieve(ident, span)
         } else {
             Err(CompilerError::IdentNotFound(span))
@@ -302,5 +298,9 @@ impl<'a> SymbolResolver<'a> {
             SymbolKind::Struct(s) => Ok(s),
             _ => Err(CompilerError::NotAStruct(span)),
         }
+    }
+
+    pub fn get_struct_size(&self, ident: &InternedStr, span: Span) -> Result<u64, CompilerError> {
+        Ok(self.get_struct(ident, span)?.size)
     }
 }
