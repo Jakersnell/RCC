@@ -230,8 +230,8 @@ pub enum HlirExprKind {
     Variable(InternedStr),
 
     // unary
-    Increment(HlirExpr, bool), // post/pre
-    Decrement(HlirExpr, bool),
+    PostIncrement(HlirExpr),
+    PostDecrement(HlirExpr),
     Negate(HlirExpr),
     LogicalNot(HlirExpr),
     BitwiseNot(HlirExpr),
