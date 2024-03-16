@@ -1,8 +1,8 @@
-mod flow;
 pub mod hlir;
 mod symbols;
 
 use crate::analysis::hlir::HlirLiteral::Char;
+use crate::analysis::hlir::HlirTypeDecl::Basic;
 use crate::analysis::hlir::{
     HighLevelIR, HlirExpr, HlirExprKind, HlirLiteral, HlirType, HlirTypeDecl, HlirTypeKind,
     HlirVarInit, HlirVariable,
@@ -11,7 +11,8 @@ use crate::analysis::symbols::SymbolResolver;
 use crate::lexer::tokens::Literal;
 use crate::parser::ast::{
     ASTRoot, AbstractSyntaxTree, AssignOp, BinaryOp, Block, DeclarationSpecifier, Expression,
-    InitDeclaration, TypeOrExpression, TypeQualifier, TypeSpecifier, VariableDeclaration,
+    InitDeclaration, PostfixOp, TypeOrExpression, TypeQualifier, TypeSpecifier, UnaryOp,
+    VariableDeclaration,
 };
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
@@ -379,11 +380,11 @@ impl GlobalValidator {
                 })
             }
             Expression::Parenthesized(expr) => self.validate_expression(expr),
-            Expression::PostFix(op, expr) => {
-                todo!("validate op can be performed on expr, return valid op");
-            }
+            Expression::PostFix(op, expr) => self.validate_post_inc_or_dec(op, expr, expr.location),
             Expression::Unary(op, expr) => {
-                todo!("validate op can be performed on expr, return valid op");
+                let span = expr.location;
+                let expr = self.validate_expression(expr)?;
+                self.validate_unary_expression(op, expr, span)
             }
             Expression::Binary(op, left, right) => {
                 let span = left.location.merge(right.location);
@@ -406,10 +407,127 @@ impl GlobalValidator {
             Expression::Cast(dec, expr) => {
                 todo!("validate cast is valid and expr is valid");
             }
-            Expression::ArrayInitializer(arr) => {
-                todo!("validate all elements are of the same type");
-            }
+            ty => panic!("Fatal compiler error: Unexpected expression type: {:?}", ty),
         }
+    }
+
+    fn validate_unary_expression(
+        &mut self,
+        op: &UnaryOp,
+        expr: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        match op {
+            UnaryOp::Increment | UnaryOp::Decrement => self.validate_pre_inc_or_dec(op, expr, span),
+            UnaryOp::Plus => Ok(expr),
+            UnaryOp::Negate => {
+                if !expr.is_numeric() {
+                    self.report_error(CompilerError::NonNumericNegation(span));
+                    Ok(expr)
+                } else {
+                    let ty = expr.ty.clone();
+                    Ok(HlirExpr {
+                        kind: Box::new(HlirExprKind::Negate(expr)),
+                        is_lval: false,
+                        ty,
+                    })
+                }
+            }
+            UnaryOp::LogicalNot | UnaryOp::BitwiseNot => {
+                if !expr.is_integer() {
+                    self.report_error(CompilerError::NotLogicalType(expr.ty.to_string(), span));
+                    Ok(expr)
+                } else {
+                    let expr = cast!(
+                        expr,
+                        HlirType {
+                            decl: HlirTypeDecl::Basic,
+                            kind: HlirTypeKind::Int(false)
+                        }
+                    );
+                    let ty = expr.ty.clone();
+                    let expr = match op {
+                        UnaryOp::LogicalNot => HlirExprKind::LogicalNot(expr),
+                        UnaryOp::BitwiseNot => HlirExprKind::BitwiseNot(expr),
+                        _ => unreachable!(),
+                    };
+                    Ok(HlirExpr {
+                        kind: Box::new(expr),
+                        is_lval: false,
+                        ty,
+                    })
+                }
+            }
+            UnaryOp::Deref => todo!(),
+            UnaryOp::AddressOf => todo!(),
+        }
+    }
+
+    fn not_incremental(&mut self, expr: &HlirExpr, span: Span) -> bool {
+        if !expr.is_lval {
+            let err = CompilerError::LeftHandNotLVal(span);
+            self.report_error(err);
+            true
+        } else if !(expr.is_numeric() || expr.is_pointer()) {
+            self.report_error(CompilerError::CannotIncrementType(
+                expr.ty.to_string(),
+                span,
+            ));
+            true
+        } else {
+            false
+        }
+    }
+
+    fn validate_pre_inc_or_dec(
+        &mut self,
+        op: &UnaryOp,
+        expr: HlirExpr,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        if self.not_incremental(&expr, span) {
+            return Ok(expr);
+        }
+
+        let literal_one = HlirExpr {
+            kind: Box::new(HlirExprKind::Literal(HlirLiteral::Char(1))),
+            ty: HlirType {
+                decl: HlirTypeDecl::Basic,
+                kind: HlirTypeKind::Char(false),
+            },
+            is_lval: false,
+        };
+
+        let op = match op {
+            UnaryOp::Increment => AssignOp::Minus,
+            UnaryOp::Decrement => AssignOp::Plus,
+            _ => panic!("Called `validate_post_inc_or_dec` with non incremental type!"),
+        };
+
+        self.validate_assign_op(&op, expr, literal_one, span)
+    }
+
+    fn validate_post_inc_or_dec(
+        &mut self,
+        op: &PostfixOp,
+        expr: &Expression,
+        span: Span,
+    ) -> Result<HlirExpr, ()> {
+        let expr = self.validate_expression(expr)?;
+
+        if self.not_incremental(&expr, span) {
+            return Ok(expr);
+        }
+        let ty = expr.ty.clone();
+        let kind = Box::new(match op {
+            PostfixOp::Increment => HlirExprKind::PostIncrement(expr),
+            PostfixOp::Decrement => HlirExprKind::PostDecrement(expr),
+        });
+        Ok(HlirExpr {
+            is_lval: false,
+            kind,
+            ty,
+        })
     }
 
     fn sizeof(&mut self, ty: &HlirType, span: Span) -> u64 {
