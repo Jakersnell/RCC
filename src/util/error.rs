@@ -184,6 +184,18 @@ pub enum CompilerError {
 
     #[error("Number to large to be represented with any type: {0}")]
     NumberTooLarge(Span),
+
+    #[error("Cannot increment the type `{0}`: {1}")]
+    CannotIncrementType(String, Span),
+
+    #[error("Cannot negate a non-numeric type: {0}")]
+    NonNumericNegation(Span),
+
+    #[error("Cannot perform a bitwise operation on `{0}`: {1}")]
+    CannotBitwise(String, Span),
+
+    #[error("Cannot perform a logical operation on this type '{0}': {1}")]
+    NotLogicalType(String, Span),
 }
 
 #[derive(Error, Debug)]
