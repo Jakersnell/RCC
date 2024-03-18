@@ -201,7 +201,7 @@ impl TryFrom<&Token> for PostfixOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum UnaryOp {
     Increment,
     Decrement,
