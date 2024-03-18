@@ -393,7 +393,20 @@ impl GlobalValidator {
                 self.validate_binary_expression(op, left, right, span)
             }
             Expression::FunctionCall(ident, args) => {
-                todo!("validate function exists and validate args");
+                let span = ident.location;
+                let ident = ident.value.clone();
+                let mut hlir_args = Vec::new();
+                for loc_expr in args {
+                    hlir_args.push((
+                        self.validate_expression(&loc_expr.value)?,
+                        loc_expr.location,
+                    ));
+                }
+                self.scope
+                    .validate_function_call(ident, hlir_args, span)
+                    .map_err(|err| {
+                        self.report_error(err);
+                    })
             }
             Expression::Index(left, index) => {
                 todo!("validate left can be indexed into and validate index is integer type");

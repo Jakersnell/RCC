@@ -271,7 +271,11 @@ pub enum HlirExprKind {
     AssignRightShift(HlirExpr, HlirExpr),
 
     // other
-    FunctionCall(CallType),
+    FunctionCall {
+        location: Option<&'static str>,
+        ident: InternedStr,
+        args: Vec<HlirExpr>,
+    },
     Index(HlirExpr, HlirExpr),
     Member(HlirExpr, InternedStr),
     Cast(HlirType, HlirExpr),
@@ -304,19 +308,6 @@ impl HlirExprKind {
             _ => Err(()),
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum CallType {
-    FunctionCall {
-        ident: InternedStr,
-        args: Vec<HlirExpr>,
-    },
-    BuiltinCall {
-        location: &'static str,
-        ident: &'static str,
-        args: Vec<HlirExpr>,
-    },
 }
 
 #[derive(Debug)]
