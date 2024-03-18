@@ -1,23 +1,15 @@
 pub mod hlir;
 mod symbols;
 
-use crate::analysis::hlir::HlirLiteral::Char;
-use crate::analysis::hlir::HlirTypeDecl::Basic;
-use crate::analysis::hlir::{
-    HighLevelIR, HlirExpr, HlirExprKind, HlirLiteral, HlirType, HlirTypeDecl, HlirTypeKind,
-    HlirVarInit, HlirVariable,
-};
+use crate::analysis::hlir::*;
 use crate::analysis::symbols::SymbolResolver;
 use crate::lexer::tokens::Literal;
-use crate::parser::ast::{
-    ASTRoot, AbstractSyntaxTree, AssignOp, BinaryOp, Block, DeclarationSpecifier, Expression,
-    InitDeclaration, PostfixOp, TypeOrExpression, TypeQualifier, TypeSpecifier, UnaryOp,
-    VariableDeclaration,
-};
+use crate::parser::ast::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
 use derive_new::new;
+use log::debug;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -90,17 +82,8 @@ impl GlobalValidator {
         let var = &locatable_variable.value;
 
         let declaration = &var.declaration;
-        if declaration.value.ident.is_none() {
-            let err = CompilerError::DeclarationMissingIdentifier(declaration.location);
-            self.report_error(err);
-            return Err(());
-        }
 
-        let ident = declaration
-            .value
-            .ident
-            .as_ref()
-            .expect("Fatal compiler error: Identifier not set");
+        let ident = declaration.value.ident.as_ref().unwrap();
         let ident_span = ident.location;
         let ident = ident.value.clone();
 
@@ -119,7 +102,14 @@ impl GlobalValidator {
             }
         }
 
-        let ty = self.validate_variable_specifier(&declaration.value.specifier, span)?;
+        for storage_spec in &declaration.specifier.specifiers {
+            // need to change this span to the specific storage spec location
+            self.report_warning(CompilerWarning::UnsupportedStorageSpecifier(
+                storage_spec.to_string(),
+                span,
+            ))
+        }
+        let ty = self.validate_type(&declaration.specifier, span)?;
         if var.is_array && var.array_size.is_none() && var.initializer.is_none() {
             let err = CompilerError::ArraySizeNotSpecified(span);
             self.report_error(err);
@@ -141,9 +131,6 @@ impl GlobalValidator {
 
         let ty = if let Some(array_size) = array_size {
             let mut ty = ty;
-            if matches!(ty.decl, HlirTypeDecl::Pointer(_)) {
-                panic!("Fatal compiler error: Array of pointers not supported");
-            }
             ty.decl = HlirTypeDecl::Array(array_size);
             ty
         } else {
@@ -172,38 +159,11 @@ impl GlobalValidator {
         }
     }
 
-    fn validate_variable_specifier(
-        &mut self,
-        specifier: &DeclarationSpecifier,
-        span: Span,
-    ) -> Result<HlirType, ()> {
-        for storage_spec in &specifier.specifiers {
-            // need to change this span to the specific storage spec location
-            self.report_warning(CompilerWarning::UnsupportedStorageSpecifier(
-                storage_spec.to_string(),
-                span,
-            ))
-        }
-
-        let mut is_const = false;
-
-        let ty_kind = self.validate_type(&specifier.ty, span)?;
-        let ty_dec = if specifier.pointer {
-            HlirTypeDecl::Pointer(false)
-        } else {
-            HlirTypeDecl::Basic
-        };
-        Ok(HlirType {
-            kind: ty_kind,
-            decl: ty_dec,
-        })
-    }
-
     fn validate_type(
         &mut self,
-        specifiers: &[TypeSpecifier],
+        declaration: &DeclarationSpecifier,
         location: Span,
-    ) -> Result<HlirTypeKind, ()> {
+    ) -> Result<HlirType, ()> {
         #[derive(Debug, PartialEq)]
         enum State {
             Start,
@@ -213,7 +173,7 @@ impl GlobalValidator {
         }
         let mut hlir_type: Option<HlirTypeKind> = None;
         let mut state = State::Start;
-        let mut iter = specifiers.iter();
+        let mut iter = declaration.ty.iter();
         macro_rules! seen_signed_or_unsigned {
             ($ty_spec:ident, $unsigned:literal) => {
                 match $ty_spec {
@@ -296,8 +256,22 @@ impl GlobalValidator {
             self.report_error(err);
             return Err(());
         }
-        let ty = hlir_type.expect("Fatal compiler error: Type specifier not set");
-        Ok(ty)
+        let ty_kind = hlir_type.unwrap();
+
+        let ty_dec = if declaration.pointer {
+            HlirTypeDecl::Pointer(false)
+        } else {
+            HlirTypeDecl::Basic
+        };
+
+        if matches!(ty_kind, HlirTypeKind::Void) && !matches!(ty_dec, HlirTypeDecl::Pointer(_)) {
+            self.report_error(CompilerError::IncompleteType(location));
+        }
+
+        Ok(HlirType {
+            kind: ty_kind,
+            decl: ty_dec,
+        })
     }
 
     fn validate_literal(&mut self, literal: &Literal, span: Span) -> Result<HlirExpr, ()> {
@@ -356,8 +330,7 @@ impl GlobalValidator {
             Expression::Sizeof(ty_or_expr) => {
                 let size = match &ty_or_expr.value {
                     TypeOrExpression::Type(ty) => {
-                        let ty =
-                            self.validate_variable_specifier(&ty.specifier, ty_or_expr.location)?;
+                        let ty = self.validate_type(&ty.specifier, ty_or_expr.location)?;
                         self.sizeof(&ty, ty_or_expr.location)
                     }
                     TypeOrExpression::Expr(expr) => {
@@ -409,19 +382,169 @@ impl GlobalValidator {
                     })
             }
             Expression::Index(left, index) => {
-                todo!("validate left can be indexed into and validate index is integer type");
+                let (left_span, left) = (left.location, self.validate_expression(left)?);
+                let (index_span, index) = (index.location, self.validate_expression(index)?);
+                self.validate_index_access(left, index, left_span, index_span)
             }
             Expression::Member(body, member) => {
-                todo!("validate body is a struct and member exists");
+                let (body_span, body) = (body.location, self.validate_expression(body)?);
+                let (member_span, member) = (member.location, (**member).clone());
+                self.validate_member_access(body, member, body_span, member_span)
             }
             Expression::PointerMember(body, member) => {
-                todo!("validate body is a struct pointer and member exists");
+                let (body_span, body) = (body.location, self.validate_expression(body)?);
+                let (member_span, member) = (member.location, (**member).clone());
+                self.validate_pointer_member_access(body, member, body_span, member_span)
             }
             Expression::Cast(dec, expr) => {
-                todo!("validate cast is valid and expr is valid");
+                let (expr_location, expr) = (expr.location, self.validate_expression(expr)?);
+                let expr = expr_location.into_locatable(expr);
+                self.validate_cast_expression(dec, expr)
             }
             ty => panic!("Fatal compiler error: Unexpected expression type: {:?}", ty),
         }
+    }
+
+    fn validate_cast_expression(
+        &mut self,
+        declaration: &Locatable<Declaration>,
+        expr: Locatable<HlirExpr>,
+    ) -> Result<HlirExpr, ()> {
+        /*
+        Any type may cast to itself.
+
+        VALID CASTS:
+        struct -> NOTHING
+
+        struct * -> void *
+        struct * -> long
+        struct * -> struct *
+
+        numeric <-> numeric
+        numeric -> any *
+        */
+        debug_assert!(declaration.ident.is_none());
+        let cast_to_ty = self.validate_type(&declaration.value.specifier, declaration.location)?;
+        let ty = &expr.ty;
+        match (&ty.kind, &ty.decl) {
+            (_, HlirTypeDecl::Array(_)) => {
+                /*
+                    what can be cast from an array?
+                       pointer to the first element of the array
+                */
+            }
+            (kind, HlirTypeDecl::Pointer(constness)) => {
+                /*
+                    what can cast from a pointer?
+                        other pointers,
+                        longs
+                */
+            }
+            (kind, decl) if kind.is_numeric() => {
+                /*
+                    longs can cast to pointers,
+                    any numeric type can cast to any numeric type,
+                    that being said it should cast to a type below it first
+                    i.e
+                    long x;
+                    (char)x <=> (char)(int)x
+                */
+                
+            }
+            (kind, decl) => panic!(),
+        };
+
+        todo!()
+    }
+
+    fn validate_index_access(
+        &mut self,
+        left: HlirExpr,
+        index: HlirExpr,
+        left_span: Span,
+        index_span: Span,
+    ) -> Result<HlirExpr, ()> {
+        if !left.is_pointer() && !left.is_array() {
+            self.report_error(CompilerError::InvalidLeftOfSubScript(
+                left.ty.to_string(),
+                left_span,
+            ));
+        }
+
+        if !index.is_integer() {
+            self.report_error(CompilerError::CannotIndexWith(
+                index.ty.to_string(),
+                index_span,
+            ));
+        }
+
+        let ty = left.ty.clone();
+        Ok(HlirExpr {
+            kind: Box::new(HlirExprKind::Index(left, index)),
+            ty,
+            is_lval: false,
+        })
+    }
+
+    fn validate_pointer_member_access(
+        &mut self,
+        body: HlirExpr,
+        member: InternedStr,
+        body_span: Span,
+        member_span: Span,
+    ) -> Result<HlirExpr, ()> {
+        if !matches!(&body.ty.kind, HlirTypeKind::Struct(_)) || body.is_array() {
+            self.report_error(CompilerError::CannotMemberAccessOnType(
+                body.ty.to_string(),
+                body_span,
+            ));
+        }
+
+        if !body.is_pointer() {
+            self.report_error(CompilerError::ArrowOnNonPointer(body_span));
+        }
+
+        // dereference to underlying type,
+        let is_const_ptr = match body.ty.decl {
+            HlirTypeDecl::Pointer(_const) => _const,
+            _ => panic!("Type at this point must be pointer."),
+        };
+        let mut ty = body.ty.clone();
+        ty.decl = HlirTypeDecl::Basic;
+
+        Ok(HlirExpr {
+            kind: Box::new(HlirExprKind::Deref(body)),
+            ty,
+            is_lval: is_const_ptr,
+        })
+    }
+
+    fn validate_member_access(
+        &mut self,
+        body: HlirExpr,
+        member: InternedStr,
+        body_span: Span,
+        member_span: Span,
+    ) -> Result<HlirExpr, ()> {
+        if !matches!(&body.ty.kind, HlirTypeKind::Struct(_)) || body.is_array() {
+            self.report_error(CompilerError::CannotMemberAccessOnType(
+                body.ty.to_string(),
+                body_span,
+            ));
+        }
+
+        if body.is_pointer() {
+            self.report_error(CompilerError::DotOperatorOnPointer(body_span));
+        }
+
+        let body = body_span.into_locatable(body);
+        let member = member_span.into_locatable(member);
+
+        self.scope
+            .validate_struct_member_access(body, member)
+            .map_err(|err| {
+                self.report_error(err);
+            })
     }
 
     fn validate_unary_expression(
@@ -857,6 +980,18 @@ fn test_try_cast_together_results_in_correct_higher_type_for_valid_types() {
     );
 }
 
+#[cfg(test)]
+macro_rules! make_dec_specifier {
+    ($types:expr) => {
+        DeclarationSpecifier {
+            specifiers: vec![],
+            qualifiers: vec![],
+            ty: $types,
+            pointer: false,
+        }
+    };
+}
+
 #[test]
 fn test_validate_type_returns_error_for_invalid_type_orientations() {
     use TypeSpecifier::*;
@@ -871,6 +1006,7 @@ fn test_validate_type_returns_error_for_invalid_type_orientations() {
     ];
     for types in type_tests {
         let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
+        let types = make_dec_specifier!(types);
         let result = validator.validate_type(&types, Span::default());
         if result.is_ok() {
             panic!("Expected error, got ok, test: {:?}", types);
@@ -893,7 +1029,12 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
     ];
     for (types, expected) in type_tests {
         let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
-        let result = validator.validate_type(&types, Span::default());
+        let dec_spec = make_dec_specifier!(types);
+        let expected = HlirType {
+            decl: HlirTypeDecl::Basic,
+            kind: expected,
+        };
+        let result = validator.validate_type(&dec_spec, Span::default());
         assert_eq!(result, Ok(expected));
     }
 }

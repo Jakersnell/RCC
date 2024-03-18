@@ -277,7 +277,7 @@ pub enum HlirExprKind {
         args: Vec<HlirExpr>,
     },
     Index(HlirExpr, HlirExpr),
-    Member(HlirExpr, InternedStr),
+    Member(HlirExpr, InternedStr), // offset
     Cast(HlirType, HlirExpr),
 }
 

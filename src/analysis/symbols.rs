@@ -296,15 +296,28 @@ impl SymbolResolver {
         self.add_symbol(&ident, symbol, span)
     }
 
-    pub fn get_struct(
-        &self,
-        ident: &InternedStr,
-        span: Span,
-    ) -> Result<&StructSymbol, CompilerError> {
+    fn get_struct(&self, ident: &InternedStr, span: Span) -> Result<&StructSymbol, CompilerError> {
         match self.retrieve(ident, span)? {
             SymbolKind::Struct(s) => Ok(s),
             _ => Err(CompilerError::NotAStruct(span)),
         }
+    }
+    pub fn validate_struct_member_access(
+        &self,
+        _struct: Locatable<HlirExpr>,
+        member: Locatable<InternedStr>,
+    ) -> Result<HlirExpr, CompilerError> {
+        let ident = match &_struct.ty.kind {
+            HlirTypeKind::Struct(ident) => ident.clone(),
+            _ => panic!("`validate_struct_member_access` called on non struct expression."),
+        };
+        let _match = self.get_struct(&ident, _struct.location)?;
+        let ty = _match.body.get_variable_type(&member, member.location)?;
+        Ok(HlirExpr {
+            kind: Box::new(HlirExprKind::Member(_struct.value, member.value)),
+            is_lval: false,
+            ty,
+        })
     }
 
     pub fn get_struct_size(&self, ident: &InternedStr, span: Span) -> Result<u64, CompilerError> {
