@@ -196,6 +196,24 @@ pub enum CompilerError {
 
     #[error("Cannot perform a logical operation on this type '{0}': {1}")]
     NotLogicalType(String, Span),
+
+    #[error("Type `{0}` on left side of subscript cannot be indexed: {1}")]
+    InvalidLeftOfSubScript(String, Span),
+
+    #[error("Cannot index with non integer type `{0}`: {1}")]
+    CannotIndexWith(String, Span),
+
+    #[error("Cannot use '.' operator on type `{0}`: {1}")]
+    CannotMemberAccessOnType(String, Span),
+
+    #[error("Left hand side is pointer, did you mean to use '->'? : {0}")]
+    DotOperatorOnPointer(Span),
+
+    #[error("Left hand side is not a pointer, did you mean to use '.'? : {0}")]
+    ArrowOnNonPointer(Span),
+
+    #[error("Incomplete type: {0}")]
+    IncompleteType(Span),
 }
 
 #[derive(Error, Debug)]
