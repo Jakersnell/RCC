@@ -449,7 +449,6 @@ impl GlobalValidator {
                     long x;
                     (char)x <=> (char)(int)x
                 */
-                
             }
             (kind, decl) => panic!(),
         };
