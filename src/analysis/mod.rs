@@ -11,6 +11,7 @@ use crate::util::{Locatable, Span};
 use derive_new::new;
 use log::debug;
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -399,7 +400,11 @@ impl GlobalValidator {
             Expression::Cast(dec, expr) => {
                 let (expr_location, expr) = (expr.location, self.validate_expression(expr)?);
                 let expr = expr_location.into_locatable(expr);
-                self.validate_cast_expression(dec, expr)
+                debug_assert!(dec.ident.is_none());
+                let dec_loc = dec.location;
+                let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location)?;
+                let cast_to_ty = dec_loc.into_locatable(cast_to_ty);
+                self.validate_cast_expression(cast_to_ty, expr)
             }
             ty => panic!("Fatal compiler error: Unexpected expression type: {:?}", ty),
         }
@@ -407,7 +412,7 @@ impl GlobalValidator {
 
     fn validate_cast_expression(
         &mut self,
-        declaration: &Locatable<Declaration>,
+        cast_ty: Locatable<HlirType>,
         expr: Locatable<HlirExpr>,
     ) -> Result<HlirExpr, ()> {
         /*
@@ -423,10 +428,11 @@ impl GlobalValidator {
         numeric <-> numeric
         numeric -> any *
         */
-        debug_assert!(declaration.ident.is_none());
-        let cast_to_ty = self.validate_type(&declaration.value.specifier, declaration.location)?;
-        let ty = &expr.ty;
-        match (&ty.kind, &ty.decl) {
+        if cast_ty.value == expr.ty {
+            return Ok(expr.value);
+        }
+        let expr_ty = &expr.ty;
+        match (&expr_ty.kind, &expr_ty.decl) {
             (_, HlirTypeDecl::Array(_)) => {
                 /*
                     what can be cast from an array?
@@ -440,7 +446,7 @@ impl GlobalValidator {
                         longs
                 */
             }
-            (kind, decl) if kind.is_numeric() => {
+            (kind, _) if kind.is_numeric() => {
                 /*
                     longs can cast to pointers,
                     any numeric type can cast to any numeric type,
@@ -448,12 +454,145 @@ impl GlobalValidator {
                     i.e
                     long x;
                     (char)x <=> (char)(int)x
+
+                    can do this recursively:
+
+                    1. cast to type directly below, if float or double cast to long
+                    2. call this function, repeat until type is target type.
+
+                    how to cast numeric type to other numeric type,
+                    get next numeric type in the direction of that type
+
+                    (char)3.5
+                    double -> long -> int -> char
                 */
+
+                /*
+                Downcasts:
+                    double -> float
+                    double -> long
+
+                    float -> int
+                    long -> int
+
+                    int -> char
+
+                Upcasts:
+                    char -> int
+                    int -> float
+                    int -> long
+                    float -> double
+                    long -> double
+
+
+                manual cast :
+                    char -> int -> long -\
+                    char -> int -> float -> double
+
+                 */
+                // match (&expr.ty.kind, &cast_ty.kind) {
+                //     (HlirTypeKind::Double, HlirTypeKind::Float) => todo!(),
+                //     (HlirTypeKind::Int(_), HlirTypeKind::Float) => todo!(),
+                //     _ => panic!(),
+                // }
             }
             (kind, decl) => panic!(),
         };
 
         todo!()
+    }
+
+    fn cast_numeric_to_numeric(&mut self, cast_to: HlirType, expr: HlirExpr) -> HlirExpr {
+        debug_assert!(cast_to.decl == HlirTypeDecl::Basic);
+        debug_assert!(expr.ty.decl == HlirTypeDecl::Basic);
+        if matches!(
+            (&expr.ty.kind, &cast_to.kind),
+            (HlirTypeKind::Double, HlirTypeKind::Float)
+                | (HlirTypeKind::Int(_), HlirTypeKind::Float)
+        ) {
+            let ty = HlirType {
+                kind: HlirTypeKind::Float,
+                decl: HlirTypeDecl::Basic,
+            };
+            HlirExpr {
+                kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
+                is_lval: false,
+                ty,
+            }
+        } else {
+            // get cast precedence, upcast or downcast depending on precedence
+            let expr_level = self.get_numeric_cast_hierarchy(&expr.ty.kind);
+            let cast_level = self.get_numeric_cast_hierarchy(&cast_to.kind);
+            let kind = match expr_level.cmp(&cast_level) {
+                Ordering::Less => Some(self.demote_numeric(&cast_to.kind)),
+                Ordering::Greater => Some(self.promote_numeric(&cast_to.kind)),
+                Ordering::Equal => None,
+            };
+            if let Some(kind) = kind {
+                let ty = HlirType {
+                    decl: HlirTypeDecl::Basic,
+                    kind,
+                };
+                let casted_lower = self.cast_numeric_to_numeric(ty, expr);
+                HlirExpr {
+                    kind: Box::new(HlirExprKind::Cast(cast_to.clone(), casted_lower)),
+                    ty: cast_to,
+                    is_lval: false,
+                }
+            } else {
+                expr
+            }
+        }
+    }
+
+    fn give_numeric_sign(&self, ty: HlirTypeKind, signed: bool) -> HlirTypeKind {
+        match ty {
+            HlirTypeKind::Long(_) => HlirTypeKind::Long(signed),
+            HlirTypeKind::Int(_) => HlirTypeKind::Int(signed),
+            HlirTypeKind::Char(_) => HlirTypeKind::Char(signed),
+            _ => ty,
+        }
+    }
+
+    fn get_numeric_signed(&self, ty: &HlirTypeKind) -> bool {
+        match ty {
+            HlirTypeKind::Long(signed) => *signed,
+            HlirTypeKind::Int(signed) => *signed,
+            HlirTypeKind::Char(signed) => *signed,
+            _ => false,
+        }
+    }
+
+    fn demote_numeric(&self, ty: &HlirTypeKind) -> HlirTypeKind {
+        // does not include double -> float
+        match ty {
+            HlirTypeKind::Double => HlirTypeKind::Long(false),
+            HlirTypeKind::Float => HlirTypeKind::Int(false),
+            HlirTypeKind::Long(_) => HlirTypeKind::Int(false),
+            HlirTypeKind::Int(_) => HlirTypeKind::Char(false),
+            _ => panic!(), // panics as this should be guarded against before calling
+        }
+    }
+
+    fn promote_numeric(&self, ty: &HlirTypeKind) -> HlirTypeKind {
+        // does not include int -> float
+        match ty {
+            HlirTypeKind::Float => HlirTypeKind::Double,
+            HlirTypeKind::Long(_) => HlirTypeKind::Double,
+            HlirTypeKind::Int(_) => HlirTypeKind::Long(false),
+            HlirTypeKind::Char(_) => HlirTypeKind::Int(false),
+            _ => panic!(), // panics as this should be guarded against before calling
+        }
+    }
+
+    fn get_numeric_cast_hierarchy(&self, ty: &HlirTypeKind) -> u8 {
+        match ty {
+            HlirTypeKind::Double => 4,
+            HlirTypeKind::Long(_) => 3,
+            HlirTypeKind::Int(_) => 2,
+            HlirTypeKind::Char(_) => 1,
+            _ => panic!(),
+        }
     }
 
     fn validate_index_access(
@@ -1080,4 +1219,73 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         assert!(result.is_ok());
         assert_eq!(result.unwrap().ty.kind, expected);
     }
+}
+
+#[cfg(test)]
+fn test_cast_structure(expr: HlirExpr, cast_to: HlirType, order: &[HlirTypeKind]) {
+    let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
+    let cast_structure = validator.cast_numeric_to_numeric(cast_to, expr);
+
+    let mut given = cast_structure;
+
+    for kind in order {
+        let given_ty = given.ty.clone();
+        assert_eq!(given_ty.kind, *kind);
+        given = match *given.kind {
+            HlirExprKind::Cast(ty, expr) => {
+                assert_eq!(ty.kind, *kind);
+                expr
+            }
+            _ => panic!("Unexpected expr type, expected HlirExprKind::Cast."),
+        }
+    }
+}
+
+#[test]
+fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_upcast() {
+    let expr = HlirExpr {
+        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Char(1))),
+        ty: HlirType {
+            kind: HlirTypeKind::Char(false),
+            decl: HlirTypeDecl::Basic,
+        },
+        is_lval: false,
+    };
+    let cast_to = HlirType {
+        kind: HlirTypeKind::Double,
+        decl: HlirTypeDecl::Basic,
+    };
+
+    let expected = [
+        HlirTypeKind::Double,
+        HlirTypeKind::Long(false),
+        HlirTypeKind::Int(false),
+    ];
+
+    test_cast_structure(expr, cast_to, &expected);
+}
+
+#[test]
+fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_downcast() {
+    let expr = HlirExpr {
+        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Float(1.0))),
+        ty: HlirType {
+            kind: HlirTypeKind::Double,
+            decl: HlirTypeDecl::Basic,
+        },
+        is_lval: false,
+    };
+
+    let cast_to = HlirType {
+        kind: HlirTypeKind::Char(false),
+        decl: HlirTypeDecl::Basic,
+    };
+
+    let expected = [
+        HlirTypeKind::Char(false),
+        HlirTypeKind::Int(false),
+        HlirTypeKind::Long(false),
+    ];
+
+    test_cast_structure(expr, cast_to, &expected);
 }

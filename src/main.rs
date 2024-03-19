@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use crate::analysis::hlir::HlirTypeKind;
 use crate::util::error::{CompilerError, CompilerWarning};
 use std::cell::RefCell;
 use std::path::PathBuf;
