@@ -19,10 +19,9 @@ pub type SharedReporter = Rc<RefCell<Reporter>>;
 
 macro_rules! cast {
     ($hlir:expr, $to:expr) => {{
-        let ty = $hlir.ty.clone();
         HlirExpr {
-            kind: Box::new(HlirExprKind::Cast($to, $hlir)),
-            ty,
+            kind: Box::new(HlirExprKind::Cast($to.clone(), $hlir)),
+            ty: $to,
             is_lval: false,
         }
     }};
@@ -432,74 +431,57 @@ impl GlobalValidator {
             return Ok(expr.value);
         }
         let expr_ty = &expr.ty;
-        match (&expr_ty.kind, &expr_ty.decl) {
-            (_, HlirTypeDecl::Array(_)) => {
-                /*
-                    what can be cast from an array?
-                       pointer to the first element of the array
-                */
+        match (
+            &expr_ty.kind,
+            &expr_ty.decl,
+            &cast_ty.value.kind,
+            &cast_ty.value.decl,
+        ) {
+            (_, HlirTypeDecl::Array(_), to_kind, HlirTypeDecl::Pointer(constness)) => Ok(cast!(
+                expr.value,
+                HlirType {
+                    kind: to_kind.clone(),
+                    decl: HlirTypeDecl::Pointer(*constness)
+                }
+            )),
+            (
+                kind,
+                HlirTypeDecl::Pointer(from_constness),
+                to_kind,
+                HlirTypeDecl::Pointer(to_constness),
+            ) => Ok(cast!(
+                expr.value,
+                HlirType {
+                    kind: to_kind.clone(),
+                    decl: HlirTypeDecl::Basic
+                }
+            )),
+            (
+                kind,
+                HlirTypeDecl::Pointer(from_constness),
+                HlirTypeKind::Long(signed),
+                HlirTypeDecl::Basic,
+            ) => Ok(cast!(
+                expr.value,
+                HlirType {
+                    kind: HlirTypeKind::Long(true),
+                    decl: HlirTypeDecl::Basic
+                }
+            )),
+            (kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic)
+                if kind.is_numeric() && cast_kind.is_numeric() =>
+            {
+                Ok(self.cast_numeric_to_numeric(cast_ty.value, expr.value))
             }
-            (kind, HlirTypeDecl::Pointer(constness)) => {
-                /*
-                    what can cast from a pointer?
-                        other pointers,
-                        longs
-                */
+            _ => {
+                self.report_error(CompilerError::CannotCast(
+                    expr.ty.to_string(),
+                    cast_ty.value.to_string(),
+                    cast_ty.location.merge(expr.location),
+                ));
+                Ok(expr.value)
             }
-            (kind, _) if kind.is_numeric() => {
-                /*
-                    longs can cast to pointers,
-                    any numeric type can cast to any numeric type,
-                    that being said it should cast to a type below it first
-                    i.e
-                    long x;
-                    (char)x <=> (char)(int)x
-
-                    can do this recursively:
-
-                    1. cast to type directly below, if float or double cast to long
-                    2. call this function, repeat until type is target type.
-
-                    how to cast numeric type to other numeric type,
-                    get next numeric type in the direction of that type
-
-                    (char)3.5
-                    double -> long -> int -> char
-                */
-
-                /*
-                Downcasts:
-                    double -> float
-                    double -> long
-
-                    float -> int
-                    long -> int
-
-                    int -> char
-
-                Upcasts:
-                    char -> int
-                    int -> float
-                    int -> long
-                    float -> double
-                    long -> double
-
-
-                manual cast :
-                    char -> int -> long -\
-                    char -> int -> float -> double
-
-                 */
-                // match (&expr.ty.kind, &cast_ty.kind) {
-                //     (HlirTypeKind::Double, HlirTypeKind::Float) => todo!(),
-                //     (HlirTypeKind::Int(_), HlirTypeKind::Float) => todo!(),
-                //     _ => panic!(),
-                // }
-            }
-            (kind, decl) => panic!(),
-        };
-
-        todo!()
+        }
     }
 
     fn cast_numeric_to_numeric(&mut self, cast_to: HlirType, expr: HlirExpr) -> HlirExpr {
