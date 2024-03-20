@@ -4,7 +4,7 @@ use crate::parser::ast::Block;
 use crate::util::Locatable;
 
 impl GlobalValidator {
-    fn validate_block(&mut self, block: &Locatable<Block>) -> Result<HlirBlock, ()> {
+    pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<HlirBlock, ()> {
         let mut statements = Vec::new();
         for raw_stmt in &block.0 {
             statements.push(self.validate_statement(raw_stmt)?);
