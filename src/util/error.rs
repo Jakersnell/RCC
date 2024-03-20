@@ -229,6 +229,9 @@ pub enum CompilerError {
 
     #[error("Parameter cannot have storage specifiers: {0}")]
     ParamStorageSpecifiers(Span),
+
+    #[error("Cannot use '->' on type '{0}': {1}")]
+    CannotPointerMemberAccess(String, Span),
 }
 
 #[derive(Error, Debug)]
