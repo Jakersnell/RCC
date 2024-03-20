@@ -94,9 +94,10 @@ pub(super) struct VariableSymbol {
     pub(super) array_size: Option<u64>,
 }
 
+#[derive(Default)]
 pub struct SymbolResolver {
-    symbols: HashMap<InternedStr, SymbolKind>,
-    parent: Option<Box<SymbolResolver>>,
+    pub(super) symbols: HashMap<InternedStr, SymbolKind>,
+    pub(super) parent: Option<Box<SymbolResolver>>,
 }
 
 impl SymbolResolver {
@@ -107,6 +108,10 @@ impl SymbolResolver {
         };
         root.init_builtins();
         root
+    }
+
+    pub fn remove_self(self) -> Option<Box<Self>> {
+        self.parent
     }
 
     fn init_builtins(&mut self) {

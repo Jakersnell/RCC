@@ -37,6 +37,12 @@ macro_rules! fabricate_expr {
     };
 }
 
+#[derive(PartialEq)]
+enum DecType {
+    Variable,
+    Parameter,
+}
+
 pub struct GlobalValidator {
     ast: AbstractSyntaxTree,
     scope: SymbolResolver,
@@ -50,15 +56,6 @@ impl GlobalValidator {
             scope: SymbolResolver::create_root(),
             reporter: Rc::new(RefCell::new(Reporter::default())),
         }
-    }
-
-    fn report_error(&mut self, error: CompilerError) -> Result<(), ()> {
-        self.reporter.borrow_mut().report_error(error);
-        Err(())
-    }
-
-    fn report_warning(&mut self, warning: CompilerWarning) {
-        self.reporter.borrow_mut().report_warning(warning);
     }
 
     pub fn validate(mut self) -> Result<HighLevelIR, SharedReporter> {
@@ -84,6 +81,129 @@ impl GlobalValidator {
         }
     }
 
+    fn report_error(&mut self, error: CompilerError) -> Result<(), ()> {
+        self.reporter.borrow_mut().report_error(error);
+        Err(())
+    }
+
+    fn report_warning(&mut self, warning: CompilerWarning) {
+        self.reporter.borrow_mut().report_warning(warning);
+    }
+
+    fn push_scope(&mut self) {
+        let mut resolver = SymbolResolver::default(); // blank temp resolver
+        std::mem::swap(&mut resolver, &mut self.scope);
+        resolver = SymbolResolver::new(Some(Box::new(resolver)));
+        std::mem::swap(&mut resolver, &mut self.scope);
+        debug_assert!(resolver.parent.is_none());
+        debug_assert!(resolver.symbols.is_empty());
+    }
+
+    fn pop_scope(&mut self) {
+        let mut resolver = SymbolResolver::default(); // blank temp resolver
+        std::mem::swap(&mut resolver, &mut self.scope);
+        resolver = *resolver
+            .remove_self()
+            .expect("Popped scope on global scope.");
+        std::mem::swap(&mut resolver, &mut self.scope);
+        debug_assert!(resolver.parent.is_none());
+        debug_assert!(resolver.symbols.is_empty());
+    }
+
+    fn validate_function(
+        &mut self,
+        func: &Locatable<FunctionDeclaration>,
+    ) -> Result<HlirFunction, ()> {
+        let (func_span, func) = (func.location, &func.value);
+        let (dec_span, dec) = (func.declaration.location, &func.declaration.value);
+        if !dec.specifier.specifiers.is_empty() {
+            self.report_error(CompilerError::FunctionStorageSpecifiers(dec_span));
+            return Err(());
+        }
+
+        let ty = self.validate_type(&dec.specifier, dec_span)?;
+        let ident = &dec.ident;
+        if ident.is_none() {
+            self.report_error(CompilerError::FunctionRequiresIdentifier(dec_span));
+            return Err(());
+        }
+
+        let ident = ident.as_ref().unwrap().value.clone();
+        let raw_params = &func.parameters;
+        let mut parameters = Vec::new();
+        for parameter in raw_params {
+            parameters.push(self.validate_function_param(parameter)?);
+        }
+
+        let param_types = parameters
+            .iter()
+            .map(|var| var.ty.clone())
+            .collect::<Vec<_>>();
+        self.scope
+            .add_function(&ident, ty.clone(), param_types, func_span);
+
+        self.push_scope();
+
+        for parameter in &parameters {
+            let array_size = match &parameter.ty.decl {
+                HlirTypeDecl::Array(size) => Some(*size),
+                _ => None,
+            };
+            self.scope
+                .add_variable(
+                    &parameter.ident,
+                    &parameter.ty,
+                    parameter.is_const,
+                    parameter.initializer.is_some(),
+                    array_size,
+                    func_span,
+                )
+                .map_err(|err| {
+                    self.report_error(err);
+                })?;
+        }
+
+        let body = self.validate_block(&func.body)?;
+
+        Ok(HlirFunction {
+            ty,
+            ident,
+            parameters,
+            body,
+        })
+    }
+
+    fn validate_block(&mut self, block: &Locatable<Block>) -> Result<HlirBlock, ()> {
+        let mut statements = Vec::new();
+        for raw_stmt in &block.0 {
+            statements.push(self.validate_statement(raw_stmt)?);
+        }
+        Ok(HlirBlock(statements))
+    }
+
+    fn validate_statement(&mut self, stmt: &Locatable<Statement>) -> Result<HlirStmt, ()> {
+        todo!()
+    }
+
+    fn validate_function_param(
+        &mut self,
+        param: &Locatable<Declaration>,
+    ) -> Result<HlirVariable, ()> {
+        if !param.specifier.specifiers.is_empty() {
+            self.report_error(CompilerError::ParamStorageSpecifiers(param.location));
+            return Err(());
+        }
+
+        if param.ident.is_none() {
+            self.report_error(CompilerError::ParamRequiresIdent(param.location));
+            return Err(());
+        }
+
+        let hlir_var = self.process_dec_to_hlir_variable(&param.value, param.location)?;
+
+        Ok(hlir_var)
+    }
+
     fn validate_variable(
         &mut self,
         locatable_variable: &Locatable<VariableDeclaration>,
@@ -93,32 +213,9 @@ impl GlobalValidator {
 
         let declaration = &var.declaration;
 
-        let ident = declaration.value.ident.as_ref().unwrap();
-        let ident_span = ident.location;
-        let ident = ident.value.clone();
+        let mut variable =
+            self.process_dec_to_hlir_variable(&declaration.value, declaration.location)?;
 
-        let mut is_const = false;
-        for ty_qual in &declaration.value.specifier.qualifiers {
-            // this is set up for expansion
-            match ty_qual {
-                TypeQualifier::Const => {
-                    if is_const {
-                        let warning = CompilerWarning::RedundantUsage(ty_qual.to_string(), span);
-                        self.report_warning(warning);
-                    } else {
-                        is_const = true;
-                    }
-                }
-            }
-        }
-
-        for storage_spec in &declaration.specifier.specifiers {
-            // need to change this span to the specific storage spec location
-            self.report_warning(CompilerWarning::UnsupportedStorageSpecifier(
-                storage_spec.to_string(),
-                span,
-            ))
-        }
         let ty = self.validate_type(&declaration.specifier, span)?;
         if var.is_array && var.array_size.is_none() && var.initializer.is_none() {
             let err = CompilerError::ArraySizeNotSpecified(span);
@@ -147,11 +244,48 @@ impl GlobalValidator {
             ty
         };
 
+        variable.initializer = initializer;
+        variable.ty = ty;
+        Ok(variable)
+    }
+
+    fn process_dec_to_hlir_variable(
+        &mut self,
+        dec: &Declaration,
+        span: Span,
+    ) -> Result<HlirVariable, ()> {
+        let ident = dec.ident.as_ref().unwrap();
+        let ident_span = ident.location;
+        let ident = ident.value.clone();
+
+        let mut is_const = false;
+        for ty_qual in &dec.specifier.qualifiers {
+            // this is set up for expansion
+            match ty_qual {
+                TypeQualifier::Const => {
+                    if is_const {
+                        let warning = CompilerWarning::RedundantUsage(ty_qual.to_string(), span);
+                        self.report_warning(warning);
+                    } else {
+                        is_const = true;
+                    }
+                }
+            }
+        }
+        for storage_spec in &dec.specifier.specifiers {
+            // need to change this span to the specific storage spec location
+            self.report_warning(CompilerWarning::UnsupportedStorageSpecifier(
+                storage_spec.to_string(),
+                span,
+            ))
+        }
+        let ty = self.validate_type(&dec.specifier, span)?;
+
         Ok(HlirVariable {
             ty,
             ident,
             is_const,
-            initializer,
+            initializer: None,
         })
     }
 
@@ -284,44 +418,6 @@ impl GlobalValidator {
         })
     }
 
-    fn validate_literal(&mut self, literal: &Literal, span: Span) -> Result<HlirExpr, ()> {
-        let (literal, kind) = match literal {
-            Literal::Integer { value, suffix } => {
-                if suffix.is_some() {
-                    let warning = CompilerWarning::SuffixIgnored(span);
-                    self.report_warning(warning);
-                }
-                if *value <= i64::MAX as isize {
-                    (HlirLiteral::Int(*value as i64), HlirTypeKind::Int(false))
-                } else if *value <= u64::MAX as isize {
-                    (HlirLiteral::UInt(*value as u64), HlirTypeKind::Int(true))
-                } else {
-                    let err = CompilerError::NumberTooLarge(span);
-                    self.report_error(err);
-                    (HlirLiteral::Int(0), HlirTypeKind::Int(false))
-                }
-            }
-            Literal::Float { value, suffix } => {
-                if suffix.is_some() {
-                    let warning = CompilerWarning::SuffixIgnored(span);
-                    self.report_warning(warning);
-                }
-                (HlirLiteral::Float(*value), HlirTypeKind::Double)
-            }
-            Literal::Char { value } => (HlirLiteral::Char(*value as u8), HlirTypeKind::Char(false)),
-            Literal::String { value } => {
-                let value = value.as_str().bytes().collect();
-                (HlirLiteral::String(value), HlirTypeKind::Char(false))
-            }
-        };
-        let ty = HlirType::new(kind, HlirTypeDecl::Basic);
-        Ok(HlirExpr {
-            kind: Box::new(HlirExprKind::Literal(literal)),
-            ty,
-            is_lval: false,
-        })
-    }
-
     // Expression Validation
     fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
         match expr {
@@ -415,6 +511,44 @@ impl GlobalValidator {
             }
             ty => panic!("Fatal compiler error: Unexpected expression type: {:?}", ty),
         }
+    }
+
+    fn validate_literal(&mut self, literal: &Literal, span: Span) -> Result<HlirExpr, ()> {
+        let (literal, kind) = match literal {
+            Literal::Integer { value, suffix } => {
+                if suffix.is_some() {
+                    let warning = CompilerWarning::SuffixIgnored(span);
+                    self.report_warning(warning);
+                }
+                if *value <= i64::MAX as isize {
+                    (HlirLiteral::Int(*value as i64), HlirTypeKind::Int(false))
+                } else if *value <= u64::MAX as isize {
+                    (HlirLiteral::UInt(*value as u64), HlirTypeKind::Int(true))
+                } else {
+                    let err = CompilerError::NumberTooLarge(span);
+                    self.report_error(err);
+                    (HlirLiteral::Int(0), HlirTypeKind::Int(false))
+                }
+            }
+            Literal::Float { value, suffix } => {
+                if suffix.is_some() {
+                    let warning = CompilerWarning::SuffixIgnored(span);
+                    self.report_warning(warning);
+                }
+                (HlirLiteral::Float(*value), HlirTypeKind::Double)
+            }
+            Literal::Char { value } => (HlirLiteral::Char(*value as u8), HlirTypeKind::Char(false)),
+            Literal::String { value } => {
+                let value = value.as_str().bytes().collect();
+                (HlirLiteral::String(value), HlirTypeKind::Char(false))
+            }
+        };
+        let ty = HlirType::new(kind, HlirTypeDecl::Basic);
+        Ok(HlirExpr {
+            kind: Box::new(HlirExprKind::Literal(literal)),
+            ty,
+            is_lval: false,
+        })
     }
 
     fn explicit_cast(&mut self, cast_ty: HlirType, expr: HlirExpr) -> Result<HlirExpr, ()> {

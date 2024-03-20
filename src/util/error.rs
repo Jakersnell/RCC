@@ -217,6 +217,18 @@ pub enum CompilerError {
 
     #[error("Cannot perform equivalence operation between '{0}' and '{1}': {2}")]
     CannotEq(String, String, Span),
+
+    #[error("Function requires an identifier: {0}")]
+    FunctionRequiresIdentifier(Span),
+
+    #[error("Function cannot have storage specifiers: {0}")]
+    FunctionStorageSpecifiers(Span),
+
+    #[error("Parameter requires identifier: {0}")]
+    ParamRequiresIdent(Span),
+
+    #[error("Parameter cannot have storage specifiers: {0}")]
+    ParamStorageSpecifiers(Span),
 }
 
 #[derive(Error, Debug)]
