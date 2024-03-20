@@ -1,7 +1,7 @@
 use super::macros::*;
 use crate::lexer::tokens::{Symbol, Token};
 use crate::lexer::LexResult;
-use crate::parser::ast::{BinaryOp, Expression, PostfixOp, TypeOrExpression, UnaryOp};
+use crate::parser::ast::{BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp};
 use crate::parser::{ParseResult, Parser};
 use crate::util::error::CompilerError;
 use crate::util::Locatable;
@@ -11,6 +11,24 @@ impl<L> Parser<L>
 where
     L: Iterator<Item = LexResult>,
 {
+    fn parse_type(&mut self) -> ParseResult<Locatable<Declaration>> {
+        let ty = self.parse_declaration()?;
+        if let Some(specifier) = ty.specifier.specifiers.first() {
+            self.report_error(CompilerError::ExpectedButFound(
+                "Type".to_string(),
+                specifier.to_string(),
+                ty.location,
+            ));
+        }
+        if ty.ident.is_some() {
+            self.report_error(CompilerError::ExpectedButFound(
+                ")".to_string(),
+                ty.ident.as_ref().unwrap().to_string(),
+                ty.ident.as_ref().unwrap().location,
+            ));
+        }
+        Ok(ty)
+    }
     pub(super) fn parse_initializer(&mut self) -> ParseResult<Locatable<Expression>> {
         if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
             let location = self.current_span()?;
@@ -95,10 +113,10 @@ where
         debug_assert!(is!(self, next, Token::Keyword(kw) if kw.is_for_type()));
         let location = self.current_span()?;
         self.advance()?;
-        let ty = self.parse_declaration()?;
         confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
         let expr = self.parse_prefix_unary_expression()?;
         let location = location.merge(self.last_span);
+        let ty = self.parse_type()?;
         let expr = Expression::Cast(ty, expr.map(Box::new));
         let locatable = Locatable::new(location, expr);
         Ok(locatable)
@@ -112,7 +130,7 @@ where
             && is!(self, next, Token::Keyword(kw) if kw.is_for_type())
         {
             self.advance()?;
-            let ty = self.parse_declaration()?;
+            let ty = self.parse_type()?;
             confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
             Expression::Sizeof(ty.map(TypeOrExpression::Type))
         } else {

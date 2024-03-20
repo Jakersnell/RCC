@@ -181,10 +181,64 @@ pub enum CompilerError {
 
     #[error("Cannot assign to a const variable: {0}")]
     ConstAssignment(Span),
+
+    #[error("Number to large to be represented with any type: {0}")]
+    NumberTooLarge(Span),
+
+    #[error("Cannot increment the type `{0}`: {1}")]
+    CannotIncrementType(String, Span),
+
+    #[error("Cannot negate a non-numeric type: {0}")]
+    NonNumericNegation(Span),
+
+    #[error("Cannot perform a bitwise operation on `{0}`: {1}")]
+    CannotBitwise(String, Span),
+
+    #[error("Cannot perform a logical operation on this type '{0}': {1}")]
+    NotLogicalType(String, Span),
+
+    #[error("Type `{0}` on left side of subscript cannot be indexed: {1}")]
+    InvalidLeftOfSubScript(String, Span),
+
+    #[error("Cannot index with non integer type `{0}`: {1}")]
+    CannotIndexWith(String, Span),
+
+    #[error("Cannot use '.' operator on type `{0}`: {1}")]
+    CannotMemberAccessOnType(String, Span),
+
+    #[error("Left hand side is pointer, did you mean to use '->'? : {0}")]
+    DotOperatorOnPointer(Span),
+
+    #[error("Left hand side is not a pointer, did you mean to use '.'? : {0}")]
+    ArrowOnNonPointer(Span),
+
+    #[error("Incomplete type: {0}")]
+    IncompleteType(Span),
+
+    #[error("Cannot perform equivalence operation between '{0}' and '{1}': {2}")]
+    CannotEq(String, String, Span),
+
+    #[error("Function requires an identifier: {0}")]
+    FunctionRequiresIdentifier(Span),
+
+    #[error("Function cannot have storage specifiers: {0}")]
+    FunctionStorageSpecifiers(Span),
+
+    #[error("Parameter requires identifier: {0}")]
+    ParamRequiresIdent(Span),
+
+    #[error("Parameter cannot have storage specifiers: {0}")]
+    ParamStorageSpecifiers(Span),
 }
 
 #[derive(Error, Debug)]
 pub enum CompilerWarning {
+    #[error("This expression has no effect: {0}")]
+    ExprNoEffect(Span),
+
+    #[error("Suffixes are currently ignored: {0}")]
+    SuffixIgnored(Span),
+
     #[error("Unused variable: {0}")]
     UnusedVariable(Span),
 
