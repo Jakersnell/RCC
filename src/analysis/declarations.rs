@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 impl GlobalValidator {
-    pub(crate) fn validate_function(
+    pub(super) fn validate_function(
         &mut self,
         func: &Locatable<FunctionDeclaration>,
     ) -> Result<HlirFunction, ()> {
@@ -95,7 +95,7 @@ impl GlobalValidator {
         Ok(hlir_var)
     }
 
-    pub(crate) fn validate_variable(
+    pub(super) fn validate_variable(
         &mut self,
         locatable_variable: &Locatable<VariableDeclaration>,
     ) -> Result<HlirVariable, ()> {
@@ -180,7 +180,7 @@ impl GlobalValidator {
         })
     }
 
-    pub(crate) fn validate_initializer(
+    pub(super) fn validate_initializer(
         &mut self,
         expr: &Expression,
         span: Span,
