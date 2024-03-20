@@ -1,4 +1,5 @@
 # Roadmap
+
 This document is a roadmap for the development of the compiler. It will be updated as the project progresses.
 <pre>
 [X] Lexing Integer Types
@@ -24,14 +25,14 @@ This document is a roadmap for the development of the compiler. It will be updat
 [X] Parsing Variable Declarations
 [X] Parsing Return Statements
 
-[ ] Binding Literals
-[ ] Binding Binary Expressions
-[ ] Binding Unary Expressions
-[ ] Binding 'sizeof'
-[ ] Binding postfix operations
-[ ] Binding structs
-[ ] Binding arrays
-[ ] Binding function calls
+[X] Binding Literals
+[X] Binding Binary Expressions
+[X] Binding Unary Expressions
+[X] Binding 'sizeof'
+[X] Binding postfix operations
+[X] Binding arrays
+[X] Binding function calls
+[ ] Binding struct declarations
 [ ] Binding function declarations
 [ ] Binding variable declarations
 [ ] Binding return statements
@@ -48,8 +49,6 @@ This document is a roadmap for the development of the compiler. It will be updat
 [ ] Lowering variable declarations
 [ ] Lowering return statements
 [ ] Lowering Control flow
-
-[ ] Buildin of printf, malloc and free functions
 
 [ ] Emitting Literals
 [ ] Emitting Binary Expressions
