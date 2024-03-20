@@ -6,7 +6,7 @@
 
 ### These elements include but are not limited to
 
-- ##### Primitive types (int, char, float, double)
+- ##### Primitive types (int, char, float, double, long)
 - ##### Arrays, pointers, and structs
 - ##### Functions (not function pointers, yet!)
 - ##### Control flow (if, else, while, for)
@@ -28,19 +28,21 @@ ___
 
 ## Directory
 
-### [AST process analysis](AST-PROCESS.md)
+### [Semantic analysis process description](_process_docs/SEMANTIC-ANALYSIS.md)
 
-### [Formal specification of the language parsing grammar. ](MICRO-C-GRAMMAR.md)
+### [AST process analysis](_process_docs/AST-PROCESS.md)
 
-### [Current roadmap](ROADMAP.md)
+### [Formal specification of the language parsing grammar. ](_process_docs/MICRO-C-GRAMMAR.md)
+
+### [Current roadmap](_process_docs/ROADMAP.md)
 
 ---
 
 ### Phases of the compiler
 
-1. Lexical analysis (Reading literals, keywords, operators, etc)
-2. Parsing (Reading the logical structure of the code)
-3. Semantic analysis (Type checking, variable validation, and the like)
+1. Lexical analysis (Reading literals, keywords, operators, etc) {done}
+2. Parsing (Reading the logical structure of the code) {done}
+3. Semantic analysis (Type checking, variable validation, and the like) {in progress}
 4. Codegen (Creating the IR, linking the object files, creating a binary)
 
 ---
