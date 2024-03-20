@@ -26,7 +26,7 @@ thread_local! {
                 location: Some("stdio.h"),
                 params: vec![HlirType {
                     kind: HlirTypeKind::Char(true),
-                    decl: HlirTypeDecl::Pointer(false),
+                    decl: HlirTypeDecl::Pointer,
                 }],
                 varargs: true,
                 return_ty: HlirType {
@@ -56,7 +56,7 @@ thread_local! {
                 location: Some("stdlib.h"),
                 params: vec![HlirType {
                     kind: HlirTypeKind::Void,
-                    decl: HlirTypeDecl::Pointer(false),
+                    decl: HlirTypeDecl::Pointer,
                 }],
                 varargs: false,
                 return_ty: HlirType {
@@ -333,7 +333,7 @@ fn test_builtin_function_is_called_correctly() {
         HlirExpr {
             kind: Box::new(HlirExprKind::Literal(HlirLiteral::String("test".into()))),
             ty: HlirType {
-                decl: HlirTypeDecl::Pointer(false),
+                decl: HlirTypeDecl::Pointer,
                 kind: HlirTypeKind::Char(true),
             },
             is_lval: false,

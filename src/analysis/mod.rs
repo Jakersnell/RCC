@@ -1137,23 +1137,10 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         (
             HlirTypeKind::Int(false), // left
             HlirTypeKind::Long(true), // right
-            HlirTypeKind::Long(true), // expected back
         ),
-        (
-            HlirTypeKind::Int(false),
-            HlirTypeKind::Char(false),
-            HlirTypeKind::Int(false),
-        ),
-        (
-            HlirTypeKind::Long(false),
-            HlirTypeKind::Int(false),
-            HlirTypeKind::Long(false),
-        ),
-        (
-            HlirTypeKind::Long(false),
-            HlirTypeKind::Long(false),
-            HlirTypeKind::Long(false),
-        ),
+        (HlirTypeKind::Int(false), HlirTypeKind::Char(false)),
+        (HlirTypeKind::Long(false), HlirTypeKind::Int(false)),
+        (HlirTypeKind::Long(false), HlirTypeKind::Long(false)),
     ];
     macro_rules! make_expr {
         ($kind:expr) => {
@@ -1164,14 +1151,14 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
             }
         };
     }
-    for (left, right, expected) in test_cases {
+    for (left, right) in test_cases {
         let left = make_expr!(left);
         let right = make_expr!(right);
         let span = Span::default();
         let result = GlobalValidator::new(AbstractSyntaxTree::default())
             .validate_binary_bitwise_expression(&BinaryOp::BitwiseAnd, left, right, span);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().ty.kind, expected);
+        assert_eq!(result.unwrap().ty.kind, HlirTypeKind::Long(true),);
     }
 }
 
