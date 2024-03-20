@@ -214,6 +214,9 @@ pub enum CompilerError {
 
     #[error("Incomplete type: {0}")]
     IncompleteType(Span),
+
+    #[error("Cannot perform equivalence operation between '{0}' and '{1}': {2}")]
+    CannotEq(String, String, Span),
 }
 
 #[derive(Error, Debug)]

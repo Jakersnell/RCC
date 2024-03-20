@@ -27,6 +27,16 @@ macro_rules! cast {
     }};
 }
 
+macro_rules! fabricate_expr {
+    ($ty:expr) => {
+        HlirExpr {
+            HlirExpr {
+                ki
+            }
+        }
+    };
+}
+
 pub struct GlobalValidator {
     ast: AbstractSyntaxTree,
     scope: SymbolResolver,
@@ -259,12 +269,12 @@ impl GlobalValidator {
         let ty_kind = hlir_type.unwrap();
 
         let ty_dec = if declaration.pointer {
-            HlirTypeDecl::Pointer(false)
+            HlirTypeDecl::Pointer
         } else {
             HlirTypeDecl::Basic
         };
 
-        if matches!(ty_kind, HlirTypeKind::Void) && !matches!(ty_dec, HlirTypeDecl::Pointer(_)) {
+        if matches!(ty_kind, HlirTypeKind::Void) && !matches!(ty_dec, HlirTypeDecl::Pointer) {
             self.report_error(CompilerError::IncompleteType(location));
         }
 
@@ -398,89 +408,83 @@ impl GlobalValidator {
             }
             Expression::Cast(dec, expr) => {
                 let (expr_location, expr) = (expr.location, self.validate_expression(expr)?);
-                let expr = expr_location.into_locatable(expr);
                 debug_assert!(dec.ident.is_none());
                 let dec_loc = dec.location;
                 let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location)?;
-                let cast_to_ty = dec_loc.into_locatable(cast_to_ty);
-                self.validate_cast_expression(cast_to_ty, expr)
+                self.explicit_cast(cast_to_ty, expr)
             }
             ty => panic!("Fatal compiler error: Unexpected expression type: {:?}", ty),
         }
     }
 
-    fn validate_cast_expression(
-        &mut self,
-        cast_ty: Locatable<HlirType>,
-        expr: Locatable<HlirExpr>,
-    ) -> Result<HlirExpr, ()> {
-        /*
-        Any type may cast to itself.
-
-        VALID CASTS:
-        struct -> NOTHING
-
-        struct * -> void *
-        struct * -> long
-        struct * -> struct *
-
-        numeric <-> numeric
-        numeric -> any *
-        */
-        if cast_ty.value == expr.ty {
-            return Ok(expr.value);
+    fn explicit_cast(&mut self, cast_ty: HlirType, expr: HlirExpr) -> Result<HlirExpr, ()> {
+        if cast_ty == expr.ty {
+            return Ok(expr);
         }
         let expr_ty = &expr.ty;
-        match (
-            &expr_ty.kind,
-            &expr_ty.decl,
-            &cast_ty.value.kind,
-            &cast_ty.value.decl,
-        ) {
-            (_, HlirTypeDecl::Array(_), to_kind, HlirTypeDecl::Pointer(constness)) => Ok(cast!(
-                expr.value,
+        match (&expr_ty.kind, &expr_ty.decl, &cast_ty.kind, &cast_ty.decl) {
+            (_, HlirTypeDecl::Array(_), to_kind, HlirTypeDecl::Pointer) => Ok(cast!(
+                expr,
                 HlirType {
                     kind: to_kind.clone(),
-                    decl: HlirTypeDecl::Pointer(*constness)
+                    decl: HlirTypeDecl::Pointer
                 }
             )),
-            (
-                kind,
-                HlirTypeDecl::Pointer(from_constness),
-                to_kind,
-                HlirTypeDecl::Pointer(to_constness),
-            ) => Ok(cast!(
-                expr.value,
+            (kind, HlirTypeDecl::Pointer, to_kind, HlirTypeDecl::Pointer) => Ok(cast!(
+                expr,
                 HlirType {
                     kind: to_kind.clone(),
                     decl: HlirTypeDecl::Basic
                 }
             )),
-            (
-                kind,
-                HlirTypeDecl::Pointer(from_constness),
-                HlirTypeKind::Long(signed),
-                HlirTypeDecl::Basic,
-            ) => Ok(cast!(
-                expr.value,
-                HlirType {
-                    kind: HlirTypeKind::Long(true),
-                    decl: HlirTypeDecl::Basic
-                }
-            )),
+            (kind, HlirTypeDecl::Pointer, HlirTypeKind::Long(signed), HlirTypeDecl::Basic) => {
+                Ok(cast!(
+                    expr,
+                    HlirType {
+                        kind: HlirTypeKind::Long(true),
+                        decl: HlirTypeDecl::Basic
+                    }
+                ))
+            }
             (kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic)
                 if kind.is_numeric() && cast_kind.is_numeric() =>
             {
-                Ok(self.cast_numeric_to_numeric(cast_ty.value, expr.value))
+                Ok(self.cast_numeric_to_numeric(cast_ty, expr))
             }
-            _ => {
-                self.report_error(CompilerError::CannotCast(
-                    expr.ty.to_string(),
-                    cast_ty.value.to_string(),
-                    cast_ty.location.merge(expr.location),
-                ));
-                Ok(expr.value)
+            _ => Err(()),
+        }
+    }
+
+    fn implicit_cast(&mut self, cast_to: HlirType, expr: HlirExpr) -> Result<HlirExpr, ()> {
+        match (&cast_to.kind, &cast_to.decl, &expr.ty.kind, &expr.ty.decl) {
+            (_, HlirTypeDecl::Pointer, HlirTypeKind::Void, HlirTypeDecl::Pointer) => {
+                let ty = HlirType {
+                    kind: HlirTypeKind::Void,
+                    decl: HlirTypeDecl::Pointer,
+                };
+                Ok(HlirExpr {
+                    kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
+                    is_lval: false,
+                    ty,
+                })
             }
+            (kind, HlirTypeDecl::Array(_), cast_kind, HlirTypeDecl::Pointer)
+                if kind == cast_kind =>
+            {
+                let ty = HlirType {
+                    kind: cast_kind.clone(),
+                    decl: HlirTypeDecl::Pointer,
+                };
+                Ok(HlirExpr {
+                    kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
+                    is_lval: false,
+                    ty,
+                })
+            }
+            (casting_kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic) => {
+                Ok(self.cast_numeric_to_numeric(cast_to, expr))
+            }
+            _ => Err(()),
         }
     }
 
@@ -502,7 +506,6 @@ impl GlobalValidator {
                 ty,
             }
         } else {
-            // get cast precedence, upcast or downcast depending on precedence
             let expr_level = self.get_numeric_cast_hierarchy(&expr.ty.kind);
             let cast_level = self.get_numeric_cast_hierarchy(&cast_to.kind);
             let kind = match expr_level.cmp(&cast_level) {
@@ -522,7 +525,11 @@ impl GlobalValidator {
                     is_lval: false,
                 }
             } else {
-                expr
+                HlirExpr {
+                    kind: Box::new(HlirExprKind::Cast(cast_to.clone(), expr)),
+                    is_lval: false,
+                    ty: cast_to,
+                }
             }
         }
     }
@@ -625,17 +632,13 @@ impl GlobalValidator {
         }
 
         // dereference to underlying type,
-        let is_const_ptr = match body.ty.decl {
-            HlirTypeDecl::Pointer(_const) => _const,
-            _ => panic!("Type at this point must be pointer."),
-        };
         let mut ty = body.ty.clone();
         ty.decl = HlirTypeDecl::Basic;
 
         Ok(HlirExpr {
             kind: Box::new(HlirExprKind::Deref(body)),
             ty,
-            is_lval: is_const_ptr,
+            is_lval: true,
         })
     }
 
@@ -816,42 +819,6 @@ impl GlobalValidator {
         }
     }
 
-    fn try_cast_together(
-        &mut self,
-        left: HlirExpr,
-        right: HlirExpr,
-        span: Span,
-    ) -> Result<(HlirExpr, HlirExpr), ()> {
-        let mut left = left;
-        let mut right = right;
-        if left.ty != right.ty {
-            if let Some(cast) = left.ty.try_implicit_cast(&right.ty) {
-                let casted = HlirExprKind::Cast(cast, left);
-                left = HlirExpr {
-                    kind: Box::new(casted),
-                    ty: right.ty.clone(),
-                    is_lval: false,
-                };
-            } else if let Some(cast) = right.ty.try_implicit_cast(&left.ty) {
-                let casted = HlirExprKind::Cast(cast, right);
-                right = HlirExpr {
-                    kind: Box::new(casted),
-                    ty: left.ty.clone(),
-                    is_lval: false,
-                };
-            } else {
-                let err = CompilerError::InvalidBinaryOperation(
-                    left.ty.to_string(),
-                    right.ty.to_string(),
-                    span,
-                );
-                self.report_error(err);
-                return Err(());
-            };
-        }
-        Ok((left, right))
-    }
-
     fn validate_binary_expression(
         &mut self,
         op: &BinaryOp,
@@ -910,20 +877,39 @@ impl GlobalValidator {
                 "Pointer arithmetic not supported".into(),
                 span,
             ));
-            return Err(());
+            return Ok(left);
         } else if left.ty.is_pointer() && right.ty.is_numeric() {
             // only addition/subtraction
-            let left = cast!(
-                left,
-                HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic)
-            );
+            let left = self
+                .implicit_cast(
+                    HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                    left,
+                )
+                .unwrap();
+            let right = self
+                .implicit_cast(
+                    HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                    right,
+                )
+                .unwrap();
             match op {
                 BinaryOp::Add => HlirExprKind::Add(left, right),
                 BinaryOp::Sub => HlirExprKind::Sub(left, right),
                 _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
             }
         } else if left.ty.is_numeric() && right.ty.is_numeric() {
-            let (left, right) = self.try_cast_together(left, right, span)?;
+            let left = self
+                .implicit_cast(
+                    HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                    left,
+                )
+                .unwrap();
+            let right = self
+                .implicit_cast(
+                    HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                    right,
+                )
+                .unwrap();
             match op {
                 BinaryOp::Add => HlirExprKind::Add(left, right),
                 BinaryOp::Sub => HlirExprKind::Sub(left, right),
@@ -938,7 +924,7 @@ impl GlobalValidator {
                 right.ty.to_string(),
                 span,
             ));
-            return Err(());
+            return Ok(left);
         };
         Ok(HlirExpr {
             kind: Box::new(kind),
@@ -956,7 +942,7 @@ impl GlobalValidator {
         if !left.is_lval {
             let err = CompilerError::LeftHandNotLVal(span);
             self.report_error(err);
-            return Err(());
+            return Ok(left);
         }
         let op = match op {
             AssignOp::Assign => None,
@@ -1003,13 +989,32 @@ impl GlobalValidator {
                 span,
             );
             self.report_error(err);
+            return Ok(left);
+        }
+
+        let left_ty = left.ty.clone();
+        let left = self.implicit_cast(
+            HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+            left,
+        );
+
+        let right_ty = right.ty.clone();
+        let right = self.implicit_cast(
+            HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+            right,
+        );
+
+        if left.is_err() || right.is_err() {
+            self.report_error(CompilerError::CannotEq(
+                left_ty.to_string(),
+                right_ty.to_string(),
+                span,
+            ));
             return Err(());
         }
-        let (left, right) = if left.ty != right.ty {
-            self.try_cast_together(left, right, span)?
-        } else {
-            (left, right)
-        };
+
+        let (left, right) = (left.unwrap(), right.unwrap());
+
         let kind = match op {
             BinaryOp::Equal => HlirExprKind::Equal(left, right),
             BinaryOp::NotEqual => HlirExprKind::NotEqual(left, right),
@@ -1043,21 +1048,14 @@ impl GlobalValidator {
             self.report_error(err);
             return Err(());
         }
-        let (left, right) = if left.is_pointer() && right.is_pointer() {
-            (
-                cast!(
-                    left,
-                    HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic)
-                ),
-                cast!(
-                    right,
-                    HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic)
-                ),
-            )
-        } else {
-            self.try_cast_together(left, right, span)?
+        let ty = HlirType {
+            kind: HlirTypeKind::Long(true),
+            decl: HlirTypeDecl::Basic,
         };
-        let ty = left.ty.clone();
+        let (left, right) = (
+            self.explicit_cast(ty.clone(), left).unwrap(),
+            self.explicit_cast(ty.clone(), right).unwrap(),
+        );
         let kind = match op {
             BinaryOp::BitwiseAnd => HlirExprKind::BitwiseAnd(left, right),
             BinaryOp::BitwiseOr => HlirExprKind::BitwiseOr(left, right),
@@ -1072,32 +1070,6 @@ impl GlobalValidator {
             is_lval: false,
         })
     }
-}
-
-#[test]
-fn test_try_cast_together_results_in_correct_higher_type_for_valid_types() {
-    let test_left = HlirExpr {
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
-        ty: HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
-        is_lval: false,
-    };
-    let test_right = HlirExpr {
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
-        ty: HlirType::new(HlirTypeKind::Long(false), HlirTypeDecl::Basic),
-        is_lval: false,
-    };
-    let span = Span::default();
-    let (result_left, result_right) = GlobalValidator::new(AbstractSyntaxTree::default())
-        .try_cast_together(test_left, test_right, span)
-        .expect("Result should be ok");
-    assert_eq!(
-        result_left.ty,
-        HlirType::new(HlirTypeKind::Long(false), HlirTypeDecl::Basic)
-    );
-    assert_eq!(
-        result_right.ty,
-        HlirType::new(HlirTypeKind::Long(false), HlirTypeDecl::Basic)
-    );
 }
 
 #[cfg(test)]

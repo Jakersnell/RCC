@@ -59,7 +59,7 @@ impl HlirType {
     }
 
     pub fn is_pointer(&self) -> bool {
-        matches!(self.decl, HlirTypeDecl::Pointer(_))
+        matches!(self.decl, HlirTypeDecl::Pointer)
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -70,7 +70,7 @@ impl HlirType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum HlirTypeDecl {
     Basic,
-    Pointer(bool), // true if pointer is const
+    Pointer, // true if pointer is const
     Array(u64),
 }
 
@@ -79,7 +79,7 @@ impl Display for HlirTypeDecl {
         use HlirTypeDecl::*;
         match self {
             Basic => Ok(()),
-            Pointer(constant) => write!(f, "*{}", if *constant { "const " } else { "" }),
+            Pointer => write!(f, "*"),
             Array(size) => write!(f, "[{}]", size),
         }
     }
@@ -117,7 +117,7 @@ impl HlirType {
             (Long(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
             (Int(_), Double, Basic, Basic) => Some(Double),
             (Long(_), Double, Basic, Basic) => Some(Double),
-            (_, Long(unsigned), Pointer(_), Basic) => Some(Long(*unsigned)), // all pointers can cast to long
+            (_, Long(unsigned), Pointer, Basic) => Some(Long(*unsigned)), // all pointers can cast to long
             _ => None,
         };
 
