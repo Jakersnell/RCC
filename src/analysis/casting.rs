@@ -131,7 +131,7 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(cast_to: HlirType, expr: Hlir
     }
 }
 
-pub(in crate::analysis) fn give_numeric_sign(ty: HlirTypeKind, signed: bool) -> HlirTypeKind {
+fn give_numeric_sign(ty: HlirTypeKind, signed: bool) -> HlirTypeKind {
     match ty {
         HlirTypeKind::Long(_) => HlirTypeKind::Long(signed),
         HlirTypeKind::Int(_) => HlirTypeKind::Int(signed),
@@ -140,7 +140,7 @@ pub(in crate::analysis) fn give_numeric_sign(ty: HlirTypeKind, signed: bool) -> 
     }
 }
 
-pub(in crate::analysis) fn get_numeric_signed(ty: &HlirTypeKind) -> bool {
+fn get_numeric_signed(ty: &HlirTypeKind) -> bool {
     match ty {
         HlirTypeKind::Long(signed) => *signed,
         HlirTypeKind::Int(signed) => *signed,
@@ -149,7 +149,7 @@ pub(in crate::analysis) fn get_numeric_signed(ty: &HlirTypeKind) -> bool {
     }
 }
 
-pub(in crate::analysis) fn demote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
+fn demote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
     // does not include double -> float
     match ty {
         HlirTypeKind::Double => HlirTypeKind::Long(false),
@@ -160,7 +160,7 @@ pub(in crate::analysis) fn demote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
     }
 }
 
-pub(in crate::analysis) fn promote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
+fn promote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
     // does not include int -> float
     match ty {
         HlirTypeKind::Float => HlirTypeKind::Double,
@@ -171,7 +171,7 @@ pub(in crate::analysis) fn promote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
     }
 }
 
-pub(in crate::analysis) fn get_numeric_cast_hierarchy(ty: &HlirTypeKind) -> u8 {
+fn get_numeric_cast_hierarchy(ty: &HlirTypeKind) -> u8 {
     match ty {
         HlirTypeKind::Double => 4,
         HlirTypeKind::Long(_) => 3,
