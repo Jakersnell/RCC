@@ -150,7 +150,7 @@ fn get_numeric_signed(ty: &HlirTypeKind) -> bool {
 }
 
 fn demote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
-    // does not include double -> float
+    // does not include double -> float, as this needs to be handled directly
     match ty {
         HlirTypeKind::Double => HlirTypeKind::Long(false),
         HlirTypeKind::Float => HlirTypeKind::Int(false),
