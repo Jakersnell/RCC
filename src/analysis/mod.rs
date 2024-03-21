@@ -2,6 +2,7 @@ mod binary_expressions;
 mod casting;
 mod declarations;
 mod expressions;
+mod flow;
 pub mod hlir;
 mod statements;
 mod symbols;
@@ -83,44 +84,6 @@ impl GlobalValidator {
         debug_assert!(resolver.symbols.is_empty());
     }
 
-    fn validate_statement(&mut self, stmt: &Locatable<Statement>) -> Result<HlirStmt, ()> {
-        match &stmt.value {
-            Statement::Expression(expr) => {
-                Ok(HlirStmt::Expression(self.validate_expression(&expr.value)?))
-            }
-            Statement::Declaration(var_dec) => {
-                todo!()
-            }
-            Statement::If(condition, body, else_body) => {
-                todo!()
-            }
-            Statement::While(condition, body) => {
-                todo!()
-            }
-            Statement::For(initializer, condition, post_loop, body) => {
-                todo!("break this into a while loop")
-            }
-            Statement::Break => {
-                todo!()
-            }
-            Statement::Continue => {
-                todo!()
-            }
-            Statement::Return(value) => {
-                todo!()
-            }
-            Statement::Block(block) => {
-                todo!()
-            }
-            Statement::Empty => {
-                todo!()
-            }
-        }
-    }
-
-    /*
-    State machine to validate a type from a DeclarationSpecifier
-     */
     fn validate_type(
         &mut self,
         declaration: &DeclarationSpecifier,
