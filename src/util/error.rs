@@ -232,6 +232,9 @@ pub enum CompilerError {
 
     #[error("Cannot use '->' on type '{0}': {1}")]
     CannotPointerMemberAccess(String, Span),
+
+    #[error("Argument type '{0}' does not match function argument type '{1}': {2}")]
+    ArgumentTypeMismatch(String, String, Span),
 }
 
 #[derive(Error, Debug)]
