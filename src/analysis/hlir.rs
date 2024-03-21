@@ -1,5 +1,5 @@
 use crate::analysis::hlir::HlirTypeKind::{Double, Float};
-use crate::parser::ast::{BinaryOp, TypeSpecifier};
+use crate::parser::ast::{BinaryOp, Block, TypeSpecifier};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
@@ -321,6 +321,7 @@ impl Deref for HlirBlock {
 
 #[derive(Debug)]
 pub enum HlirStmt {
+    Block(HlirBlock),
     Expression(HlirExpr),
     VariableDeclaration(HlirVariable),
     If {
@@ -334,5 +335,5 @@ pub enum HlirStmt {
     },
     Continue,
     Break,
-    Return(HlirExpr),
+    Return(Option<HlirExpr>),
 }
