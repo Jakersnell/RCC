@@ -181,45 +181,12 @@ impl SymbolResolver {
     pub fn validate_function_call(
         &self,
         ident: InternedStr,
-        args: Vec<(HlirExpr, Span)>,
         span: Span,
-    ) -> Result<HlirExpr, CompilerError> {
+    ) -> Result<&FunctionSymbol, CompilerError> {
         match self.retrieve(&ident, span)? {
-            SymbolKind::Function(func) => {
-                Self::validate_function_params(func.varargs, &func.params, &args, span)?;
-                let kind = HlirExprKind::FunctionCall {
-                    location: func.location.clone(),
-                    ident,
-                    args: args.into_iter().map(|arg| arg.0).collect(),
-                };
-                Ok(HlirExpr {
-                    kind: Box::new(kind),
-                    ty: func.return_ty.clone(),
-                    is_lval: false,
-                })
-            }
+            SymbolKind::Function(func) => Ok(func),
             _ => Err(CompilerError::NotAFunction(span)),
         }
-    }
-
-    fn validate_function_params(
-        varargs: bool,
-        params: &[HlirType],
-        args: &[(HlirExpr, Span)],
-        span: Span,
-    ) -> SymbolResult {
-        for (param, arg) in params.iter().zip(args.iter()) {
-            if param != &arg.0.ty {
-                return Err(CompilerError::FunctionTypeMismatch(arg.1));
-            }
-        }
-        if varargs {
-            return Ok(());
-        }
-        if params.len() != args.len() {
-            return Err(CompilerError::FunctionTypeMismatch(span));
-        }
-        Ok(())
     }
 
     pub fn check_valid_assignment(
@@ -334,17 +301,6 @@ impl SymbolResolver {
 fn test_builtin_function_is_called_correctly() {
     let mut resolver = crate::analysis::symbols::SymbolResolver::create_root();
     let ident = crate::util::str_intern::intern("printf");
-    let args = [(
-        HlirExpr {
-            kind: Box::new(HlirExprKind::Literal(HlirLiteral::String("test".into()))),
-            ty: HlirType {
-                decl: HlirTypeDecl::Pointer,
-                kind: HlirTypeKind::Char(true),
-            },
-            is_lval: false,
-        },
-        Span::default(),
-    )];
-    let call = resolver.validate_function_call(ident, args.into(), Span::default());
+    let call = resolver.validate_function_call(ident, Span::default());
     assert!(call.is_ok())
 }
