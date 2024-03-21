@@ -2,7 +2,6 @@ mod binary_expressions;
 mod casting;
 mod declarations;
 mod expressions;
-mod flow;
 pub mod hlir;
 mod statements;
 mod symbols;
@@ -88,6 +87,7 @@ impl GlobalValidator {
         &mut self,
         declaration: &DeclarationSpecifier,
         location: Span,
+        is_function_return_ty: bool,
     ) -> Result<HlirType, ()> {
         #[derive(Debug, PartialEq)]
         enum State {
@@ -189,8 +189,12 @@ impl GlobalValidator {
             HlirTypeDecl::Basic
         };
 
-        if matches!(ty_kind, HlirTypeKind::Void) && !matches!(ty_dec, HlirTypeDecl::Pointer) {
+        if !is_function_return_ty
+            && matches!(ty_kind, HlirTypeKind::Void)
+            && !matches!(ty_dec, HlirTypeDecl::Pointer)
+        {
             self.report_error(CompilerError::IncompleteType(location));
+            return Err(());
         }
 
         Ok(HlirType {
@@ -202,12 +206,12 @@ impl GlobalValidator {
 
 #[cfg(test)]
 macro_rules! make_dec_specifier {
-    ($types:expr) => {
+    ($types:expr, $is_ptr:expr) => {
         DeclarationSpecifier {
             specifiers: vec![],
             qualifiers: vec![],
             ty: $types,
-            pointer: false,
+            pointer: $is_ptr,
         }
     };
 }
@@ -223,11 +227,12 @@ fn test_validate_type_returns_error_for_invalid_type_orientations() {
         vec![Unsigned, Signed, Int],
         vec![Signed, Unsigned, Long],
         vec![Signed, Double],
+        vec![Void],
     ];
     for types in type_tests {
         let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
-        let types = make_dec_specifier!(types);
-        let result = validator.validate_type(&types, Span::default());
+        let types = make_dec_specifier!(types, false);
+        let result = validator.validate_type(&types, Span::default(), false);
         if result.is_ok() {
             panic!("Expected error, got ok, test: {:?}", types);
         }
@@ -238,23 +243,39 @@ fn test_validate_type_returns_error_for_invalid_type_orientations() {
 fn test_validate_type_returns_ok_for_valid_type_orientations() {
     use TypeSpecifier::*;
     let type_tests = [
-        (vec![Int], HlirTypeKind::Int(false)),
-        (vec![Long], HlirTypeKind::Long(false)),
-        (vec![Unsigned, Int], HlirTypeKind::Int(true)),
-        (vec![Unsigned, Long], HlirTypeKind::Long(true)),
-        (vec![Signed, Int], HlirTypeKind::Int(false)),
-        (vec![Signed, Long], HlirTypeKind::Long(false)),
-        (vec![Double], HlirTypeKind::Double),
-        (vec![Void], HlirTypeKind::Void),
+        (vec![Int], HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+        (vec![Long], HlirTypeKind::Long(false), HlirTypeDecl::Basic),
+        (
+            vec![Unsigned, Int],
+            HlirTypeKind::Int(true),
+            HlirTypeDecl::Basic,
+        ),
+        (
+            vec![Unsigned, Long],
+            HlirTypeKind::Long(true),
+            HlirTypeDecl::Basic,
+        ),
+        (
+            vec![Signed, Int],
+            HlirTypeKind::Int(false),
+            HlirTypeDecl::Basic,
+        ),
+        (
+            vec![Signed, Long],
+            HlirTypeKind::Long(false),
+            HlirTypeDecl::Basic,
+        ),
+        (vec![Double], HlirTypeKind::Double, HlirTypeDecl::Basic),
+        (vec![Void], HlirTypeKind::Void, HlirTypeDecl::Pointer),
     ];
-    for (types, expected) in type_tests {
+    for (types, expected, decl) in type_tests {
         let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
-        let dec_spec = make_dec_specifier!(types);
+        let dec_spec = make_dec_specifier!(types, decl == HlirTypeDecl::Pointer);
         let expected = HlirType {
-            decl: HlirTypeDecl::Basic,
+            decl,
             kind: expected,
         };
-        let result = validator.validate_type(&dec_spec, Span::default());
+        let result = validator.validate_type(&dec_spec, Span::default(), false);
         assert_eq!(result, Ok(expected));
     }
 }

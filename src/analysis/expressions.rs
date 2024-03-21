@@ -54,7 +54,7 @@ impl GlobalValidator {
     ) -> Result<HlirExpr, ()> {
         let size = match &ty_or_expr.value {
             TypeOrExpression::Type(ty) => {
-                let ty = self.validate_type(&ty.specifier, ty_or_expr.location)?;
+                let ty = self.validate_type(&ty.specifier, ty_or_expr.location, false)?;
                 self.sizeof(&ty, ty_or_expr.location)
             }
             TypeOrExpression::Expr(expr) => {
@@ -280,7 +280,7 @@ impl GlobalValidator {
         let (expr_location, expr) = (expr.location, self.validate_expression(expr)?);
         debug_assert!(dec.ident.is_none());
         let dec_loc = dec.location;
-        let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location)?;
+        let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false)?;
         explicit_cast(cast_to_ty, expr)
     }
 
