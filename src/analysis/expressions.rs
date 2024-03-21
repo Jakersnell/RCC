@@ -2,6 +2,7 @@ use crate::analysis::casting::{explicit_cast, implicit_cast};
 use crate::analysis::hlir::{
     HlirExpr, HlirExprKind, HlirLiteral, HlirType, HlirTypeDecl, HlirTypeKind,
 };
+use crate::analysis::symbols::SymbolResult;
 use crate::analysis::GlobalValidator;
 use crate::lexer::tokens::Literal;
 use crate::parser::ast::{
@@ -10,6 +11,7 @@ use crate::parser::ast::{
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
+use std::env::var;
 
 impl GlobalValidator {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
@@ -157,6 +159,19 @@ impl GlobalValidator {
     ) -> Result<HlirExpr, ()> {
         let span = ident.location;
         let ident = ident.value.clone();
+
+        let func = self.scope.validate_function_call(ident.clone(), span);
+        if let Err(err) = func {
+            self.report_error(err);
+            return Err(());
+        }
+
+        let func = func.unwrap();
+        let varargs = func.varargs;
+        let params = func.params.clone();
+        let location = func.location;
+        let return_ty = func.return_ty.clone();
+
         let mut hlir_args = Vec::new();
         for loc_expr in args {
             hlir_args.push((
@@ -164,11 +179,67 @@ impl GlobalValidator {
                 loc_expr.location,
             ));
         }
-        self.scope
-            .validate_function_call(ident, hlir_args, span)
-            .map_err(|err| {
-                self.report_error(err);
-            })
+        let hlir_args = self.try_cast_function_args(hlir_args, &params)?;
+
+        self.validate_function_params(varargs, &params, &hlir_args, span)?;
+        let kind = HlirExprKind::FunctionCall {
+            location,
+            ident,
+            args: hlir_args.into_iter().map(|arg| arg.0).collect(),
+        };
+        Ok(HlirExpr {
+            kind: Box::new(kind),
+            ty: return_ty,
+            is_lval: false,
+        })
+    }
+    fn try_cast_function_args(
+        &mut self,
+        args: Vec<(HlirExpr, Span)>,
+        param_types: &[HlirType],
+    ) -> Result<Vec<(HlirExpr, Span)>, ()> {
+        let mut args = args;
+        let var_args = args.split_off(param_types.len());
+        let mut processed_args = Vec::new();
+        for (arg, param_ty) in args.into_iter().zip(param_types.iter()) {
+            let arg_ty = arg.0.ty.clone();
+            let span = arg.1;
+            if let Ok(arg) = implicit_cast(param_ty.clone(), arg.0) {
+                processed_args.push((arg, span));
+            } else {
+                self.report_error(CompilerError::ArgumentTypeMismatch(
+                    arg_ty.to_string(),
+                    param_ty.to_string(),
+                    span,
+                ));
+                return Err(());
+            }
+        }
+        processed_args.extend(var_args);
+        Ok(processed_args)
+    }
+
+    fn validate_function_params(
+        &mut self,
+        varargs: bool,
+        params: &[HlirType],
+        args: &[(HlirExpr, Span)],
+        span: Span,
+    ) -> Result<(), ()> {
+        for (param, arg) in params.iter().zip(args.iter()) {
+            if param != &arg.0.ty {
+                self.report_error(CompilerError::FunctionTypeMismatch(arg.1));
+                return Err(());
+            }
+        }
+        if varargs {
+            return Ok(());
+        }
+        if params.len() != args.len() {
+            self.report_error(CompilerError::FunctionTypeMismatch(span));
+            return Err(());
+        }
+        Ok(())
     }
 
     fn route_index(
