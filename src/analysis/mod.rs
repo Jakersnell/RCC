@@ -17,7 +17,8 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::rc::Rc;
 
-pub type SharedReporter = Rc<RefCell<Reporter>>;
+#[derive(Debug, Default)]
+pub struct SharedReporter(Rc<RefCell<Reporter>>);
 
 pub struct GlobalValidator {
     ast: Option<AbstractSyntaxTree>,
@@ -30,7 +31,7 @@ impl GlobalValidator {
         Self {
             ast: Some(ast),
             scope: Box::new(RefCell::new(SymbolResolver::create_root())),
-            reporter: Rc::new(RefCell::new(Reporter::default())),
+            reporter: SharedReporter::default(),
         }
     }
 
@@ -96,7 +97,10 @@ impl GlobalValidator {
         let functions = deref_map(functions);
         let structs = deref_map(structs);
         let globals = deref_map(globals);
-        if self.reporter.borrow().status().is_err() {
+        if !functions.contains_key("main") {
+            self.report_error(CompilerError::MissingMain);
+        }
+        if self.reporter.0.borrow().status().is_err() {
             Err(self.reporter)
         } else {
             Ok(HighLevelIR {
@@ -108,12 +112,12 @@ impl GlobalValidator {
     }
 
     fn report_error(&mut self, error: CompilerError) -> Result<(), ()> {
-        self.reporter.borrow_mut().report_error(error);
+        self.reporter.0.borrow_mut().report_error(error);
         Err(())
     }
 
     fn report_warning(&mut self, warning: CompilerWarning) {
-        self.reporter.borrow_mut().report_warning(warning);
+        self.reporter.0.borrow_mut().report_warning(warning);
     }
 
     fn add_variable_to_scope(&mut self, var: &HlirVariable, span: Span) -> Result<(), ()> {
