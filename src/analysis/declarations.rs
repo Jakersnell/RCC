@@ -95,6 +95,8 @@ impl GlobalValidator {
 
         let body = self.validate_block(&func.body)?;
 
+        self.pop_scope();
+
         Ok(HlirFunction {
             ty,
             ident,
