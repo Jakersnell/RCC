@@ -93,7 +93,7 @@ pub enum CompilerError {
     #[error("Unclosed char literal: {0}")]
     UnclosedCharLiteral(Span),
 
-    #[error("Cannot cast {0} to {1}")]
+    #[error("Cannot cast '{0}' to '{1}': {2}")]
     CannotCast(String, String, Span),
 
     #[error("Cannot assign '{1}' to lval with type of '{0}': {2}")]
