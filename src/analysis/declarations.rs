@@ -88,15 +88,13 @@ impl GlobalValidator {
             .add_function(&ident, ty.clone(), param_types, func_span);
 
         self.push_scope();
-
         for parameter in &parameters {
-            self.add_variable_to_scope(parameter, func_span)?;
+            self.add_variable_to_scope(parameter, func_span);
         }
 
-        let body = self.validate_block(&func.body)?;
-
+        let body = self.validate_block(&func.body);
         self.pop_scope();
-
+        let body = body?;
         Ok(HlirFunction {
             ty,
             ident,
@@ -166,15 +164,6 @@ impl GlobalValidator {
 
         variable.initializer = initializer;
         variable.ty = ty;
-
-        self.scope.borrow_mut().add_variable(
-            &variable.ident,
-            &variable.ty,
-            variable.is_const,
-            variable.initializer.is_some(),
-            array_size,
-            locatable_variable.location,
-        );
 
         Ok(variable)
     }
