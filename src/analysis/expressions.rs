@@ -294,20 +294,29 @@ impl GlobalValidator {
         literal: &Literal,
         span: Span,
     ) -> Result<HlirExpr, ()> {
-        let (literal, kind) = match literal {
+        let (literal, ty) = match literal {
             Literal::Integer { value, suffix } => {
                 if suffix.is_some() {
                     let warning = CompilerWarning::SuffixIgnored(span);
                     self.report_warning(warning);
                 }
                 if *value <= i64::MAX as isize {
-                    (HlirLiteral::Int(*value as i64), HlirTypeKind::Int(false))
+                    (
+                        HlirLiteral::Int(*value as i64),
+                        HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+                    )
                 } else if *value <= u64::MAX as isize {
-                    (HlirLiteral::UInt(*value as u64), HlirTypeKind::Int(true))
+                    (
+                        HlirLiteral::UInt(*value as u64),
+                        HlirType::new(HlirTypeKind::Int(true), HlirTypeDecl::Basic),
+                    )
                 } else {
                     let err = CompilerError::NumberTooLarge(span);
                     self.report_error(err);
-                    (HlirLiteral::Int(0), HlirTypeKind::Int(false))
+                    (
+                        HlirLiteral::Int(0),
+                        HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+                    )
                 }
             }
             Literal::Float { value, suffix } => {
@@ -315,15 +324,23 @@ impl GlobalValidator {
                     let warning = CompilerWarning::SuffixIgnored(span);
                     self.report_warning(warning);
                 }
-                (HlirLiteral::Float(*value), HlirTypeKind::Double)
+                (
+                    HlirLiteral::Float(*value),
+                    HlirType::new(HlirTypeKind::Double, HlirTypeDecl::Basic),
+                )
             }
-            Literal::Char { value } => (HlirLiteral::Char(*value as u8), HlirTypeKind::Char(false)),
+            Literal::Char { value } => (
+                HlirLiteral::Char(*value as u8),
+                HlirType::new(HlirTypeKind::Char(false), HlirTypeDecl::Basic),
+            ),
             Literal::String { value } => {
                 let value = value.as_str().bytes().collect();
-                (HlirLiteral::String(value), HlirTypeKind::Char(false))
+                (
+                    HlirLiteral::String(value),
+                    HlirType::new(HlirTypeKind::Char(false), HlirTypeDecl::Pointer),
+                )
             }
         };
-        let ty = HlirType::new(kind, HlirTypeDecl::Basic);
         Ok(HlirExpr {
             kind: Box::new(HlirExprKind::Literal(literal)),
             ty,
