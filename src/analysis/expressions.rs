@@ -284,9 +284,17 @@ impl GlobalValidator {
     ) -> Result<HlirExpr, ()> {
         let (expr_location, expr) = (expr.location, self.validate_expression(expr)?);
         debug_assert!(dec.ident.is_none());
-        let dec_loc = dec.location;
         let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false)?;
-        explicit_cast(cast_to_ty, expr)
+        let casting_ty_string = cast_to_ty.to_string();
+        let expr_ty_string = expr.ty.to_string();
+        explicit_cast(cast_to_ty.clone(), expr).map_err(|_| {
+            let err = CompilerError::CannotCast(
+                expr_ty_string,
+                casting_ty_string,
+                dec.location.merge(expr_location),
+            );
+            self.report_error(err);
+        })
     }
 
     pub(super) fn validate_literal(
