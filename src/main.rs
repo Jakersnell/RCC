@@ -18,14 +18,7 @@ mod util;
 /// Cant compile a program if you don't have a compiler.
 
 fn main() {
-    let src = "
-
-    int main() {
-        int x = 1;
-
-        return 0;
-    }
-    ";
+    let src = std::fs::read_to_string("_c_test_files/for_dev_debug.c").unwrap();
     let lexer = lexer::Lexer::new(src.into());
     let parser = parser::Parser::new(lexer);
     let result = parser.parse_all().unwrap();
@@ -33,7 +26,7 @@ fn main() {
         result.into_iter().map(|dec| dec.value).collect(),
     ));
     let hlir = global_validator.validate();
-    println!("{:#?}", hlir);
+    // println!("{:#?}", hlir);
 }
 
 #[cfg(test)]
