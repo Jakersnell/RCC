@@ -5,7 +5,7 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Reporter {
-    errors: Vec<CompilerError>,
+    pub errors: Vec<CompilerError>,
     warnings: Vec<CompilerWarning>,
 }
 impl Default for Reporter {

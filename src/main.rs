@@ -13,7 +13,7 @@ mod parser;
 mod util;
 
 /// The main entry point for the program.
-/// This will be last to be completed because it's just a CLI and
+/// This will be last to be completed because it's just a CLI frontend and
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't have a compiler.
 
@@ -29,13 +29,17 @@ fn main() {
     // println!("{:#?}", hlir);
 }
 
+/// Contains integration tests for the components and their cohesion
 #[cfg(test)]
 mod tests {
-    use crate::parser::ast::{Expression, InitDeclaration};
+
+    const DISPLAY_ERRORS: bool = true;
+
+    use crate::parser::ast::{AbstractSyntaxTree, Expression, InitDeclaration};
     use crate::parser::ParseResult;
     use crate::util::error::{CompilerError, CompilerWarning};
     use crate::util::{CompilerResult, Locatable};
-    use crate::{lexer, parser};
+    use crate::{analysis, lexer, parser};
     use std::cell::RefCell;
     use std::env::var;
     use std::path::PathBuf;
@@ -50,43 +54,51 @@ mod tests {
         Ok(paths)
     }
 
-    fn run_test_on_file(
-        path: &PathBuf,
-    ) -> Result<Vec<Locatable<InitDeclaration>>, Vec<CompilerError>> {
+    fn run_test_on_file(path: &PathBuf) -> Result<(), ()> {
         let source = std::fs::read_to_string(path).expect("Could not read file.");
         let lexer = lexer::Lexer::new(source.into());
         let parser = parser::Parser::new(lexer);
-        parser.parse_all()
+        let result = parser.parse_all().map_err(|err| {
+            if DISPLAY_ERRORS {
+                println!("{:#?}", err)
+            }
+        })?;
+        let global_validator = analysis::GlobalValidator::new(AbstractSyntaxTree::new(
+            result.into_iter().map(|dec| dec.value).collect(),
+        ));
+        global_validator.validate().map(|_| ()).map_err(|reporter| {
+            if DISPLAY_ERRORS {
+                println!("{:#?}", reporter.borrow().errors)
+            }
+        })
+    }
+
+    macro_rules! file_test_assert {
+        ($filename:expr, $assertion:expr) => {
+            if !$assertion {
+                panic!(
+                    "Assertion error in '{:#?}': `{:#?}`",
+                    $filename,
+                    stringify!($assertion)
+                )
+            }
+        };
     }
 
     #[test]
     fn test_should_succeed_files() {
-        let tests = get_file_paths(&"_c_test_files/should_succeed".into()).unwrap();
-
-        for test in tests {
-            let result = run_test_on_file(&test);
-            match result {
-                Ok(body) => {
-                    assert!(!body.is_empty(), "No body in file: {:#?}", test);
-                }
-                Err(errors) => panic!("File {:#?} errors:\n{:#?}", test, errors),
-            }
-        }
+        get_file_paths(&"_c_test_files/should_succeed".into())
+            .unwrap()
+            .iter()
+            .for_each(|test| file_test_assert!(test, run_test_on_file(test).is_ok()));
     }
 
     #[test]
     fn test_should_fail_files() {
-        let tests = get_file_paths(&"_c_test_files/should_fail".into()).unwrap();
-
-        for test in tests {
-            let result = run_test_on_file(&test);
-            match result {
-                Err(errors) => {
-                    assert!(!errors.is_empty(), "No errors in file: {:#?}", test);
-                }
-                Ok(body) => panic!("File {:#?} succeeded", test),
-            }
-        }
+        get_file_paths(&"_c_test_files/should_fail".into())
+            .unwrap()
+            .iter()
+            .for_each(|test| file_test_assert!(test, run_test_on_file(test).is_err()))
     }
 
     #[test]
