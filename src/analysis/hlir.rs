@@ -1,3 +1,4 @@
+use crate::analysis::hlir::HlirTypeDecl::{Basic, Pointer};
 use crate::analysis::hlir::HlirTypeKind::{Double, Float};
 use crate::parser::ast::{BinaryOp, Block, TypeSpecifier};
 use crate::util::error::CompilerError;
@@ -55,7 +56,7 @@ pub struct HlirType {
 
 impl HlirType {
     pub fn is_array(&self) -> bool {
-        matches!(self.decl, HlirTypeDecl::Array(_))
+        matches!(self.decl, HlirTypeDecl::Array(_)) && !self.is_pointer()
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -63,29 +64,14 @@ impl HlirType {
     }
 
     pub fn is_numeric(&self) -> bool {
-        self.kind.is_numeric()
+        use HlirTypeKind::*;
+        matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double) && !self.is_pointer()
     }
-}
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum HlirTypeDecl {
-    Basic,
-    Pointer, // true if pointer is const
-    Array(u64),
-}
-
-impl Display for HlirTypeDecl {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use HlirTypeDecl::*;
-        match self {
-            Basic => Ok(()),
-            Pointer => write!(f, "*"),
-            Array(size) => write!(f, "[{}]", size),
-        }
+    pub fn is_integer(&self) -> bool {
+        use HlirTypeKind::*;
+        matches!(&self.kind, Char(_) | Int(_) | Long(_)) && !self.is_pointer()
     }
-}
-
-impl HlirType {
     pub fn try_implicit_cast(&self, to: &HlirType) -> Option<HlirType> {
         if self == to {
             return None;
@@ -124,6 +110,25 @@ impl HlirType {
         ty_kind.map(|kind| HlirType::new(kind, Basic))
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HlirTypeDecl {
+    Basic,
+    Pointer, // true if pointer is const
+    Array(u64),
+}
+
+impl Display for HlirTypeDecl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use HlirTypeDecl::*;
+        match self {
+            Basic => Ok(()),
+            Pointer => write!(f, " *"),
+            Array(size) => write!(f, " [{}]", size),
+        }
+    }
+}
+
 impl Display for HlirType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.kind, self.decl)
@@ -141,26 +146,15 @@ pub enum HlirTypeKind {
     Struct(InternedStr),
 }
 
-impl HlirTypeKind {
-    pub fn is_numeric(&self) -> bool {
-        use HlirTypeKind::*;
-        matches!(self, Char(_) | Int(_) | Long(_) | Float | Double)
-    }
-
-    pub fn is_integer(&self) -> bool {
-        use HlirTypeKind::*;
-        matches!(self, Char(_) | Int(_) | Long(_))
-    }
-}
-
 impl Display for HlirTypeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         macro_rules! write_signed {
             ($name:literal, $signed:expr) => {
                 write!(
                     f,
-                    concat!($name, " {}"),
-                    if $signed { "signed" } else { "unsigned" }
+                    "{} {}",
+                    if $signed { "signed" } else { "unsigned" },
+                    $name
                 )
             };
         }
@@ -204,11 +198,11 @@ impl HlirExpr {
         )
     }
     pub fn is_integer_or_pointer(&self) -> bool {
-        self.ty.kind.is_integer() || self.ty.is_pointer()
+        self.ty.is_integer() || self.ty.is_pointer()
     }
 
     pub fn is_integer(&self) -> bool {
-        self.ty.kind.is_integer()
+        self.ty.is_integer()
     }
 
     pub fn is_pointer(&self) -> bool {

@@ -44,7 +44,7 @@ pub(in crate::analysis) fn explicit_cast(
             ))
         }
         (kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic)
-            if kind.is_numeric() && cast_kind.is_numeric() =>
+            if expr.ty.is_numeric() && cast_ty.is_numeric() =>
         {
             Ok(cast_numeric_to_numeric(cast_ty, expr))
         }
