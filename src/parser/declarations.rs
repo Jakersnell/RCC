@@ -53,7 +53,7 @@ where
         }
         confirm!(self, consume, Token::Symbol(Symbol::CloseCurly), "}")?;
         confirm!(self, consume, Token::Symbol(Symbol::Semicolon), ";")?;
-        let location = declaration.location.merge(self.current_span()?);
+        let location = declaration.location.merge(self.last_span);
         Ok(Locatable::new(
             location,
             StructDeclaration {
