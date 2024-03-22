@@ -1,20 +1,60 @@
-use crate::analysis::hlir::{
-    HighLevelIR, HlirBlock, HlirFunction, HlirStmt, HlirType, HlirTypeDecl, HlirTypeKind,
-    HlirVarInit, HlirVariable,
-};
+use crate::analysis::hlir::*;
 use crate::analysis::symbols::SymbolResolver;
 use crate::analysis::{GlobalValidator, SharedReporter};
-use crate::parser::ast::{
-    AbstractSyntaxTree, Block, Declaration, DeclarationSpecifier, Expression, FunctionDeclaration,
-    Statement, TypeQualifier, TypeSpecifier, VariableDeclaration,
-};
+use crate::parser::ast::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::{Locatable, Span};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 impl GlobalValidator {
-    pub(super) fn validate_function(
+    pub(super) fn validate_struct_definition(
+        &mut self,
+        _struct: &Locatable<StructDeclaration>,
+    ) -> Result<HlirStruct, ()> {
+        if _struct.declaration.specifier.pointer {
+            self.report_error(CompilerError::StructDeclarationPointer(_struct.location));
+        }
+        if !_struct.declaration.specifier.qualifiers.is_empty() {
+            self.report_error(CompilerError::StructDeclarationQualifiers(_struct.location));
+        }
+        if !_struct.declaration.specifier.specifiers.is_empty() {
+            self.report_error(CompilerError::StructStorageSpecifiers(_struct.location));
+        }
+        if _struct.declaration.ident.is_none() {
+            self.report_error(CompilerError::StructMissingIdent(_struct.location));
+        }
+        let as_ty = self.validate_type(
+            &_struct.declaration.specifier,
+            _struct.declaration.location,
+            false,
+        )?;
+        let location = _struct.location;
+        let ident = _struct.declaration.ident.as_ref().unwrap().value.clone();
+        let mut fields = Vec::new();
+        let mut size = 0;
+        for member in &_struct.members {
+            let span = member.location;
+            let member = self.process_dec_to_hlir_variable(&member, span)?;
+            size += self.sizeof(&member.ty, span);
+            fields.push(member);
+        }
+        let _struct = HlirStruct {
+            ident,
+            fields,
+            size,
+        };
+        let add_struct_result = self
+            .scope
+            .borrow_mut()
+            .add_struct(as_ty, &_struct, location);
+        if let Err(err) = add_struct_result {
+            self.report_error(err);
+        }
+        Ok(_struct)
+    }
+
+    pub(super) fn validate_function_definition(
         &mut self,
         func: &Locatable<FunctionDeclaration>,
     ) -> Result<HlirFunction, ()> {
@@ -44,27 +84,13 @@ impl GlobalValidator {
             .map(|var| var.ty.clone())
             .collect::<Vec<_>>();
         self.scope
+            .borrow_mut()
             .add_function(&ident, ty.clone(), param_types, func_span);
 
         self.push_scope();
 
         for parameter in &parameters {
-            let array_size = match &parameter.ty.decl {
-                HlirTypeDecl::Array(size) => Some(*size),
-                _ => None,
-            };
-            self.scope
-                .add_variable(
-                    &parameter.ident,
-                    &parameter.ty,
-                    parameter.is_const,
-                    parameter.initializer.is_some(),
-                    array_size,
-                    func_span,
-                )
-                .map_err(|err| {
-                    self.report_error(err);
-                })?;
+            self.add_variable_to_scope(parameter, func_span)?;
         }
 
         let body = self.validate_block(&func.body)?;
@@ -76,6 +102,7 @@ impl GlobalValidator {
             body,
         })
     }
+
     pub(crate) fn validate_function_param(
         &mut self,
         param: &Locatable<Declaration>,
@@ -95,7 +122,7 @@ impl GlobalValidator {
         Ok(hlir_var)
     }
 
-    pub(super) fn validate_variable(
+    pub(super) fn validate_variable_declaration(
         &mut self,
         locatable_variable: &Locatable<VariableDeclaration>,
     ) -> Result<HlirVariable, ()> {
@@ -137,6 +164,16 @@ impl GlobalValidator {
 
         variable.initializer = initializer;
         variable.ty = ty;
+
+        self.scope.borrow_mut().add_variable(
+            &variable.ident,
+            &variable.ty,
+            variable.is_const,
+            variable.initializer.is_some(),
+            array_size,
+            locatable_variable.location,
+        );
+
         Ok(variable)
     }
 
