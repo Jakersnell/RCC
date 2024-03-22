@@ -15,7 +15,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 pub struct HighLevelIR {
     pub functions: HashMap<InternedStr, HlirFunction>,
     pub structs: HashMap<InternedStr, HlirStruct>,
-    pub globals: Vec<HlirVariable>,
+    pub globals: HashMap<InternedStr, HlirVariable>,
 }
 
 #[derive(Debug)]
