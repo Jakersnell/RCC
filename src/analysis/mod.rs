@@ -18,7 +18,7 @@ pub type SharedReporter = Rc<RefCell<Reporter>>;
 
 pub struct GlobalValidator {
     ast: AbstractSyntaxTree,
-    scope: SymbolResolver,
+    scope: Box<RefCell<SymbolResolver>>,
     reporter: SharedReporter,
 }
 
@@ -26,7 +26,7 @@ impl GlobalValidator {
     pub fn new(ast: AbstractSyntaxTree) -> Self {
         Self {
             ast,
-            scope: SymbolResolver::create_root(),
+            scope: Box::new(RefCell::new(SymbolResolver::create_root())),
             reporter: Rc::new(RefCell::new(Reporter::default())),
         }
     }
@@ -63,24 +63,44 @@ impl GlobalValidator {
         self.reporter.borrow_mut().report_warning(warning);
     }
 
+    fn add_variable_to_scope(&mut self, var: &HlirVariable, span: Span) -> Result<(), ()> {
+        let array_size = match &var.ty.decl {
+            HlirTypeDecl::Array(size) => Some(*size),
+            _ => None,
+        };
+        let result = self.scope.borrow_mut().add_variable(
+            &var.ident,
+            &var.ty,
+            var.is_const,
+            var.initializer.is_some(),
+            array_size,
+            span,
+        );
+        if let Err(err) = result {
+            self.report_error(err);
+        }
+        Ok(())
+    }
+
     fn push_scope(&mut self) {
-        let mut resolver = SymbolResolver::default(); // blank temp resolver
+        let mut resolver = Box::new(RefCell::new(SymbolResolver::default())); // blank temp resolver
         std::mem::swap(&mut resolver, &mut self.scope);
-        resolver = SymbolResolver::new(Some(Box::new(resolver)));
+        resolver = Box::new(RefCell::new(SymbolResolver::new(Some(resolver))));
         std::mem::swap(&mut resolver, &mut self.scope);
-        debug_assert!(resolver.parent.is_none());
-        debug_assert!(resolver.symbols.is_empty());
+        debug_assert!(resolver.borrow().parent.is_none());
+        debug_assert!(resolver.borrow().symbols.is_empty());
     }
 
     fn pop_scope(&mut self) {
-        let mut resolver = SymbolResolver::default(); // blank temp resolver
+        let mut resolver = Box::new(RefCell::new(SymbolResolver::default())); // blank temp resolver
         std::mem::swap(&mut resolver, &mut self.scope);
-        resolver = *resolver
+        resolver = (*resolver)
+            .take()
             .remove_self()
             .expect("Popped scope on global scope.");
         std::mem::swap(&mut resolver, &mut self.scope);
-        debug_assert!(resolver.parent.is_none());
-        debug_assert!(resolver.symbols.is_empty());
+        debug_assert!(resolver.borrow().parent.is_none());
+        debug_assert!(resolver.borrow().symbols.is_empty());
     }
 
     fn validate_type(
