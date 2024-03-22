@@ -36,16 +36,21 @@ impl GlobalValidator {
         &mut self,
         variable: &Locatable<InternedStr>,
     ) -> Result<HlirExpr, ()> {
-        self.scope
+        let result = self
+            .scope
+            .borrow_mut()
             .get_variable_type(&variable.value, variable.location)
             .map(|ty| HlirExpr {
                 kind: Box::new(HlirExprKind::Variable(variable.value.clone())),
                 ty,
                 is_lval: true,
-            })
-            .map_err(|err| {
-                self.report_error(err);
-            })
+            });
+        if let Err(err) = result {
+            self.report_error(err);
+            Err(())
+        } else {
+            Ok(result.unwrap())
+        }
     }
 
     fn validate_sizeof(
@@ -77,7 +82,7 @@ impl GlobalValidator {
         })
     }
 
-    fn sizeof(&mut self, ty: &HlirType, span: Span) -> u64 {
+    pub(super) fn sizeof(&mut self, ty: &HlirType, span: Span) -> u64 {
         use crate::util::arch::*;
         if ty.is_pointer() {
             return POINTER_SIZE;
@@ -91,12 +96,13 @@ impl GlobalValidator {
             HlirTypeKind::Void => 0,
             HlirTypeKind::Float => FLOAT_SIZE,
             HlirTypeKind::Struct(ident) => {
-                self.scope
-                    .get_struct_size(ident, span)
-                    .unwrap_or_else(|err| {
-                        self.report_error(err);
-                        0
-                    })
+                let result = self.scope.borrow_mut().get_struct_size(ident, span);
+                if let Err(err) = result {
+                    self.report_error(err);
+                    0
+                } else {
+                    result.unwrap()
+                }
             }
         };
 
@@ -159,19 +165,18 @@ impl GlobalValidator {
     ) -> Result<HlirExpr, ()> {
         let span = ident.location;
         let ident = ident.value.clone();
-
-        let func = self.scope.validate_function_call(ident.clone(), span);
-        if let Err(err) = func {
-            self.report_error(err);
+        let mut resolver = self.scope.borrow_mut();
+        let func = resolver.validate_function_call(ident.clone(), span);
+        if func.is_err() {
+            let func = func.unwrap_err();
             return Err(());
         }
-
         let func = func.unwrap();
         let varargs = func.varargs;
         let params = func.params.clone();
         let location = func.location;
         let return_ty = func.return_ty.clone();
-
+        drop(resolver);
         let mut hlir_args = Vec::new();
         for loc_expr in args {
             hlir_args.push((
@@ -397,11 +402,16 @@ impl GlobalValidator {
         let body = body_span.into_locatable(body);
         let member = member_span.into_locatable(member);
 
-        self.scope
-            .validate_struct_member_access(body, member)
-            .map_err(|err| {
-                self.report_error(err);
-            })
+        let result = self
+            .scope
+            .borrow_mut()
+            .validate_struct_member_access(body, member);
+        if let Err(err) = result {
+            self.report_error(err);
+            Err(())
+        } else {
+            Ok(result.unwrap())
+        }
     }
 
     pub(super) fn validate_unary_expression(
