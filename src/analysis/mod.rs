@@ -39,32 +39,40 @@ impl GlobalValidator {
         let mut functions = HashMap::new();
         let mut structs = HashMap::new();
         let ast = self.ast.take().expect("Ast must be Some(T)");
+        macro_rules! push_locatable {
+            ($map:expr, $func:expr, $locatable:ident) => {
+                #[allow(clippy::redundant_closure_call)]
+                if let Ok(result) = $func($locatable) {
+                    $map.insert(
+                        result.ident.clone(),
+                        $locatable.location.into_locatable(result),
+                    );
+                }
+            };
+        }
         for node in &*ast {
             use crate::parser::ast::InitDeclaration::*;
             match node {
                 Declaration(locatable_variable) => {
-                    if let Ok(result) = self.validate_variable_declaration(locatable_variable) {
-                        globals.insert(
-                            result.ident.clone(),
-                            locatable_variable.location.into_locatable(result),
-                        );
-                    }
+                    push_locatable!(
+                        globals,
+                        |item| self.validate_variable_declaration(item),
+                        locatable_variable
+                    )
                 }
                 Function(locatable_function) => {
-                    if let Ok(result) = self.validate_function_definition(locatable_function) {
-                        functions.insert(
-                            result.ident.clone(),
-                            locatable_function.location.into_locatable(result),
-                        );
-                    }
+                    push_locatable!(
+                        functions,
+                        |item| self.validate_function_definition(item),
+                        locatable_function
+                    )
                 }
                 Struct(locatable_struct) => {
-                    if let Ok(result) = self.validate_struct_definition(locatable_struct) {
-                        structs.insert(
-                            result.ident.clone(),
-                            locatable_struct.location.into_locatable(result),
-                        );
-                    }
+                    push_locatable!(
+                        structs,
+                        |item| self.validate_struct_definition(item),
+                        locatable_struct
+                    )
                 }
             }
         }
