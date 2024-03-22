@@ -14,11 +14,18 @@ use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 #[derive(Debug, Default)]
 pub struct SharedReporter(Rc<RefCell<Reporter>>);
+
+impl Deref for SharedReporter {
+    type Target = Rc<RefCell<Reporter>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 pub struct GlobalValidator {
     ast: Option<AbstractSyntaxTree>,
@@ -97,10 +104,10 @@ impl GlobalValidator {
         let functions = deref_map(functions);
         let structs = deref_map(structs);
         let globals = deref_map(globals);
-        if !functions.contains_key("main") {
+        if self.reporter.borrow().status().is_ok() && !functions.contains_key("main") {
             self.report_error(CompilerError::MissingMain);
         }
-        if self.reporter.0.borrow().status().is_err() {
+        if self.reporter.borrow().status().is_err() {
             Err(self.reporter)
         } else {
             Ok(HighLevelIR {
