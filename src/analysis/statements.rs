@@ -119,7 +119,7 @@ impl GlobalValidator {
         initializer: &Option<Locatable<VariableDeclaration>>,
         condition: &Option<Locatable<Expression>>,
         post_loop: &Option<Locatable<Expression>>,
-        body: &Box<Locatable<Statement>>,
+        body: &Locatable<Statement>,
     ) -> Result<Option<HlirStmt>, ()> {
         let mut block_body = Vec::new();
         if let Some(initializer) = initializer {
