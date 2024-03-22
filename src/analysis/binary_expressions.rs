@@ -13,15 +13,6 @@ impl GlobalValidator {
         right: HlirExpr,
         span: Span,
     ) -> Result<HlirExpr, ()> {
-        if left.is_array() || right.is_array() || left.is_string() || right.is_string() {
-            let err = CompilerError::InvalidBinaryOperation(
-                left.ty.to_string(),
-                right.ty.to_string(),
-                span,
-            );
-            self.report_error(err);
-            return Err(());
-        }
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
                 self.validate_arithmetic_binary_op(op, left, right, span)
@@ -103,6 +94,7 @@ impl GlobalValidator {
             }
         } else {
             self.report_error(CompilerError::InvalidBinaryOperation(
+                op.to_string(),
                 left.ty.to_string(),
                 right.ty.to_string(),
                 span,
@@ -127,6 +119,14 @@ impl GlobalValidator {
             self.report_error(err);
             return Ok(left);
         }
+        let right_ty = right.ty.clone();
+        let right = implicit_cast(left.ty.clone(), right);
+        if right.is_err() {
+            let err = CompilerError::CannotAssign(left.ty.to_string(), right_ty.to_string(), span);
+            self.report_error(err);
+            return Ok(left);
+        }
+        let right = right.unwrap();
         let op = match op {
             AssignOp::Assign => None,
             AssignOp::Plus => Some(BinaryOp::Add),
@@ -167,6 +167,7 @@ impl GlobalValidator {
             || (!left.ty.is_pointer() && right.ty.is_pointer())
         {
             let err = CompilerError::InvalidBinaryOperation(
+                op.to_string(),
                 left.ty.to_string(),
                 right.ty.to_string(),
                 span,
@@ -237,6 +238,7 @@ impl GlobalValidator {
             )
         } else {
             let err = CompilerError::InvalidBinaryOperation(
+                op.to_string(),
                 left.ty.to_string(),
                 right.ty.to_string(),
                 span,
