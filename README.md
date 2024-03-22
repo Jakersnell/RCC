@@ -14,6 +14,7 @@
 - ##### Variable declarations and assignments
 - ##### Comments (single-line and multi-line)
 - ##### Built in library functions (printf, scanf, etc.)
+- ##### Casting (implicit and explicit)
 
 ---
 
