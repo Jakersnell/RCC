@@ -235,6 +235,21 @@ pub enum CompilerError {
 
     #[error("Argument type '{0}' does not match function argument type '{1}': {2}")]
     ArgumentTypeMismatch(String, String, Span),
+
+    #[error("A member with this name already exists in this scope: {0}")]
+    MemberAlreadyExists(Span),
+
+    #[error("Expected '{{' but found '*': {0}")]
+    StructDeclarationPointer(Span),
+
+    #[error("Struct definitions cannot be given declaration qualifiers: {0}")]
+    StructDeclarationQualifiers(Span),
+
+    #[error("Struct definitions cannot possess storage specifiers: {0}")]
+    StructStorageSpecifiers(Span),
+
+    #[error("Struct must be given an identifier: {0}")]
+    StructMissingIdent(Span),
 }
 
 #[derive(Error, Debug)]
