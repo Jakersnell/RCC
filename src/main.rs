@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use crate::analysis::hlir::HlirTypeKind;
+use crate::parser::ast::AbstractSyntaxTree;
 use crate::util::error::{CompilerError, CompilerWarning};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -18,14 +19,21 @@ mod util;
 
 fn main() {
     let src = "
-    struct test {
-        int x;
-    };
+
+    int main() {
+        int x = 1;
+
+        return 0;
+    }
     ";
     let lexer = lexer::Lexer::new(src.into());
     let parser = parser::Parser::new(lexer);
-    let result = parser.parse_all();
-    println!("{:#?}", result);
+    let result = parser.parse_all().unwrap();
+    let global_validator = analysis::GlobalValidator::new(AbstractSyntaxTree::new(
+        result.into_iter().map(|dec| dec.value).collect(),
+    ));
+    let hlir = global_validator.validate();
+    println!("{:#?}", hlir);
 }
 
 #[cfg(test)]
