@@ -29,6 +29,7 @@ where
         }
         Ok(ty)
     }
+
     pub(super) fn parse_initializer(&mut self) -> ParseResult<Locatable<Expression>> {
         if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
             let location = self.current_span()?;
