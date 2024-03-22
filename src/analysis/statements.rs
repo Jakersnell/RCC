@@ -27,7 +27,9 @@ impl GlobalValidator {
             Statement::Expression(expr) => Ok(Some(HlirStmt::Expression(
                 self.validate_expression(&expr.value)?,
             ))),
-            Statement::Declaration(var_dec) => todo!(),
+            Statement::Declaration(var_dec) => {
+                self.validate_variable_declaration_statement(var_dec)
+            }
             Statement::If(condition, then, otherwise) => {
                 self.validate_if_statement(condition, then, otherwise)
             }
