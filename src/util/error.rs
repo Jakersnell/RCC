@@ -3,6 +3,7 @@ use crate::parser::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
 use crate::util::Span;
 use thiserror::Error;
 
+#[derive(Debug)]
 pub struct Reporter {
     errors: Vec<CompilerError>,
     warnings: Vec<CompilerWarning>,
@@ -46,6 +47,9 @@ impl Reporter {
 pub enum CompilerError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Could not find fn 'main', no entry point!")]
+    MissingMain,
 
     #[error("Invalid integer literal: {0}")]
     ParseIntError(Span),
@@ -119,7 +123,7 @@ pub enum CompilerError {
     #[error("Unexpected end of file.")]
     UnexpectedEOF,
 
-    #[error("'This identifier already exists in this scope and cannot be redeclared.")]
+    #[error("This identifier already exists in this scope and cannot be redeclared: {0}")]
     IdentifierExists(Span),
 
     #[error("Identifier cannot be found in the current scope: {0}")]
@@ -250,6 +254,9 @@ pub enum CompilerError {
 
     #[error("Struct must be given an identifier: {0}")]
     StructMissingIdent(Span),
+
+    #[error("The identifier 'main' is reserved as a function only: {0}")]
+    MainIsReserved(Span),
 }
 
 #[derive(Error, Debug)]
