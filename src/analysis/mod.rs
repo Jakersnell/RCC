@@ -10,14 +10,17 @@ use crate::analysis::hlir::*;
 use crate::analysis::symbols::SymbolResolver;
 use crate::parser::ast::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
+use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ops::DerefMut;
 use std::rc::Rc;
 
 pub type SharedReporter = Rc<RefCell<Reporter>>;
 
 pub struct GlobalValidator {
-    ast: AbstractSyntaxTree,
+    ast: Option<AbstractSyntaxTree>,
     scope: Box<RefCell<SymbolResolver>>,
     reporter: SharedReporter,
 }
@@ -25,32 +28,74 @@ pub struct GlobalValidator {
 impl GlobalValidator {
     pub fn new(ast: AbstractSyntaxTree) -> Self {
         Self {
-            ast,
+            ast: Some(ast),
             scope: Box::new(RefCell::new(SymbolResolver::create_root())),
             reporter: Rc::new(RefCell::new(Reporter::default())),
         }
     }
 
     pub fn validate(mut self) -> Result<HighLevelIR, SharedReporter> {
-        let hlir = HighLevelIR::default();
-        for node in &*self.ast {
+        let mut globals = HashMap::new();
+        let mut functions = HashMap::new();
+        let mut structs = HashMap::new();
+        let ast = self.ast.take().expect("Ast must be Some(T)");
+        for node in &*ast {
             use crate::parser::ast::InitDeclaration::*;
             match node {
                 Declaration(locatable_variable) => {
-                    todo!("validation")
+                    if let Ok(result) = self.validate_variable_declaration(locatable_variable) {
+                        globals.insert(
+                            result.ident.clone(),
+                            locatable_variable.location.into_locatable(result),
+                        );
+                    }
                 }
                 Function(locatable_function) => {
-                    todo!("validation")
+                    if let Ok(result) = self.validate_function_definition(locatable_function) {
+                        functions.insert(
+                            result.ident.clone(),
+                            locatable_function.location.into_locatable(result),
+                        );
+                    }
                 }
                 Struct(locatable_struct) => {
-                    todo!("validation")
+                    if let Ok(result) = self.validate_struct_definition(locatable_struct) {
+                        structs.insert(
+                            result.ident.clone(),
+                            locatable_struct.location.into_locatable(result),
+                        );
+                    }
                 }
             }
         }
+        let idents = self.scope.borrow().get_unused_idents();
+        for ident in idents {
+            if let Some(variable) = globals.get(&ident) {
+                self.report_warning(CompilerWarning::UnusedVariable(variable.location));
+            } else if let Some(function) = functions.get(&ident) {
+                self.report_warning(CompilerWarning::UnusedFunction(function.location));
+            } else if let Some(_struct) = structs.get(&ident) {
+                self.report_warning(CompilerWarning::UnusedStruct(_struct.location))
+            } else {
+                panic!("Could not match unused ident to type: ident = '{}'", ident);
+            }
+        }
+        fn deref_map<K: Eq + std::hash::Hash, T>(map: HashMap<K, Locatable<T>>) -> HashMap<K, T> {
+            map.into_iter()
+                .map(|(ident, item)| (ident, item.value))
+                .collect()
+        }
+        let functions = deref_map(functions);
+        let structs = deref_map(structs);
+        let globals = deref_map(globals);
         if self.reporter.borrow().status().is_err() {
             Err(self.reporter)
         } else {
-            Ok(hlir)
+            Ok(HighLevelIR {
+                functions,
+                structs,
+                globals,
+            })
         }
     }
 
