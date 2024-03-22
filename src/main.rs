@@ -41,7 +41,7 @@ mod tests {
     use std::path::PathBuf;
     use std::rc::Rc;
 
-    fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
+    pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
         let res_paths = std::fs::read_dir(path)?.map(|res| res.map(|entry| entry.path()));
         for path in res_paths {
