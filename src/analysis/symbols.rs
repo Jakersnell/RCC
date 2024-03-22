@@ -180,9 +180,13 @@ impl SymbolResolver {
     fn add_symbol(&mut self, ident: &InternedStr, kind: SymbolKind, span: Span) -> SymbolResult {
         if self.retrieve(ident, span).is_ok() {
             Err(CompilerError::IdentifierExists(span))
+        } else if !matches!(kind, SymbolKind::Function { .. }) && ident.as_ref() == "main" {
+            Err(CompilerError::MainIsReserved(span))
         } else {
             self.symbols.insert(ident.clone(), (kind, false));
-            self.un_accessed_items.insert(ident.clone());
+            if ident.as_ref() != "main" {
+                self.un_accessed_items.insert(ident.clone());
+            }
             Ok(())
         }
     }
