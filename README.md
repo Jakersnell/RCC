@@ -29,7 +29,7 @@ ___
 
 ## Directory
 
-### [Semantic analysis process description](_process_docs/SEMANTIC-ANALYSIS.md)
+### [Semantic analysis process description](_process_docs/SEMANTIC-ANALYSIS.md) - This is the current phase of development
 
 ### [AST process analysis](_process_docs/AST-PROCESS.md)
 
