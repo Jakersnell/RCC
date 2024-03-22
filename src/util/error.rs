@@ -96,7 +96,7 @@ pub enum CompilerError {
     #[error("Cannot cast {0} to {1}")]
     CannotCast(String, String, Span),
 
-    #[error("Cannot assign {0} to type {1}")]
+    #[error("Cannot assign '{1}' to lval with type of '{0}': {2}")]
     CannotAssign(String, String, Span),
 
     #[error("Unknown identifier \"{0}\"")]
@@ -165,8 +165,8 @@ pub enum CompilerError {
     #[error("Invalid array operation: {0}")]
     InvalidArrayOperation(Span),
 
-    #[error("Invalid binary operation between {0} and {1}: {2}")]
-    InvalidBinaryOperation(String, String, Span),
+    #[error("Invalid binary operation '{0}' between '{1}' and '{2}': {3}")]
+    InvalidBinaryOperation(String, String, String, Span),
 
     #[error("Left hand operand is not assignable: {0}")]
     LeftHandNotLVal(Span),
