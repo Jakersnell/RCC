@@ -21,21 +21,21 @@ impl GlobalValidator {
         if !_struct.declaration.specifier.specifiers.is_empty() {
             self.report_error(CompilerError::StructStorageSpecifiers(_struct.location));
         }
-        if _struct.declaration.ident.is_none() {
-            self.report_error(CompilerError::StructMissingIdent(_struct.location));
-        }
         let as_ty = self.validate_type(
             &_struct.declaration.specifier,
             _struct.declaration.location,
             false,
         )?;
+        let ident = match &as_ty.kind {
+            HlirTypeKind::Struct(ident) => ident.clone(),
+            _ => panic!(),
+        };
         let location = _struct.location;
-        let ident = _struct.declaration.ident.as_ref().unwrap().value.clone();
         let mut fields = Vec::new();
         let mut size = 0;
         for member in &_struct.members {
             let span = member.location;
-            let member = self.process_dec_to_hlir_variable(&member, span)?;
+            let member = self.process_dec_to_hlir_variable(member, span)?;
             size += self.sizeof(&member.ty, span);
             fields.push(member);
         }
