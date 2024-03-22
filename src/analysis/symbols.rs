@@ -187,6 +187,10 @@ impl SymbolResolver {
         }
     }
 
+    pub fn get_unused_idents(&self) -> HashSet<InternedStr> {
+        self.un_accessed_items.clone()
+    }
+
     pub fn validate_function_call(
         &mut self,
         ident: InternedStr,
