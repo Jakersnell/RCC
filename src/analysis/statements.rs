@@ -8,12 +8,14 @@ use std::env::var;
 
 impl GlobalValidator {
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<HlirBlock, ()> {
+        self.push_scope();
         let mut statements = Vec::new();
         for raw_stmt in &block.0 {
             if let Some(stmt) = self.validate_statement(raw_stmt)? {
                 statements.push(stmt);
             }
         }
+        self.pop_scope();
         Ok(HlirBlock(statements))
     }
 
@@ -25,9 +27,7 @@ impl GlobalValidator {
             Statement::Expression(expr) => Ok(Some(HlirStmt::Expression(
                 self.validate_expression(&expr.value)?,
             ))),
-            Statement::Declaration(var_dec) => Ok(Some(HlirStmt::VariableDeclaration(
-                self.validate_variable(var_dec)?,
-            ))),
+            Statement::Declaration(var_dec) => todo!(),
             Statement::If(condition, then, otherwise) => {
                 self.validate_if_statement(condition, then, otherwise)
             }
@@ -44,6 +44,17 @@ impl GlobalValidator {
             Statement::Empty => Ok(None),
         }
     }
+
+    fn validate_variable_declaration_statement(
+        &mut self,
+        var_dec: &Locatable<VariableDeclaration>,
+    ) -> Result<Option<HlirStmt>, ()> {
+        let span = var_dec.location;
+        let var_dec = self.validate_variable_declaration(var_dec)?;
+        self.add_variable_to_scope(&var_dec, span)?;
+        Ok(Some(HlirStmt::VariableDeclaration(var_dec)))
+    }
+
     fn validate_if_statement(
         &mut self,
         condition: &Locatable<Expression>,
@@ -110,7 +121,7 @@ impl GlobalValidator {
     ) -> Result<Option<HlirStmt>, ()> {
         let mut block_body = Vec::new();
         if let Some(initializer) = initializer {
-            let var_dec = self.validate_variable(initializer)?;
+            let var_dec = self.validate_variable_declaration(initializer)?;
             let var_stmt = HlirStmt::VariableDeclaration(var_dec);
             block_body.push(var_stmt);
         }
