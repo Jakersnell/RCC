@@ -16,7 +16,17 @@ mod util;
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't have a compiler.
 
-fn main() {}
+fn main() {
+    let src = "
+    struct test {
+        int x;
+    };
+    ";
+    let lexer = lexer::Lexer::new(src.into());
+    let parser = parser::Parser::new(lexer);
+    let result = parser.parse_all();
+    println!("{:#?}", result);
+}
 
 #[cfg(test)]
 mod tests {
