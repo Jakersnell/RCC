@@ -140,24 +140,24 @@ impl GlobalValidator {
     }
 
     fn push_scope(&mut self) {
-        let mut resolver = Box::new(RefCell::new(SymbolResolver::default())); // blank temp resolver
-        std::mem::swap(&mut resolver, &mut self.scope);
-        resolver = Box::new(RefCell::new(SymbolResolver::new(Some(resolver))));
-        std::mem::swap(&mut resolver, &mut self.scope);
-        debug_assert!(resolver.borrow().parent.is_none());
-        debug_assert!(resolver.borrow().symbols.is_empty());
+        let mut resolver = SymbolResolver::default(); // blank temp resolver
+        resolver = self.scope.replace(resolver);
+        resolver = SymbolResolver::new(Some(Box::new(RefCell::new(resolver))));
+        resolver = self.scope.replace(resolver);
+        debug_assert!(resolver.parent.is_none());
+        debug_assert!(resolver.symbols.is_empty());
     }
 
     fn pop_scope(&mut self) {
-        let mut resolver = Box::new(RefCell::new(SymbolResolver::default())); // blank temp resolver
-        std::mem::swap(&mut resolver, &mut self.scope);
-        resolver = (*resolver)
-            .take()
+        let mut resolver = SymbolResolver::default(); // blank temp resolver
+        resolver = self.scope.replace(resolver);
+        resolver = resolver
             .remove_self()
-            .expect("Popped scope on global scope.");
-        std::mem::swap(&mut resolver, &mut self.scope);
-        debug_assert!(resolver.borrow().parent.is_none());
-        debug_assert!(resolver.borrow().symbols.is_empty());
+            .expect("Popped scope on global scope.")
+            .take();
+        resolver = self.scope.replace(resolver);
+        debug_assert!(resolver.parent.is_none());
+        debug_assert!(resolver.symbols.is_empty());
     }
 
     fn validate_type(
