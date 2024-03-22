@@ -149,11 +149,11 @@ pub enum HlirTypeKind {
 impl Display for HlirTypeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         macro_rules! write_signed {
-            ($name:literal, $signed:expr) => {
+            ($name:literal, $unsigned:expr) => {
                 write!(
                     f,
                     "{} {}",
-                    if $signed { "signed" } else { "unsigned" },
+                    if $unsigned { "unsigned" } else { "signed" },
                     $name
                 )
             };
