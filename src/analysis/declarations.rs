@@ -25,6 +25,7 @@ impl GlobalValidator {
             &_struct.declaration.specifier,
             _struct.declaration.location,
             false,
+            true,
         )?;
         let ident = match &as_ty.kind {
             HlirTypeKind::Struct(ident) => ident.clone(),
@@ -65,7 +66,7 @@ impl GlobalValidator {
             return Err(());
         }
 
-        let ty = self.validate_type(&dec.specifier, dec_span, true)?;
+        let ty = self.validate_type(&dec.specifier, dec_span, true, false)?;
         let ident = &dec.ident;
         if ident.is_none() {
             self.report_error(CompilerError::FunctionRequiresIdentifier(dec_span));
@@ -76,7 +77,7 @@ impl GlobalValidator {
         let raw_params = &func.parameters;
         let mut parameters = Vec::new();
         for parameter in raw_params {
-            parameters.push(self.validate_function_param(parameter)?);
+            parameters.push(self.validate_function_param_declaration(parameter)?);
         }
 
         let param_types = parameters
@@ -103,7 +104,7 @@ impl GlobalValidator {
         })
     }
 
-    pub(crate) fn validate_function_param(
+    pub(crate) fn validate_function_param_declaration(
         &mut self,
         param: &Locatable<Declaration>,
     ) -> Result<HlirVariable, ()> {
@@ -134,7 +135,7 @@ impl GlobalValidator {
         let mut variable =
             self.process_dec_to_hlir_variable(&declaration.value, declaration.location)?;
 
-        let ty = self.validate_type(&declaration.specifier, span, false)?;
+        let ty = self.validate_type(&declaration.specifier, span, false, false)?;
         if var.is_array && var.array_size.is_none() && var.initializer.is_none() {
             let err = CompilerError::ArraySizeNotSpecified(span);
             self.report_error(err);
@@ -198,7 +199,7 @@ impl GlobalValidator {
                 span,
             ))
         }
-        let ty = self.validate_type(&dec.specifier, span, false)?;
+        let ty = self.validate_type(&dec.specifier, span, false, false)?;
 
         Ok(HlirVariable {
             ty,
