@@ -102,7 +102,7 @@ pub(super) struct VariableSymbol {
 #[derive(Default, Debug)]
 pub struct SymbolResolver {
     un_accessed_items: HashSet<InternedStr>,
-    pub(super) symbols: HashMap<InternedStr, (SymbolKind, bool)>, // bool represents has been accessed
+    pub(super) symbols: HashMap<InternedStr, SymbolKind>,
     pub(super) parent: Option<Box<RefCell<SymbolResolver>>>,
 }
 
@@ -127,7 +127,7 @@ impl SymbolResolver {
             for builtin in builtins.iter() {
                 self.symbols.insert(
                     str_intern::intern(builtin.0),
-                    (SymbolKind::Function(builtin.1.clone()), true), // ignore access check on builtins
+                    SymbolKind::Function(builtin.1.clone()), // ignore access check on builtins
                 );
             }
         });
@@ -178,12 +178,12 @@ impl SymbolResolver {
 
     #[inline]
     fn add_symbol(&mut self, ident: &InternedStr, kind: SymbolKind, span: Span) -> SymbolResult {
-        if self.retrieve(ident, span).is_ok() {
+        if self.symbols.contains_key(ident) {
             Err(CompilerError::IdentifierExists(span))
         } else if !matches!(kind, SymbolKind::Function { .. }) && ident.as_ref() == "main" {
             Err(CompilerError::MainIsReserved(span))
         } else {
-            self.symbols.insert(ident.clone(), (kind, false));
+            self.symbols.insert(ident.clone(), kind);
             if ident.as_ref() != "main" {
                 self.un_accessed_items.insert(ident.clone());
             }
@@ -241,14 +241,15 @@ impl SymbolResolver {
         }
     }
 
-    fn retrieve(&self, ident: &InternedStr, span: Span) -> Result<SymbolKind, CompilerError> {
+    fn retrieve(&mut self, ident: &InternedStr, span: Span) -> Result<SymbolKind, CompilerError> {
         let symbol = self.symbols.get(ident);
         if let Some(symbol) = symbol {
-            Ok(symbol.0.clone())
+            self.un_accessed_items.remove(ident);
+            Ok(symbol.clone())
         } else if let Some(parent) = self.parent.as_ref() {
-            parent.borrow().retrieve(ident, span)
+            parent.borrow_mut().retrieve(ident, span)
         } else {
-            Err(CompilerError::IdentNotFound(span))
+            Err(CompilerError::IdentNotFound((*ident).clone(), span))
         }
     }
 
@@ -259,6 +260,13 @@ impl SymbolResolver {
         span: Span,
     ) -> SymbolResult {
         let ident = _struct.ident.clone();
+        if cfg!(debug_assertions) {
+            let ty_ident = match &as_type.kind {
+                HlirTypeKind::Struct(ident) => ident,
+                _ => panic!(),
+            };
+            assert_eq!(ident, *ty_ident);
+        }
         let mut body = HashMap::default();
         for field in &_struct.fields {
             let array_size = if let HlirTypeDecl::Array(size) = &field.ty.decl {
@@ -273,9 +281,9 @@ impl SymbolResolver {
                 array_size,
             };
             if body.contains_key(&ident) {
-                return Err(CompilerError::MemberAlreadyExists(span));
+                return Err(CompilerError::MemberAlreadyExists(ident.clone(), span));
             }
-            body.insert(ident.clone(), var);
+            body.insert(field.ident.clone(), var);
         }
         let mut symbol = StructSymbol {
             size: _struct.size,
@@ -302,19 +310,22 @@ impl SymbolResolver {
         member: Locatable<InternedStr>,
     ) -> Result<HlirExpr, CompilerError> {
         let ident = match &_struct.ty.kind {
-            HlirTypeKind::Struct(ident) => ident.clone(),
+            HlirTypeKind::Struct(ident) => ident,
             _ => panic!("`validate_struct_member_access` called on non struct expression."),
         };
-        let _match = self.get_struct(&ident, _struct.location)?;
+        let _match = self.get_struct(ident, _struct.location)?;
         let ty = _match
             .body
-            .get(&ident)
-            .ok_or(CompilerError::MemberNotFound(member.location))?
-            .ty
-            .clone();
+            .get(&member.value)
+            .ok_or(CompilerError::MemberNotFound(
+                member.value.to_string(),
+                ident.to_string(),
+                member.location,
+            ));
+        let ty = ty?.ty.clone();
         Ok(HlirExpr {
             kind: Box::new(HlirExprKind::Member(_struct.value, member.value)),
-            is_lval: false,
+            is_lval: true,
             ty,
         })
     }
@@ -326,6 +337,14 @@ impl SymbolResolver {
     ) -> Result<u64, CompilerError> {
         Ok(self.get_struct(ident, span)?.size)
     }
+
+    pub fn check_struct_exists(
+        &mut self,
+        ident: &InternedStr,
+        span: Span,
+    ) -> Result<(), CompilerError> {
+        self.get_struct(ident, span).map(|_| ())
+    }
 }
 
 #[test]
@@ -334,4 +353,22 @@ fn test_builtin_function_is_called_correctly() {
     let ident = crate::util::str_intern::intern("printf");
     let call = resolver.validate_function_call(ident, Span::default());
     assert!(call.is_ok())
+}
+
+#[test]
+fn test_parent_scope_is_accessed_in_retrieve() {
+    let mut resolver = SymbolResolver::create_root();
+    let symbol = SymbolKind::Struct(StructSymbol {
+        size: 0,
+        as_type: HlirType {
+            kind: HlirTypeKind::Void,
+            decl: HlirTypeDecl::Basic,
+        },
+        body: Default::default(),
+    });
+    let ident = "test_ident".into();
+    resolver.add_symbol(&ident, symbol, Span::default());
+    resolver = SymbolResolver::new(Some(Box::new(RefCell::new(resolver))));
+    let result = resolver.retrieve(&ident, Span::default());
+    assert!(result.is_ok());
 }
