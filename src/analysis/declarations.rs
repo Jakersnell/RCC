@@ -216,7 +216,7 @@ impl GlobalValidator {
         if let Expression::ArrayInitializer(arr) = expr {
             let mut inits = Vec::with_capacity(arr.len());
             for init in arr {
-                let init = self.validate_expression(expr)?;
+                let init = self.validate_expression(init)?;
                 inits.push(init);
             }
             Ok(HlirVarInit::Array(inits))
