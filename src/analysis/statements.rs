@@ -121,9 +121,11 @@ impl GlobalValidator {
         post_loop: &Option<Locatable<Expression>>,
         body: &Locatable<Statement>,
     ) -> Result<Option<HlirStmt>, ()> {
+        self.push_scope();
         let mut block_body = Vec::new();
         if let Some(initializer) = initializer {
             let var_dec = self.validate_variable_declaration(initializer)?;
+            self.add_variable_to_scope(&var_dec, initializer.location);
             let var_stmt = HlirStmt::VariableDeclaration(var_dec);
             block_body.push(var_stmt);
         }
@@ -153,7 +155,7 @@ impl GlobalValidator {
         let body = Box::new(HlirStmt::Block(HlirBlock(body)));
         let as_while_loop = HlirStmt::While { condition, body };
         block_body.push(as_while_loop);
-
+        self.pop_scope();
         Ok(Some(HlirStmt::Block(HlirBlock(block_body))))
     }
 }
