@@ -1,6 +1,6 @@
 # Micro-C
 
-### a small compiler focusing on a subset of the C language.
+### A small handwritten compiler focusing on a subset of the C language.
 
 ---
 
