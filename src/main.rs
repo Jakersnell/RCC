@@ -56,9 +56,7 @@ mod tests {
         let lexer = lexer::Lexer::new(source.into());
         let parser = parser::Parser::new(lexer);
         let result = parser.parse_all().map_err(FailReason::Parser)?;
-        let global_validator = analysis::GlobalValidator::new(AbstractSyntaxTree::new(
-            result.into_iter().map(|dec| dec.value).collect(),
-        ));
+        let global_validator = analysis::GlobalValidator::new(result);
         global_validator
             .validate()
             .map(|_| ())
@@ -112,10 +110,10 @@ mod tests {
         let lexer = lexer::Lexer::new(src.into());
         let parser = parser::Parser::new(lexer);
         let result = parser.parse_all().unwrap();
-        let var_dec = &**result.first().expect("Expected non-empty result.");
+        let var_dec = result.first().expect("Expected non-empty result.");
 
         let variable = match var_dec {
-            InitDeclaration::Declaration(variable) => &**variable,
+            InitDeclaration::Declaration(variable) => variable,
             _ => panic!("First element should be a variable declaration!"),
         };
 
