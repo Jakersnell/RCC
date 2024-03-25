@@ -49,14 +49,15 @@ int main() {
     for (int i = 0; i < 10; i++) {
         pt->a++;
     }
-    int i;
-    for (i = 0; i < 10; i++) {
-        pt->a++;
-    }
+//    int i;
+//    for (i = 0; i < 10; i++) {
+//        pt->a++;
+//    }
     for (;;) {
         pt->a++;
     }
-    int x[] = {1, 2, 3, 4, 5};
+    int i;
+    int array[] = {1, 2, 3, 4, 5};
     foo(pt, &i);
     return 0;
 }
