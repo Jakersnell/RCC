@@ -486,8 +486,39 @@ impl GlobalValidator {
                     })
                 }
             }
-            UnaryOp::Deref => todo!(),
-            UnaryOp::AddressOf => todo!(),
+            UnaryOp::Deref => {
+                if !expr.is_pointer() {
+                    let err = CompilerError::DerefOnNonPointer(expr.ty.to_string(), span);
+                    self.report_error(err);
+                    return Ok(expr);
+                }
+                let ty_kind = expr.ty.kind.clone();
+
+                Ok(HlirExpr {
+                    kind: Box::new(HlirExprKind::Deref(expr)),
+                    ty: HlirType {
+                        decl: HlirTypeDecl::Basic,
+                        kind: ty_kind,
+                    },
+                    is_lval: true,
+                })
+            }
+            UnaryOp::AddressOf => {
+                if expr.is_pointer() {
+                    let err = CompilerError::AttemptedAddressOfPointer(span);
+                    self.report_error(err);
+                    return Ok(expr);
+                }
+                let ty_kind = expr.ty.kind.clone();
+                Ok(HlirExpr {
+                    kind: Box::new(HlirExprKind::AddressOf(expr)),
+                    ty: HlirType {
+                        kind: ty_kind,
+                        decl: HlirTypeDecl::Pointer,
+                    },
+                    is_lval: false,
+                })
+            }
         }
     }
 
