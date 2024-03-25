@@ -1,4 +1,4 @@
-use crate::analysis::hlir::{HighLevelIR, HlirExpr, HlirStmt, HlirType};
+use crate::analysis::hlir::{HighLevelIR, HlirBlock, HlirExpr, HlirFunction, HlirStmt, HlirType};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -40,10 +40,40 @@ struct BasicBlockEdge<'a> {
     condition: Option<&'a HlirExpr>,
 }
 
+struct BasicBlockFactory<'a> {
+    statements: Vec<&'a HlirStmt>,
+    blocks: Vec<Rc<BasicBlock<'a>>>,
+}
+
+impl<'a> BasicBlockFactory<'a> {
+    pub fn build(block: &HlirBlock) {
+        for stmt in block.iter() {}
+    }
+}
+
 pub struct ControlFlowGraph<'a> {
-    hlir: &'a HighLevelIR,
+    function: &'a HlirFunction,
     start: Rc<BasicBlock<'a>>,
     end: Rc<BasicBlock<'a>>,
     blocks: Vec<Rc<BasicBlock<'a>>>,
     edges: Vec<Rc<BasicBlockEdge<'a>>>,
+}
+
+impl<'a> ControlFlowGraph<'a> {
+    fn new(function: &'a HlirFunction) -> Self {
+        Self {
+            function,
+            start: Rc::new(BasicBlock::new(BasicBlockKind::Start)),
+            end: Rc::new(BasicBlock::new(BasicBlockKind::End)),
+            blocks: Vec::new(),
+            edges: Vec::new(),
+        }
+    }
+
+    pub fn build(mut self) -> Self {
+        for stmt in &self.function.body.0 {
+            todo!()
+        }
+        todo!()
+    }
 }
