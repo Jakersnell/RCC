@@ -2,6 +2,7 @@ mod binary_expressions;
 mod casting;
 mod declarations;
 mod expressions;
+mod flow;
 pub mod hlir;
 mod statements;
 mod symbols;
@@ -64,7 +65,13 @@ impl GlobalValidator {
                 Declaration(locatable_variable) => {
                     push_locatable!(
                         globals,
-                        |item| self.validate_variable_declaration(item),
+                        |item| {
+                            let var = self.validate_variable_declaration(item);
+                            if let Ok(var) = var.as_ref() {
+                                self.add_variable_to_scope(var, item.location);
+                            }
+                            var
+                        },
                         locatable_variable
                     )
                 }
@@ -172,6 +179,7 @@ impl GlobalValidator {
         declaration: &DeclarationSpecifier,
         location: Span,
         is_function_return_ty: bool,
+        is_struct_dec: bool,
     ) -> Result<HlirType, ()> {
         #[derive(Debug, PartialEq)]
         enum State {
@@ -267,6 +275,17 @@ impl GlobalValidator {
         }
         let ty_kind = hlir_type.unwrap();
 
+        match &ty_kind {
+            HlirTypeKind::Struct(ident) if !is_struct_dec => {
+                let result = self.scope.borrow_mut().check_struct_exists(ident, location);
+                if let Err(err) = result {
+                    self.report_error(err);
+                    return Err(());
+                }
+            }
+            _ => (),
+        }
+
         let ty_dec = if declaration.pointer {
             HlirTypeDecl::Pointer
         } else {
@@ -316,7 +335,7 @@ fn test_validate_type_returns_error_for_invalid_type_orientations() {
     for types in type_tests {
         let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
         let types = make_dec_specifier!(types, false);
-        let result = validator.validate_type(&types, Span::default(), false);
+        let result = validator.validate_type(&types, Span::default(), false, false);
         if result.is_ok() {
             panic!("Expected error, got ok, test: {:?}", types);
         }
@@ -359,7 +378,7 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
             decl,
             kind: expected,
         };
-        let result = validator.validate_type(&dec_spec, Span::default(), false);
+        let result = validator.validate_type(&dec_spec, Span::default(), false, false);
         assert_eq!(result, Ok(expected));
     }
 }
