@@ -56,6 +56,9 @@ pub(in crate::analysis) fn implicit_cast(
     cast_to: HlirType,
     expr: HlirExpr,
 ) -> Result<HlirExpr, ()> {
+    if expr.ty == cast_to {
+        return Ok(expr);
+    }
     match (&cast_to.kind, &cast_to.decl, &expr.ty.kind, &expr.ty.decl) {
         (_, HlirTypeDecl::Pointer, HlirTypeKind::Void, HlirTypeDecl::Pointer) => {
             let ty = HlirType {
@@ -247,4 +250,22 @@ fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_downcast() {
     ];
 
     test_cast_structure(expr, cast_to, &expected);
+}
+
+#[test]
+fn test_cast_type_to_itself_returns_initial_expression_for_struct_pointer() {
+    let ty = HlirType {
+        kind: HlirTypeKind::Struct(crate::util::str_intern::intern("test")),
+        decl: HlirTypeDecl::Pointer,
+    };
+    let expr = HlirExpr {
+        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(0))), // kind can be anything here, it is not used
+        ty: HlirType {
+            kind: HlirTypeKind::Struct(crate::util::str_intern::intern("test")), // separate interning is important
+            decl: HlirTypeDecl::Pointer,
+        },
+        is_lval: false,
+    };
+    let result = implicit_cast(ty, expr);
+    assert!(result.is_ok());
 }
