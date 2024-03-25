@@ -254,15 +254,6 @@ pub enum HlirExprKind {
 
     // assign
     Assign(HlirExpr, HlirExpr),
-    AssignAdd(HlirExpr, HlirExpr),
-    AssignSub(HlirExpr, HlirExpr),
-    AssignMul(HlirExpr, HlirExpr),
-    AssignMod(HlirExpr, HlirExpr),
-    AssignBitAnd(HlirExpr, HlirExpr),
-    AssignBitOr(HlirExpr, HlirExpr),
-    AssignBitXor(HlirExpr, HlirExpr),
-    AssignLeftShift(HlirExpr, HlirExpr),
-    AssignRightShift(HlirExpr, HlirExpr),
 
     // other
     FunctionCall {
@@ -271,7 +262,7 @@ pub enum HlirExprKind {
         args: Vec<HlirExpr>,
     },
     Index(HlirExpr, HlirExpr),
-    Member(HlirExpr, InternedStr), // offset
+    Member(HlirExpr, InternedStr),
     Cast(HlirType, HlirExpr),
 }
 
