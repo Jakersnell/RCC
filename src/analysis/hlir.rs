@@ -314,16 +314,8 @@ pub enum HlirStmt {
     Block(HlirBlock),
     Expression(HlirExpr),
     VariableDeclaration(HlirVariable),
-    If {
-        condition: HlirExpr,
-        then: Box<Locatable<HlirStmt>>,
-        otherwise: Option<Box<Locatable<HlirStmt>>>,
-    },
-    While {
-        condition: HlirExpr,
-        body: Box<Locatable<HlirStmt>>,
-    },
-    Continue,
-    Break,
+    Label(InternedStr),
+    Goto(InternedStr),
+    ConditionalGoto(HlirExpr, InternedStr),
     Return(Option<HlirExpr>),
 }
