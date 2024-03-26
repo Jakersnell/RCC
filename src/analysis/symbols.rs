@@ -101,7 +101,7 @@ pub(super) struct VariableSymbol {
 
 #[derive(Default, Debug)]
 pub struct SymbolResolver {
-    un_accessed_items: HashSet<InternedStr>,
+    un_accessed_items: HashMap<InternedStr, Span>,
     pub(super) symbols: HashMap<InternedStr, SymbolKind>,
     pub(super) parent: Option<Box<RefCell<SymbolResolver>>>,
 }
@@ -109,7 +109,7 @@ pub struct SymbolResolver {
 impl SymbolResolver {
     pub fn create_root() -> Self {
         let mut root = Self {
-            un_accessed_items: HashSet::default(),
+            un_accessed_items: HashMap::default(),
             symbols: HashMap::default(),
             parent: None,
         };
@@ -134,7 +134,7 @@ impl SymbolResolver {
     }
     pub fn new(parent: Option<Box<RefCell<SymbolResolver>>>) -> Self {
         Self {
-            un_accessed_items: HashSet::default(),
+            un_accessed_items: HashMap::default(),
             symbols: HashMap::default(),
             parent,
         }
@@ -185,14 +185,14 @@ impl SymbolResolver {
         } else {
             self.symbols.insert(ident.clone(), kind);
             if ident.as_ref() != "main" {
-                self.un_accessed_items.insert(ident.clone());
+                self.un_accessed_items.insert(ident.clone(), span);
             }
             Ok(())
         }
     }
 
-    pub fn get_unused_idents(&self) -> HashSet<InternedStr> {
-        self.un_accessed_items.clone()
+    pub fn get_unused_idents(&self) -> Vec<(InternedStr, Span)> {
+        self.un_accessed_items.clone().into_iter().collect()
     }
 
     pub fn validate_function_call(
@@ -324,6 +324,7 @@ impl SymbolResolver {
             ));
         let ty = ty?.ty.clone();
         Ok(HlirExpr {
+            span: _struct.location.merge(member.location),
             kind: Box::new(HlirExprKind::Member(_struct.value, member.value)),
             is_lval: true,
             ty,

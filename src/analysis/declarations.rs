@@ -31,6 +31,7 @@ impl GlobalValidator {
             HlirTypeKind::Struct(ident) => ident.clone(),
             _ => panic!(),
         };
+        let ident = _struct.declaration.location.into_locatable(ident);
         let location = _struct.location;
         let mut fields = Vec::new();
         let mut size = 0;
@@ -38,7 +39,7 @@ impl GlobalValidator {
             let span = member.location;
             let member = self.process_dec_to_hlir_variable(member, span)?;
             size += self.sizeof(&member.ty, span);
-            fields.push(member);
+            fields.push(span.into_locatable(member));
         }
         let _struct = HlirStruct {
             ident,
@@ -66,7 +67,8 @@ impl GlobalValidator {
             return Err(());
         }
 
-        let ty = self.validate_type(&dec.specifier, dec_span, true, false)?;
+        let ty =
+            dec_span.into_locatable(self.validate_type(&dec.specifier, dec_span, true, false)?);
 
         self.return_ty = Some(ty.clone());
 
@@ -75,12 +77,16 @@ impl GlobalValidator {
             self.report_error(CompilerError::FunctionRequiresIdentifier(dec_span));
             return Err(());
         }
-
-        let ident = ident.as_ref().unwrap().value.clone();
+        let ident = ident.as_ref().unwrap();
+        let ident = ident.location.into_locatable(ident.value.clone());
         let raw_params = &func.parameters;
         let mut parameters = Vec::new();
         for parameter in raw_params {
-            parameters.push(self.validate_function_param_declaration(parameter)?);
+            parameters.push(
+                parameter
+                    .location
+                    .into_locatable(self.validate_function_param_declaration(parameter)?),
+            );
         }
 
         let param_types = parameters
@@ -98,15 +104,32 @@ impl GlobalValidator {
 
         let body = self.validate_block(&func.body);
         self.pop_scope();
-        let body = body?;
+        let body = Self::flatten_blocks(body?);
+        let body = func.body.location.into_locatable(body);
         self.return_ty = None;
 
         Ok(HlirFunction {
+            span: func_span,
             ty,
             ident,
             parameters,
             body,
         })
+    }
+
+    fn flatten_blocks(hlir_block: HlirBlock) -> HlirBlock {
+        let mut block = Vec::new();
+        Self::flatten_blocks_recursive(hlir_block, &mut block);
+        HlirBlock(block)
+    }
+
+    fn flatten_blocks_recursive(hlir_block: HlirBlock, vec: &mut Vec<HlirStmt>) {
+        for stmt in hlir_block.0 {
+            match stmt {
+                HlirStmt::Block(inner_block) => Self::flatten_blocks_recursive(inner_block, vec),
+                other => vec.push(other),
+            }
+        }
     }
 
     pub(crate) fn validate_function_param_declaration(
@@ -147,14 +170,17 @@ impl GlobalValidator {
             return Err(());
         }
 
-        let initializer: Option<HlirVarInit> = if let Some(init) = &var.initializer {
-            Some(self.validate_initializer(init, init.location)?)
+        let initializer = if let Some(init) = &var.initializer {
+            Some(
+                init.location
+                    .into_locatable(self.validate_initializer(init, init.location)?),
+            )
         } else {
             None
         };
 
         let array_size = var.array_size.map(|size| size as u64).or_else(|| {
-            initializer.as_ref().and_then(|init| match init {
+            initializer.as_ref().and_then(|init| match &init.value {
                 HlirVarInit::Array(arr) => Some(arr.len() as u64),
                 HlirVarInit::Expr(_) => None,
             })
@@ -167,6 +193,8 @@ impl GlobalValidator {
         } else {
             ty
         };
+
+        let ty = declaration.location.into_locatable(ty);
 
         variable.initializer = initializer;
         variable.ty = ty;
@@ -181,7 +209,7 @@ impl GlobalValidator {
     ) -> Result<HlirVariable, ()> {
         let ident = dec.ident.as_ref().unwrap();
         let ident_span = ident.location;
-        let ident = ident.value.clone();
+        let ident = ident.location.into_locatable(ident.value.clone());
 
         let mut is_const = false;
         for ty_qual in &dec.specifier.qualifiers {
@@ -204,9 +232,10 @@ impl GlobalValidator {
                 span,
             ))
         }
-        let ty = self.validate_type(&dec.specifier, span, false, false)?;
+        let ty = span.into_locatable(self.validate_type(&dec.specifier, span, false, false)?);
 
         Ok(HlirVariable {
+            span,
             ty,
             ident,
             is_const,

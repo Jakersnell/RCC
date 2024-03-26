@@ -1,9 +1,11 @@
 use crate::analysis::hlir::*;
+use crate::util::Span;
 use std::cmp::Ordering;
 
 macro_rules! cast {
-    ($hlir:expr, $to:expr) => {{
+    ($hlir:expr, $to:expr, $span:expr) => {{
         HlirExpr {
+            span: $span,
             kind: Box::new(HlirExprKind::Cast($to.clone(), $hlir)),
             ty: $to,
             is_lval: false,
@@ -14,6 +16,7 @@ macro_rules! cast {
 pub(in crate::analysis) fn explicit_cast(
     cast_ty: HlirType,
     expr: HlirExpr,
+    span: Span,
 ) -> Result<HlirExpr, ()> {
     if cast_ty == expr.ty {
         return Ok(expr);
@@ -25,14 +28,16 @@ pub(in crate::analysis) fn explicit_cast(
             HlirType {
                 kind: to_kind.clone(),
                 decl: HlirTypeDecl::Pointer
-            }
+            },
+            span
         )),
         (kind, HlirTypeDecl::Pointer, to_kind, HlirTypeDecl::Pointer) => Ok(cast!(
             expr,
             HlirType {
                 kind: to_kind.clone(),
                 decl: HlirTypeDecl::Basic
-            }
+            },
+            span
         )),
         (kind, HlirTypeDecl::Pointer, HlirTypeKind::Long(signed), HlirTypeDecl::Basic) => {
             Ok(cast!(
@@ -40,13 +45,14 @@ pub(in crate::analysis) fn explicit_cast(
                 HlirType {
                     kind: HlirTypeKind::Long(true),
                     decl: HlirTypeDecl::Basic
-                }
+                },
+                span
             ))
         }
         (kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic)
             if expr.ty.is_numeric() && cast_ty.is_numeric() =>
         {
-            Ok(cast_numeric_to_numeric(cast_ty, expr))
+            Ok(cast_numeric_to_numeric(cast_ty, expr, span))
         }
         _ => Err(()),
     }
@@ -55,6 +61,7 @@ pub(in crate::analysis) fn explicit_cast(
 pub(in crate::analysis) fn implicit_cast(
     cast_to: HlirType,
     expr: HlirExpr,
+    span: Span,
 ) -> Result<HlirExpr, ()> {
     if expr.ty == cast_to {
         return Ok(expr);
@@ -69,6 +76,7 @@ pub(in crate::analysis) fn implicit_cast(
                 kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
                 is_lval: false,
                 ty,
+                span,
             })
         }
         (kind, HlirTypeDecl::Array(_), cast_kind, HlirTypeDecl::Pointer) if kind == cast_kind => {
@@ -77,19 +85,24 @@ pub(in crate::analysis) fn implicit_cast(
                 decl: HlirTypeDecl::Pointer,
             };
             Ok(HlirExpr {
+                span,
                 kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
                 is_lval: false,
                 ty,
             })
         }
         (casting_kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic) => {
-            Ok(cast_numeric_to_numeric(cast_to, expr))
+            Ok(cast_numeric_to_numeric(cast_to, expr, span))
         }
         _ => Err(()),
     }
 }
 
-pub(in crate::analysis) fn cast_numeric_to_numeric(cast_to: HlirType, expr: HlirExpr) -> HlirExpr {
+pub(in crate::analysis) fn cast_numeric_to_numeric(
+    cast_to: HlirType,
+    expr: HlirExpr,
+    span: Span,
+) -> HlirExpr {
     debug_assert!(cast_to.decl == HlirTypeDecl::Basic);
     debug_assert!(expr.ty.decl == HlirTypeDecl::Basic);
     if matches!(
@@ -101,6 +114,7 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(cast_to: HlirType, expr: Hlir
             decl: HlirTypeDecl::Basic,
         };
         HlirExpr {
+            span,
             kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
             is_lval: false,
             ty,
@@ -118,14 +132,16 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(cast_to: HlirType, expr: Hlir
                 decl: HlirTypeDecl::Basic,
                 kind,
             };
-            let casted_lower = cast_numeric_to_numeric(ty, expr);
+            let casted_lower = cast_numeric_to_numeric(ty, expr, span);
             HlirExpr {
+                span,
                 kind: Box::new(HlirExprKind::Cast(cast_to.clone(), casted_lower)),
                 ty: cast_to,
                 is_lval: false,
             }
         } else {
             HlirExpr {
+                span,
                 kind: Box::new(HlirExprKind::Cast(cast_to.clone(), expr)),
                 is_lval: false,
                 ty: cast_to,
@@ -186,7 +202,7 @@ fn get_numeric_cast_hierarchy(ty: &HlirTypeKind) -> u8 {
 
 #[cfg(test)]
 fn test_cast_structure(expr: HlirExpr, cast_to: HlirType, order: &[HlirTypeKind]) {
-    let cast_structure = cast_numeric_to_numeric(cast_to, expr);
+    let cast_structure = cast_numeric_to_numeric(cast_to, expr, Span::default());
 
     let mut given = cast_structure;
 
@@ -206,6 +222,7 @@ fn test_cast_structure(expr: HlirExpr, cast_to: HlirType, order: &[HlirTypeKind]
 #[test]
 fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_upcast() {
     let expr = HlirExpr {
+        span: Span::default(),
         kind: Box::new(HlirExprKind::Literal(HlirLiteral::Char(1))),
         ty: HlirType {
             kind: HlirTypeKind::Char(false),
@@ -230,6 +247,7 @@ fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_upcast() {
 #[test]
 fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_downcast() {
     let expr = HlirExpr {
+        span: Span::default(),
         kind: Box::new(HlirExprKind::Literal(HlirLiteral::Float(1.0))),
         ty: HlirType {
             kind: HlirTypeKind::Double,
@@ -259,6 +277,7 @@ fn test_cast_type_to_itself_returns_initial_expression_for_struct_pointer() {
         decl: HlirTypeDecl::Pointer,
     };
     let expr = HlirExpr {
+        span: Span::default(),
         kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(0))), // kind can be anything here, it is not used
         ty: HlirType {
             kind: HlirTypeKind::Struct(crate::util::str_intern::intern("test")), // separate interning is important
@@ -266,6 +285,6 @@ fn test_cast_type_to_itself_returns_initial_expression_for_struct_pointer() {
         },
         is_lval: false,
     };
-    let result = implicit_cast(ty, expr);
+    let result = implicit_cast(ty, expr, Span::default());
     assert!(result.is_ok());
 }

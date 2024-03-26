@@ -61,11 +61,13 @@ impl GlobalValidator {
             let left = implicit_cast(
                 HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
                 left,
+                Span::default(),
             )
             .unwrap();
             let right = implicit_cast(
                 HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
                 right,
+                span,
             )
             .unwrap();
             match op {
@@ -77,11 +79,13 @@ impl GlobalValidator {
             let left = implicit_cast(
                 HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
                 left,
+                span,
             )
             .unwrap();
             let right = implicit_cast(
                 HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
                 right,
+                span,
             )
             .unwrap();
             match op {
@@ -102,6 +106,7 @@ impl GlobalValidator {
             return Ok(left);
         };
         Ok(HlirExpr {
+            span,
             kind: Box::new(kind),
             ty,
             is_lval: false,
@@ -120,7 +125,7 @@ impl GlobalValidator {
             return Ok(left);
         }
         let right_ty = right.ty.clone();
-        let right = implicit_cast(left.ty.clone(), right);
+        let right = implicit_cast(left.ty.clone(), right, span);
         if right.is_err() {
             let err = CompilerError::CannotAssign(left.ty.to_string(), right_ty.to_string(), span);
             self.report_error(err);
@@ -148,6 +153,7 @@ impl GlobalValidator {
             HlirExprKind::Assign(left, right)
         };
         Ok(HlirExpr {
+            span,
             kind: Box::new(kind),
             ty,
             is_lval: false,
@@ -180,12 +186,14 @@ impl GlobalValidator {
         let left = implicit_cast(
             HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
             left,
+            span,
         );
 
         let right_ty = right.ty.clone();
         let right = implicit_cast(
             HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
             right,
+            span,
         );
 
         if left.is_err() || right.is_err() {
@@ -209,6 +217,7 @@ impl GlobalValidator {
             _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
         };
         Ok(HlirExpr {
+            span,
             kind: Box::new(kind),
             ty: HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
             is_lval: false,
@@ -228,13 +237,13 @@ impl GlobalValidator {
         };
         let (left, right) = if left.is_pointer() && right.is_pointer() {
             (
-                explicit_cast(ty.clone(), left).unwrap(),
-                explicit_cast(ty.clone(), right).unwrap(),
+                explicit_cast(ty.clone(), left, span).unwrap(),
+                explicit_cast(ty.clone(), right, span).unwrap(),
             )
         } else if !left.is_pointer() && !right.is_pointer() {
             (
-                implicit_cast(ty.clone(), left).unwrap(),
-                implicit_cast(ty.clone(), right).unwrap(),
+                implicit_cast(ty.clone(), left, span).unwrap(),
+                implicit_cast(ty.clone(), right, span).unwrap(),
             )
         } else {
             let err = CompilerError::InvalidBinaryOperation(
@@ -255,6 +264,7 @@ impl GlobalValidator {
             _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
         };
         Ok(HlirExpr {
+            span,
             kind: Box::new(kind),
             ty,
             is_lval: false,
@@ -277,6 +287,7 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
     macro_rules! make_expr {
         ($kind:expr) => {
             HlirExpr {
+                span: Span::default(),
                 kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
                 ty: HlirType::new($kind, HlirTypeDecl::Basic),
                 is_lval: false,

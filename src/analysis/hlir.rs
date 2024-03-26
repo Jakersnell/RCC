@@ -1,9 +1,7 @@
-use crate::analysis::hlir::HlirTypeDecl::{Basic, Pointer};
-use crate::analysis::hlir::HlirTypeKind::{Double, Float};
 use crate::parser::ast::{BinaryOp, Block, TypeSpecifier};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
-use crate::util::Locatable;
+use crate::util::{Locatable, Span};
 use arcstr::ArcStr;
 use derive_new::new;
 use std::cell::OnceCell;
@@ -12,6 +10,10 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
+pub const VOID_TYPE: HlirType = HlirType {
+    kind: HlirTypeKind::Void,
+    decl: HlirTypeDecl::Basic,
+};
 #[derive(Debug, Default)]
 pub struct HighLevelIR {
     pub functions: HashMap<InternedStr, HlirFunction>,
@@ -21,25 +23,27 @@ pub struct HighLevelIR {
 
 #[derive(Debug)]
 pub struct HlirStruct {
-    pub ident: InternedStr,
-    pub fields: Vec<HlirVariable>,
+    pub ident: Locatable<InternedStr>,
+    pub fields: Vec<Locatable<HlirVariable>>,
     pub size: u64,
 }
 
 #[derive(Debug)]
 pub struct HlirFunction {
-    pub ty: HlirType,
-    pub ident: InternedStr,
-    pub parameters: Vec<HlirVariable>,
-    pub body: HlirBlock,
+    pub span: Span,
+    pub ty: Locatable<HlirType>,
+    pub ident: Locatable<InternedStr>,
+    pub parameters: Vec<Locatable<HlirVariable>>,
+    pub body: Locatable<HlirBlock>,
 }
 
 #[derive(Debug)]
 pub struct HlirVariable {
-    pub ty: HlirType,
-    pub ident: InternedStr,
+    pub span: Span,
+    pub ty: Locatable<HlirType>,
+    pub ident: Locatable<InternedStr>,
     pub is_const: bool,
-    pub initializer: Option<HlirVarInit>,
+    pub initializer: Option<Locatable<HlirVarInit>>,
 }
 
 #[derive(Debug)]
@@ -182,6 +186,7 @@ pub enum HlirLiteral {
 
 #[derive(Debug, Clone, new)]
 pub struct HlirExpr {
+    pub span: Span,
     pub kind: Box<HlirExprKind>,
     pub ty: HlirType,
     pub is_lval: bool,
@@ -309,16 +314,8 @@ pub enum HlirStmt {
     Block(HlirBlock),
     Expression(HlirExpr),
     VariableDeclaration(HlirVariable),
-    If {
-        condition: HlirExpr,
-        then: Box<HlirStmt>,
-        otherwise: Option<Box<HlirStmt>>,
-    },
-    While {
-        condition: HlirExpr,
-        body: Box<HlirStmt>,
-    },
-    Continue,
-    Break,
+    Label(InternedStr),
+    Goto(InternedStr),
+    ConditionalGoto(HlirExpr, InternedStr),
     Return(Option<HlirExpr>),
 }
