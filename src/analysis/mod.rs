@@ -14,9 +14,25 @@ use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
+
+static mut LABEL_COUNT: usize = 0;
+
+pub(in crate::analysis) fn peek_current_label() -> usize {
+    unsafe { LABEL_COUNT }
+}
+pub(in crate::analysis) fn peek_next_label() -> usize {
+    peek_current_label() + 1
+}
+
+pub(in crate::analysis) fn create_label() -> usize {
+    unsafe {
+        LABEL_COUNT += 1;
+        LABEL_COUNT
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct SharedReporter(Rc<RefCell<Reporter>>);
@@ -33,6 +49,7 @@ pub struct GlobalValidator {
     scope: Box<RefCell<SymbolResolver>>,
     reporter: SharedReporter,
     return_ty: Option<HlirType>, // for functions
+    loop_label_stack: VecDeque<InternedStr>,
 }
 
 impl GlobalValidator {
@@ -42,6 +59,7 @@ impl GlobalValidator {
             scope: Box::new(RefCell::new(SymbolResolver::create_root())),
             reporter: SharedReporter::default(),
             return_ty: None,
+            loop_label_stack: VecDeque::new(),
         }
     }
 
@@ -95,14 +113,17 @@ impl GlobalValidator {
         }
         let idents = self.scope.borrow().get_unused_idents();
         for ident in idents {
-            if let Some(variable) = globals.get(&ident) {
+            if let Some(variable) = globals.get(&ident.0) {
                 self.report_warning(CompilerWarning::UnusedVariable(variable.location));
-            } else if let Some(function) = functions.get(&ident) {
+            } else if let Some(function) = functions.get(&ident.0) {
                 self.report_warning(CompilerWarning::UnusedFunction(function.location));
-            } else if let Some(_struct) = structs.get(&ident) {
+            } else if let Some(_struct) = structs.get(&ident.0) {
                 self.report_warning(CompilerWarning::UnusedStruct(_struct.location))
             } else {
-                panic!("Could not match unused ident to type: ident = '{}'", ident);
+                panic!(
+                    "Could not match unused ident to type: ident = '{}': {}",
+                    ident.0, ident.1
+                );
             }
         }
         fn deref_map<K: Eq + std::hash::Hash, T>(map: HashMap<K, Locatable<T>>) -> HashMap<K, T> {
@@ -165,6 +186,7 @@ impl GlobalValidator {
     }
 
     fn pop_scope(&mut self) {
+        self.report_unused_items();
         let mut resolver = SymbolResolver::default(); // blank temp resolver
         resolver = self.scope.replace(resolver);
         resolver = resolver
@@ -174,6 +196,20 @@ impl GlobalValidator {
         resolver = self.scope.replace(resolver);
         debug_assert!(resolver.parent.is_none());
         debug_assert!(resolver.symbols.is_empty());
+    }
+
+    fn report_unused_items(&mut self) {
+        let items = self.scope.borrow_mut().get_unused_idents();
+        for (item, span) in items {
+            if cfg!(debug_assertions) {
+                assert!(self
+                    .scope
+                    .borrow_mut()
+                    .get_variable_type(&item, span)
+                    .is_ok());
+            }
+            self.report_warning(CompilerWarning::UnusedVariable(span));
+        }
     }
 
     fn validate_type(
