@@ -2,7 +2,7 @@ mod binary_expressions;
 mod casting;
 mod declarations;
 mod expressions;
-mod flow;
+mod functions;
 pub mod hlir;
 mod statements;
 mod symbols;
@@ -32,6 +32,7 @@ pub struct GlobalValidator {
     ast: Option<AbstractSyntaxTree>,
     scope: Box<RefCell<SymbolResolver>>,
     reporter: SharedReporter,
+    return_ty: Option<HlirType>, // for functions
 }
 
 impl GlobalValidator {
@@ -40,6 +41,7 @@ impl GlobalValidator {
             ast: Some(ast),
             scope: Box::new(RefCell::new(SymbolResolver::create_root())),
             reporter: SharedReporter::default(),
+            return_ty: None,
         }
     }
 

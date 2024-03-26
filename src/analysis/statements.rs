@@ -1,9 +1,12 @@
+use crate::analysis::hlir::HlirTypeDecl::Basic;
+use crate::analysis::hlir::HlirTypeKind::Void;
 use crate::analysis::hlir::{
     HlirBlock, HlirExpr, HlirExprKind, HlirLiteral, HlirStmt, HlirType, HlirTypeDecl, HlirTypeKind,
 };
 use crate::analysis::GlobalValidator;
 use crate::parser::ast::{Block, Expression, Statement, VariableDeclaration};
-use crate::util::Locatable;
+use crate::util::error::CompilerError;
+use crate::util::{Locatable, Span};
 use std::env::var;
 
 impl GlobalValidator {
@@ -40,7 +43,7 @@ impl GlobalValidator {
                 self.validate_for_loop(initializer, condition, post_loop, body)
             }
             Statement::Block(block) => Ok(Some(HlirStmt::Block(self.validate_block(block)?))),
-            Statement::Return(value) => self.validate_return_statement(value),
+            Statement::Return(value) => self.validate_return_statement(value, stmt.location),
             Statement::Continue => Ok(Some(HlirStmt::Continue)),
             Statement::Break => Ok(Some(HlirStmt::Break)),
             Statement::Empty => Ok(None),
@@ -102,12 +105,26 @@ impl GlobalValidator {
     fn validate_return_statement(
         &mut self,
         value: &Option<Locatable<Expression>>,
+        span: Span,
     ) -> Result<Option<HlirStmt>, ()> {
         let value = if let Some(value) = value {
             Some(self.validate_expression(value)?)
         } else {
             None
         };
+        static NONE_TYPE: HlirType = HlirType {
+            kind: Void,
+            decl: Basic,
+        };
+        let function_ty = self.return_ty.as_ref().unwrap_or(&NONE_TYPE);
+        let value_ty = value.as_ref().map(|expr| &expr.ty).unwrap_or(&NONE_TYPE);
+        if function_ty != value_ty {
+            self.report_error(CompilerError::InvalidReturnType(
+                function_ty.to_string(),
+                value_ty.to_string(),
+                span,
+            ));
+        }
         Ok(Some(HlirStmt::Return(value)))
     }
 
