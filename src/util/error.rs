@@ -264,6 +264,9 @@ pub enum CompilerError {
 
     #[error("Cannot take an address of a pointer, not in this language, yet: {0}")]
     AttemptedAddressOfPointer(Span),
+
+    #[error("Function must return type '{0}', cannot return '{1}': {0}")]
+    InvalidReturnType(String, String, Span),
 }
 
 #[derive(Error, Debug)]
