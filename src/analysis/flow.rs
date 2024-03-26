@@ -54,15 +54,8 @@ impl<'a> BasicBlockFactory<'a> {
             match stmt {
                 HlirStmt::Block(_) => {}
                 HlirStmt::Expression(_) | HlirStmt::VariableDeclaration(_) => {}
-                HlirStmt::If {
-                    condition,
-                    then,
-                    otherwise,
-                } => {}
-                HlirStmt::While { condition, body } => {}
-                HlirStmt::Continue => {}
-                HlirStmt::Break => {}
                 HlirStmt::Return(_) => {}
+                _ => {}
             }
         }
     }
@@ -79,7 +72,7 @@ pub struct ControlFlowGraph<'a> {
 
 impl<'a> ControlFlowGraph<'a> {
     fn new(function: &'a HlirFunction) -> Self {
-        let ty_is_void = (&function.ty.value == &VOID_TYPE);
+        let ty_is_void = (function.ty.value == VOID_TYPE);
         Self {
             function,
             start: Rc::new(BasicBlock::new(BasicBlockKind::Start)),
