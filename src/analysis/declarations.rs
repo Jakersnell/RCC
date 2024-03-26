@@ -67,6 +67,9 @@ impl GlobalValidator {
         }
 
         let ty = self.validate_type(&dec.specifier, dec_span, true, false)?;
+
+        self.return_ty = Some(ty.clone());
+
         let ident = &dec.ident;
         if ident.is_none() {
             self.report_error(CompilerError::FunctionRequiresIdentifier(dec_span));
@@ -96,6 +99,8 @@ impl GlobalValidator {
         let body = self.validate_block(&func.body);
         self.pop_scope();
         let body = body?;
+        self.return_ty = None;
+
         Ok(HlirFunction {
             ty,
             ident,
