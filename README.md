@@ -1,6 +1,6 @@
 # Micro-C
 
-### a small compiler focusing on a subset of the C language.
+### A small handwritten compiler focusing on a subset of the C language.
 
 ---
 
@@ -14,14 +14,14 @@
 - ##### Variable declarations and assignments
 - ##### Comments (single-line and multi-line)
 - ##### Built in library functions (printf, scanf, etc.)
+- ##### Casting (implicit and explicit)
 
 ---
 
 ## About the Project
 
 The goal of this project is to create a simple, yet powerful, compiler that can take in a file written in Micro-C
-and output an executable file that can be run. This is a semi long-term project and I will be updating this file as I
-make progress.
+and output an executable file. This is a long-term project and I will be updating this file as I make progress.
 The reason that I am doing this is to learn more about how compilers work and to improve my programming skills.
 I am also interested in learning more about the C language and how it is compiled. I chose to write this in rust because
 I absolutely love rust, and the idea seemed funny to me, as rust is built to stop the things that make C so "dangerous".
@@ -29,9 +29,7 @@ ___
 
 ## Directory
 
-### [Dev log](_process_docs/DEVLOG.md)
-
-### [Semantic analysis process description](_process_docs/SEMANTIC-ANALYSIS.md)
+### [Semantic analysis process description](_process_docs/SEMANTIC-ANALYSIS.md) - This is the current phase of development
 
 ### [AST process analysis](_process_docs/AST-PROCESS.md)
 
