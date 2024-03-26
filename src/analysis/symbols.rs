@@ -324,6 +324,7 @@ impl SymbolResolver {
             ));
         let ty = ty?.ty.clone();
         Ok(HlirExpr {
+            span: _struct.location.merge(member.location),
             kind: Box::new(HlirExprKind::Member(_struct.value, member.value)),
             is_lval: true,
             ty,

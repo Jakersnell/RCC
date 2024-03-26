@@ -2,7 +2,7 @@ mod binary_expressions;
 mod casting;
 mod declarations;
 mod expressions;
-mod functions;
+mod flow;
 pub mod hlir;
 mod statements;
 mod symbols;

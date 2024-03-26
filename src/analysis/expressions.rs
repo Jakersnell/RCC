@@ -41,6 +41,7 @@ impl GlobalValidator {
             .borrow_mut()
             .get_variable_type(&variable.value, variable.location)
             .map(|ty| HlirExpr {
+                span: variable.location,
                 kind: Box::new(HlirExprKind::Variable(variable.value.clone())),
                 ty,
                 is_lval: true,
@@ -76,6 +77,7 @@ impl GlobalValidator {
         };
         let ty = HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic);
         Ok(HlirExpr {
+            span: ty_or_expr.location,
             kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(size as i64))),
             ty,
             is_lval: false,
@@ -130,6 +132,7 @@ impl GlobalValidator {
             PostfixOp::Decrement => HlirExprKind::PostDecrement(expr),
         });
         Ok(HlirExpr {
+            span,
             is_lval: false,
             kind,
             ty,
@@ -178,7 +181,9 @@ impl GlobalValidator {
         let return_ty = func.return_ty.clone();
         drop(resolver);
         let mut hlir_args = Vec::new();
+        let mut last_arg_span = span;
         for loc_expr in args {
+            last_arg_span = loc_expr.location;
             hlir_args.push((
                 self.validate_expression(&loc_expr.value)?,
                 loc_expr.location,
@@ -193,6 +198,7 @@ impl GlobalValidator {
             args: hlir_args.into_iter().map(|arg| arg.0).collect(),
         };
         Ok(HlirExpr {
+            span: span.merge(last_arg_span),
             kind: Box::new(kind),
             ty: return_ty,
             is_lval: false,
@@ -209,7 +215,7 @@ impl GlobalValidator {
         for (arg, param_ty) in args.into_iter().zip(param_types.iter()) {
             let arg_ty = arg.0.ty.clone();
             let span = arg.1;
-            if let Ok(arg) = implicit_cast(param_ty.clone(), arg.0) {
+            if let Ok(arg) = implicit_cast(param_ty.clone(), arg.0, span) {
                 processed_args.push((arg, span));
             } else {
                 self.report_error(CompilerError::ArgumentTypeMismatch(
@@ -287,7 +293,7 @@ impl GlobalValidator {
         let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false, false)?;
         let casting_ty_string = cast_to_ty.to_string();
         let expr_ty_string = expr.ty.to_string();
-        explicit_cast(cast_to_ty.clone(), expr).map_err(|_| {
+        explicit_cast(cast_to_ty.clone(), expr, dec.location.merge(expr_location)).map_err(|_| {
             let err = CompilerError::CannotCast(
                 expr_ty_string,
                 casting_ty_string,
@@ -350,6 +356,7 @@ impl GlobalValidator {
             }
         };
         Ok(HlirExpr {
+            span,
             kind: Box::new(HlirExprKind::Literal(literal)),
             ty,
             is_lval: false,
@@ -379,6 +386,7 @@ impl GlobalValidator {
 
         let ty = left.ty.clone();
         Ok(HlirExpr {
+            span: left_span.merge(index_span),
             kind: Box::new(HlirExprKind::Index(left, index)),
             ty,
             is_lval: false,
@@ -399,6 +407,7 @@ impl GlobalValidator {
         let mut ty = body.ty.clone();
         ty.decl = HlirTypeDecl::Basic;
         let expr = HlirExpr {
+            span: body_span.merge(member_span),
             kind: Box::new(HlirExprKind::Deref(body)),
             ty,
             is_lval: true,
@@ -455,6 +464,7 @@ impl GlobalValidator {
                 } else {
                     let ty = expr.ty.clone();
                     Ok(HlirExpr {
+                        span,
                         kind: Box::new(HlirExprKind::Negate(expr)),
                         is_lval: false,
                         ty,
@@ -472,6 +482,7 @@ impl GlobalValidator {
                             kind: HlirTypeKind::Int(false),
                         },
                         expr,
+                        span,
                     )?;
                     let ty = expr.ty.clone();
                     let expr = match op {
@@ -480,6 +491,7 @@ impl GlobalValidator {
                         _ => unreachable!(),
                     };
                     Ok(HlirExpr {
+                        span,
                         kind: Box::new(expr),
                         is_lval: false,
                         ty,
@@ -495,6 +507,7 @@ impl GlobalValidator {
                 let ty_kind = expr.ty.kind.clone();
 
                 Ok(HlirExpr {
+                    span,
                     kind: Box::new(HlirExprKind::Deref(expr)),
                     ty: HlirType {
                         decl: HlirTypeDecl::Basic,
@@ -511,6 +524,7 @@ impl GlobalValidator {
                 }
                 let ty_kind = expr.ty.kind.clone();
                 Ok(HlirExpr {
+                    span,
                     kind: Box::new(HlirExprKind::AddressOf(expr)),
                     ty: HlirType {
                         kind: ty_kind,
@@ -549,6 +563,7 @@ impl GlobalValidator {
         }
 
         let literal_one = HlirExpr {
+            span,
             kind: Box::new(HlirExprKind::Literal(HlirLiteral::Char(1))),
             ty: HlirType {
                 decl: HlirTypeDecl::Basic,

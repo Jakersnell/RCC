@@ -1,7 +1,8 @@
 use crate::analysis::hlir::HlirTypeDecl::Basic;
 use crate::analysis::hlir::HlirTypeKind::Void;
 use crate::analysis::hlir::{
-    HlirBlock, HlirExpr, HlirExprKind, HlirLiteral, HlirStmt, HlirType, HlirTypeDecl, HlirTypeKind,
+    HlirBlock, HlirExpr, HlirExprKind, HlirFunction, HlirLiteral, HlirStmt, HlirType, HlirTypeDecl,
+    HlirTypeKind,
 };
 use crate::analysis::GlobalValidator;
 use crate::parser::ast::{Block, Expression, Statement, VariableDeclaration};
@@ -67,17 +68,19 @@ impl GlobalValidator {
         otherwise: &Option<Box<Locatable<Statement>>>,
     ) -> Result<Option<HlirStmt>, ()> {
         let condition = self.validate_expression(condition)?;
+        let then_span = then.location;
         let then = self.validate_statement(then)?;
         if then.is_none() {
             return Ok(None);
         }
-        let then = Box::new(then.unwrap());
+        let then = Box::new(then_span.into_locatable(then.unwrap()));
         let otherwise = if let Some(otherwise) = otherwise {
+            let span = otherwise.location;
             let otherwise = self.validate_statement(otherwise)?;
             if otherwise.is_none() {
                 return Ok(None);
             }
-            Some(Box::new(otherwise.unwrap()))
+            Some(Box::new(span.into_locatable(otherwise.unwrap())))
         } else {
             None
         };
@@ -94,11 +97,12 @@ impl GlobalValidator {
         body: &Locatable<Statement>,
     ) -> Result<Option<HlirStmt>, ()> {
         let condition = self.validate_expression(condition)?;
+        let span = body.location;
         let body = self.validate_statement(body)?;
         if body.is_none() {
             return Ok(None);
         }
-        let body = Box::new(body.unwrap());
+        let body = Box::new(span.into_locatable(body.unwrap()));
         Ok(Some(HlirStmt::While { condition, body }))
     }
 
@@ -150,6 +154,7 @@ impl GlobalValidator {
             self.validate_expression(condition)?
         } else {
             HlirExpr {
+                span: Span::default(),
                 kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
                 ty: HlirType {
                     kind: HlirTypeKind::Int(false),
@@ -162,6 +167,7 @@ impl GlobalValidator {
         if body_stmt.is_none() {
             return Ok(None);
         }
+        let span = body.location;
         let mut body = Vec::new();
         body.push(body_stmt.unwrap());
         if let Some(post_loop) = post_loop {
@@ -169,7 +175,7 @@ impl GlobalValidator {
             let post_loop_stmt = HlirStmt::Expression(post_loop);
             body.push(post_loop_stmt);
         }
-        let body = Box::new(HlirStmt::Block(HlirBlock(body)));
+        let body = Box::new(span.into_locatable(HlirStmt::Block(HlirBlock(body))));
         let as_while_loop = HlirStmt::While { condition, body };
         block_body.push(as_while_loop);
         self.pop_scope();
