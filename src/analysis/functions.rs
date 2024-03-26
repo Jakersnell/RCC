@@ -35,7 +35,6 @@ struct GraphEdge {
 }
 
 pub struct FunctionFlowAnalyzer<'a> {
-    reporter: SharedReporter,
     function: &'a HlirFunction,
     start: Rc<GraphNode>,
     end: Rc<GraphNode>,
@@ -43,7 +42,6 @@ pub struct FunctionFlowAnalyzer<'a> {
 impl<'a> FunctionFlowAnalyzer<'a> {
     pub fn new(reporter: SharedReporter, function: &'a HlirFunction) -> Self {
         Self {
-            reporter,
             function,
             start: Rc::new(GraphNode::new(Span::default())),
             end: Rc::new(GraphNode::new(Span::default())),
@@ -52,9 +50,5 @@ impl<'a> FunctionFlowAnalyzer<'a> {
 
     pub fn analyze(mut self) -> Result<(), ()> {
         todo!()
-    }
-
-    fn report_error(&mut self, error: CompilerError) {
-        self.reporter.borrow_mut().report_error(error);
     }
 }
