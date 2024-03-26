@@ -267,6 +267,12 @@ pub enum CompilerError {
 
     #[error("Function must return type '{0}', cannot return '{1}': {0}")]
     InvalidReturnType(String, String, Span),
+
+    #[error("Keyword 'continue' has no corresponding loop: {0}")]
+    ContinueWithoutLoop(Span),
+
+    #[error("Keyword 'break' has no corresponding loop: {0}")]
+    BreakWithoutLoop(Span),
 }
 
 #[derive(Error, Debug)]
