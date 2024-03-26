@@ -19,7 +19,7 @@ would be represented as
     d   2 
     
 This is correct because it preserves our rules for operator precedence.
-Becuase the tree is evaluated bottom to top, left to right, the expression is evaluated correctly.
+As the tree is evaluated bottom to top, left to right, the expression is evaluated correctly.
 d * 2 is evaluated first, then the result is added to 1.
 
 The same tree output from my compiler in debug mode would look like this:

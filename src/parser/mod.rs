@@ -55,7 +55,7 @@ where
         }
     }
 
-    pub fn parse_all(mut self) -> Result<Vec<Locatable<InitDeclaration>>, Vec<CompilerError>> {
+    pub fn parse_all(mut self) -> Result<AbstractSyntaxTree, Vec<CompilerError>> {
         let primer = self.prime();
         if primer.is_err() {
             return Err(self.errors);
@@ -68,7 +68,9 @@ where
             }
             global.push(init_dec.unwrap());
         }
-        Ok(global)
+        Ok(AbstractSyntaxTree::new(
+            global.into_iter().map(|dec| dec.value).collect(),
+        ))
     }
 
     #[inline(always)]

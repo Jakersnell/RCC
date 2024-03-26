@@ -63,7 +63,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, new, Clone, Copy, Default)]
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -72,6 +72,17 @@ pub struct Span {
 }
 
 impl Span {
+    #[inline]
+    pub fn new(start: usize, end: usize, col: usize, line: usize) -> Self {
+        debug_assert!(start < end);
+        Self {
+            start,
+            end,
+            col,
+            line,
+        }
+    }
+
     #[inline]
     pub fn merge(mut self, other: Self) -> Self {
         self.end = other.end;
@@ -94,10 +105,8 @@ impl Display for Span {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "src: {}:{}:{}",
-            self.line,
-            self.col,
-            self.end - self.start
+            "src: {}:{}:{}:{}",
+            self.line, self.col, self.start, self.end
         )
     }
 }

@@ -1,5 +1,6 @@
+use crate::analysis::hlir::HlirTypeDecl::{Basic, Pointer};
 use crate::analysis::hlir::HlirTypeKind::{Double, Float};
-use crate::parser::ast::{BinaryOp, TypeSpecifier};
+use crate::parser::ast::{BinaryOp, Block, TypeSpecifier};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
@@ -15,7 +16,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 pub struct HighLevelIR {
     pub functions: HashMap<InternedStr, HlirFunction>,
     pub structs: HashMap<InternedStr, HlirStruct>,
-    pub globals: Vec<HlirVariable>,
+    pub globals: HashMap<InternedStr, HlirVariable>,
 }
 
 #[derive(Debug)]
@@ -55,7 +56,7 @@ pub struct HlirType {
 
 impl HlirType {
     pub fn is_array(&self) -> bool {
-        matches!(self.decl, HlirTypeDecl::Array(_))
+        matches!(self.decl, HlirTypeDecl::Array(_)) && !self.is_pointer()
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -63,29 +64,14 @@ impl HlirType {
     }
 
     pub fn is_numeric(&self) -> bool {
-        self.kind.is_numeric()
+        use HlirTypeKind::*;
+        matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double) && !self.is_pointer()
     }
-}
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum HlirTypeDecl {
-    Basic,
-    Pointer, // true if pointer is const
-    Array(u64),
-}
-
-impl Display for HlirTypeDecl {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use HlirTypeDecl::*;
-        match self {
-            Basic => Ok(()),
-            Pointer => write!(f, "*"),
-            Array(size) => write!(f, "[{}]", size),
-        }
+    pub fn is_integer(&self) -> bool {
+        use HlirTypeKind::*;
+        matches!(&self.kind, Char(_) | Int(_) | Long(_)) && !self.is_pointer()
     }
-}
-
-impl HlirType {
     pub fn try_implicit_cast(&self, to: &HlirType) -> Option<HlirType> {
         if self == to {
             return None;
@@ -124,6 +110,25 @@ impl HlirType {
         ty_kind.map(|kind| HlirType::new(kind, Basic))
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HlirTypeDecl {
+    Basic,
+    Pointer, // true if pointer is const
+    Array(u64),
+}
+
+impl Display for HlirTypeDecl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use HlirTypeDecl::*;
+        match self {
+            Basic => Ok(()),
+            Pointer => write!(f, " *"),
+            Array(size) => write!(f, " [{}]", size),
+        }
+    }
+}
+
 impl Display for HlirType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.kind, self.decl)
@@ -141,26 +146,15 @@ pub enum HlirTypeKind {
     Struct(InternedStr),
 }
 
-impl HlirTypeKind {
-    pub fn is_numeric(&self) -> bool {
-        use HlirTypeKind::*;
-        matches!(self, Char(_) | Int(_) | Long(_) | Float | Double)
-    }
-
-    pub fn is_integer(&self) -> bool {
-        use HlirTypeKind::*;
-        matches!(self, Char(_) | Int(_) | Long(_))
-    }
-}
-
 impl Display for HlirTypeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         macro_rules! write_signed {
-            ($name:literal, $signed:expr) => {
+            ($name:literal, $unsigned:expr) => {
                 write!(
                     f,
-                    concat!($name, " {}"),
-                    if $signed { "signed" } else { "unsigned" }
+                    "{} {}",
+                    if $unsigned { "unsigned" } else { "signed" },
+                    $name
                 )
             };
         }
@@ -204,11 +198,11 @@ impl HlirExpr {
         )
     }
     pub fn is_integer_or_pointer(&self) -> bool {
-        self.ty.kind.is_integer() || self.ty.is_pointer()
+        self.ty.is_integer() || self.ty.is_pointer()
     }
 
     pub fn is_integer(&self) -> bool {
-        self.ty.kind.is_integer()
+        self.ty.is_integer()
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -260,15 +254,6 @@ pub enum HlirExprKind {
 
     // assign
     Assign(HlirExpr, HlirExpr),
-    AssignAdd(HlirExpr, HlirExpr),
-    AssignSub(HlirExpr, HlirExpr),
-    AssignMul(HlirExpr, HlirExpr),
-    AssignMod(HlirExpr, HlirExpr),
-    AssignBitAnd(HlirExpr, HlirExpr),
-    AssignBitOr(HlirExpr, HlirExpr),
-    AssignBitXor(HlirExpr, HlirExpr),
-    AssignLeftShift(HlirExpr, HlirExpr),
-    AssignRightShift(HlirExpr, HlirExpr),
 
     // other
     FunctionCall {
@@ -277,7 +262,7 @@ pub enum HlirExprKind {
         args: Vec<HlirExpr>,
     },
     Index(HlirExpr, HlirExpr),
-    Member(HlirExpr, InternedStr), // offset
+    Member(HlirExpr, InternedStr),
     Cast(HlirType, HlirExpr),
 }
 
@@ -321,6 +306,7 @@ impl Deref for HlirBlock {
 
 #[derive(Debug)]
 pub enum HlirStmt {
+    Block(HlirBlock),
     Expression(HlirExpr),
     VariableDeclaration(HlirVariable),
     If {
@@ -334,5 +320,5 @@ pub enum HlirStmt {
     },
     Continue,
     Break,
-    Return(HlirExpr),
+    Return(Option<HlirExpr>),
 }

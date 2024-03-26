@@ -1,10 +1,12 @@
 use crate::analysis::hlir::HlirType;
 use crate::parser::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
+use crate::util::str_intern::InternedStr;
 use crate::util::Span;
 use thiserror::Error;
 
+#[derive(Debug)]
 pub struct Reporter {
-    errors: Vec<CompilerError>,
+    pub errors: Vec<CompilerError>,
     warnings: Vec<CompilerWarning>,
 }
 impl Default for Reporter {
@@ -46,6 +48,9 @@ impl Reporter {
 pub enum CompilerError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Could not find fn 'main', no entry point!")]
+    MissingMain,
 
     #[error("Invalid integer literal: {0}")]
     ParseIntError(Span),
@@ -89,10 +94,10 @@ pub enum CompilerError {
     #[error("Unclosed char literal: {0}")]
     UnclosedCharLiteral(Span),
 
-    #[error("Cannot cast {0} to {1}")]
+    #[error("Cannot cast '{0}' to '{1}': {2}")]
     CannotCast(String, String, Span),
 
-    #[error("Cannot assign {0} to type {1}")]
+    #[error("Cannot assign '{1}' to lval with type of '{0}': {2}")]
     CannotAssign(String, String, Span),
 
     #[error("Unknown identifier \"{0}\"")]
@@ -119,11 +124,11 @@ pub enum CompilerError {
     #[error("Unexpected end of file.")]
     UnexpectedEOF,
 
-    #[error("'This identifier already exists in this scope and cannot be redeclared.")]
+    #[error("This identifier already exists in this scope and cannot be redeclared: {0}")]
     IdentifierExists(Span),
 
-    #[error("Identifier cannot be found in the current scope: {0}")]
-    IdentNotFound(Span),
+    #[error("The identifier '{0}' cannot be found in the current scope: {1}")]
+    IdentNotFound(InternedStr, Span),
 
     #[error("{0}")]
     CustomError(String, Span),
@@ -161,8 +166,8 @@ pub enum CompilerError {
     #[error("Invalid array operation: {0}")]
     InvalidArrayOperation(Span),
 
-    #[error("Invalid binary operation between {0} and {1}: {2}")]
-    InvalidBinaryOperation(String, String, Span),
+    #[error("Invalid binary operation '{0}' between '{1}' and '{2}': {3}")]
+    InvalidBinaryOperation(String, String, String, Span),
 
     #[error("Left hand operand is not assignable: {0}")]
     LeftHandNotLVal(Span),
@@ -176,8 +181,8 @@ pub enum CompilerError {
     #[error("Not a struct: {0}")]
     NotAStruct(Span),
 
-    #[error("Not a member for this struct: {0}")]
-    MemberNotFound(Span),
+    #[error("Ident '{0}' is not a member of the struct definition for 'struct {1}': {2}")]
+    MemberNotFound(String, String, Span),
 
     #[error("Cannot assign to a const variable: {0}")]
     ConstAssignment(Span),
@@ -229,6 +234,39 @@ pub enum CompilerError {
 
     #[error("Parameter cannot have storage specifiers: {0}")]
     ParamStorageSpecifiers(Span),
+
+    #[error("Cannot use '->' on type '{0}': {1}")]
+    CannotPointerMemberAccess(String, Span),
+
+    #[error("Argument type '{0}' does not match function argument type '{1}': {2}")]
+    ArgumentTypeMismatch(String, String, Span),
+
+    #[error("A member with the identifier '{0}' already exists in this scope: {1}")]
+    MemberAlreadyExists(InternedStr, Span),
+
+    #[error("Expected '{{' but found '*': {0}")]
+    StructDeclarationPointer(Span),
+
+    #[error("Struct definitions cannot be given declaration qualifiers: {0}")]
+    StructDeclarationQualifiers(Span),
+
+    #[error("Struct definitions cannot possess storage specifiers: {0}")]
+    StructStorageSpecifiers(Span),
+
+    #[error("Struct must be given an identifier: {0}")]
+    StructMissingIdent(Span),
+
+    #[error("The identifier 'main' is reserved as a function only: {0}")]
+    MainIsReserved(Span),
+
+    #[error("Cannot deref type '{0}' as it is not a pointer: {1}")]
+    DerefOnNonPointer(String, Span),
+
+    #[error("Cannot take an address of a pointer, not in this language, yet: {0}")]
+    AttemptedAddressOfPointer(Span),
+
+    #[error("Function must return type '{0}', cannot return '{1}': {0}")]
+    InvalidReturnType(String, String, Span),
 }
 
 #[derive(Error, Debug)]

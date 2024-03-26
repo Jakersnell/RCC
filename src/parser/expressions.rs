@@ -29,6 +29,7 @@ where
         }
         Ok(ty)
     }
+
     pub(super) fn parse_initializer(&mut self) -> ParseResult<Locatable<Expression>> {
         if is!(self, current, Token::Symbol(Symbol::OpenCurly)) {
             let location = self.current_span()?;
@@ -113,10 +114,10 @@ where
         debug_assert!(is!(self, next, Token::Keyword(kw) if kw.is_for_type()));
         let location = self.current_span()?;
         self.advance()?;
+        let ty = self.parse_type()?;
         confirm!(self, consume, Token::Symbol(Symbol::CloseParen) => (), ")")?;
         let expr = self.parse_prefix_unary_expression()?;
         let location = location.merge(self.last_span);
-        let ty = self.parse_type()?;
         let expr = Expression::Cast(ty, expr.map(Box::new));
         let locatable = Locatable::new(location, expr);
         Ok(locatable)
