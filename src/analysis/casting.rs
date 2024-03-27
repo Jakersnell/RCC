@@ -1,12 +1,12 @@
-use crate::analysis::hlir::*;
+use crate::analysis::mlir::*;
 use crate::util::Span;
 use std::cmp::Ordering;
 
 macro_rules! cast {
     ($hlir:expr, $to:expr, $span:expr) => {{
-        HlirExpr {
+        MlirExpr {
             span: $span,
-            kind: Box::new(HlirExprKind::Cast($to.clone(), $hlir)),
+            kind: Box::new(MlirExprKind::Cast($to.clone(), $hlir)),
             ty: $to,
             is_lval: false,
         }
@@ -14,42 +14,42 @@ macro_rules! cast {
 }
 
 pub(in crate::analysis) fn explicit_cast(
-    cast_ty: HlirType,
-    expr: HlirExpr,
+    cast_ty: MlirType,
+    expr: MlirExpr,
     span: Span,
-) -> Result<HlirExpr, ()> {
+) -> Result<MlirExpr, ()> {
     if cast_ty == expr.ty {
         return Ok(expr);
     }
     let expr_ty = &expr.ty;
     match (&expr_ty.kind, &expr_ty.decl, &cast_ty.kind, &cast_ty.decl) {
-        (_, HlirTypeDecl::Array(_), to_kind, HlirTypeDecl::Pointer) => Ok(cast!(
+        (_, MlirTypeDecl::Array(_), to_kind, MlirTypeDecl::Pointer) => Ok(cast!(
             expr,
-            HlirType {
+            MlirType {
                 kind: to_kind.clone(),
-                decl: HlirTypeDecl::Pointer
+                decl: MlirTypeDecl::Pointer
             },
             span
         )),
-        (kind, HlirTypeDecl::Pointer, to_kind, HlirTypeDecl::Pointer) => Ok(cast!(
+        (kind, MlirTypeDecl::Pointer, to_kind, MlirTypeDecl::Pointer) => Ok(cast!(
             expr,
-            HlirType {
+            MlirType {
                 kind: to_kind.clone(),
-                decl: HlirTypeDecl::Basic
+                decl: MlirTypeDecl::Basic
             },
             span
         )),
-        (kind, HlirTypeDecl::Pointer, HlirTypeKind::Long(signed), HlirTypeDecl::Basic) => {
+        (kind, MlirTypeDecl::Pointer, MlirTypeKind::Long(signed), MlirTypeDecl::Basic) => {
             Ok(cast!(
                 expr,
-                HlirType {
-                    kind: HlirTypeKind::Long(true),
-                    decl: HlirTypeDecl::Basic
+                MlirType {
+                    kind: MlirTypeKind::Long(true),
+                    decl: MlirTypeDecl::Basic
                 },
                 span
             ))
         }
-        (kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic)
+        (kind, MlirTypeDecl::Basic, cast_kind, MlirTypeDecl::Basic)
             if expr.ty.is_numeric() && cast_ty.is_numeric() =>
         {
             Ok(cast_numeric_to_numeric(cast_ty, expr, span))
@@ -59,39 +59,39 @@ pub(in crate::analysis) fn explicit_cast(
 }
 
 pub(in crate::analysis) fn implicit_cast(
-    cast_to: HlirType,
-    expr: HlirExpr,
+    cast_to: MlirType,
+    expr: MlirExpr,
     span: Span,
-) -> Result<HlirExpr, ()> {
+) -> Result<MlirExpr, ()> {
     if expr.ty == cast_to {
         return Ok(expr);
     }
     match (&cast_to.kind, &cast_to.decl, &expr.ty.kind, &expr.ty.decl) {
-        (_, HlirTypeDecl::Pointer, HlirTypeKind::Void, HlirTypeDecl::Pointer) => {
-            let ty = HlirType {
-                kind: HlirTypeKind::Void,
-                decl: HlirTypeDecl::Pointer,
+        (_, MlirTypeDecl::Pointer, MlirTypeKind::Void, MlirTypeDecl::Pointer) => {
+            let ty = MlirType {
+                kind: MlirTypeKind::Void,
+                decl: MlirTypeDecl::Pointer,
             };
-            Ok(HlirExpr {
-                kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
+            Ok(MlirExpr {
+                kind: Box::new(MlirExprKind::Cast(ty.clone(), expr)),
                 is_lval: false,
                 ty,
                 span,
             })
         }
-        (kind, HlirTypeDecl::Array(_), cast_kind, HlirTypeDecl::Pointer) if kind == cast_kind => {
-            let ty = HlirType {
+        (kind, MlirTypeDecl::Array(_), cast_kind, MlirTypeDecl::Pointer) if kind == cast_kind => {
+            let ty = MlirType {
                 kind: cast_kind.clone(),
-                decl: HlirTypeDecl::Pointer,
+                decl: MlirTypeDecl::Pointer,
             };
-            Ok(HlirExpr {
+            Ok(MlirExpr {
                 span,
-                kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
+                kind: Box::new(MlirExprKind::Cast(ty.clone(), expr)),
                 is_lval: false,
                 ty,
             })
         }
-        (casting_kind, HlirTypeDecl::Basic, cast_kind, HlirTypeDecl::Basic) => {
+        (casting_kind, MlirTypeDecl::Basic, cast_kind, MlirTypeDecl::Basic) => {
             Ok(cast_numeric_to_numeric(cast_to, expr, span))
         }
         _ => Err(()),
@@ -99,23 +99,23 @@ pub(in crate::analysis) fn implicit_cast(
 }
 
 pub(in crate::analysis) fn cast_numeric_to_numeric(
-    cast_to: HlirType,
-    expr: HlirExpr,
+    cast_to: MlirType,
+    expr: MlirExpr,
     span: Span,
-) -> HlirExpr {
-    debug_assert!(cast_to.decl == HlirTypeDecl::Basic);
-    debug_assert!(expr.ty.decl == HlirTypeDecl::Basic);
+) -> MlirExpr {
+    debug_assert!(cast_to.decl == MlirTypeDecl::Basic);
+    debug_assert!(expr.ty.decl == MlirTypeDecl::Basic);
     if matches!(
         (&expr.ty.kind, &cast_to.kind),
-        (HlirTypeKind::Double, HlirTypeKind::Float) | (HlirTypeKind::Int(_), HlirTypeKind::Float)
+        (MlirTypeKind::Double, MlirTypeKind::Float) | (MlirTypeKind::Int(_), MlirTypeKind::Float)
     ) {
-        let ty = HlirType {
-            kind: HlirTypeKind::Float,
-            decl: HlirTypeDecl::Basic,
+        let ty = MlirType {
+            kind: MlirTypeKind::Float,
+            decl: MlirTypeDecl::Basic,
         };
-        HlirExpr {
+        MlirExpr {
             span,
-            kind: Box::new(HlirExprKind::Cast(ty.clone(), expr)),
+            kind: Box::new(MlirExprKind::Cast(ty.clone(), expr)),
             is_lval: false,
             ty,
         }
@@ -128,21 +128,21 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(
             Ordering::Equal => None,
         };
         if let Some(kind) = kind {
-            let ty = HlirType {
-                decl: HlirTypeDecl::Basic,
+            let ty = MlirType {
+                decl: MlirTypeDecl::Basic,
                 kind,
             };
             let casted_lower = cast_numeric_to_numeric(ty, expr, span);
-            HlirExpr {
+            MlirExpr {
                 span,
-                kind: Box::new(HlirExprKind::Cast(cast_to.clone(), casted_lower)),
+                kind: Box::new(MlirExprKind::Cast(cast_to.clone(), casted_lower)),
                 ty: cast_to,
                 is_lval: false,
             }
         } else {
-            HlirExpr {
+            MlirExpr {
                 span,
-                kind: Box::new(HlirExprKind::Cast(cast_to.clone(), expr)),
+                kind: Box::new(MlirExprKind::Cast(cast_to.clone(), expr)),
                 is_lval: false,
                 ty: cast_to,
             }
@@ -150,58 +150,58 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(
     }
 }
 
-fn give_numeric_sign(ty: HlirTypeKind, signed: bool) -> HlirTypeKind {
+fn give_numeric_sign(ty: MlirTypeKind, signed: bool) -> MlirTypeKind {
     match ty {
-        HlirTypeKind::Long(_) => HlirTypeKind::Long(signed),
-        HlirTypeKind::Int(_) => HlirTypeKind::Int(signed),
-        HlirTypeKind::Char(_) => HlirTypeKind::Char(signed),
+        MlirTypeKind::Long(_) => MlirTypeKind::Long(signed),
+        MlirTypeKind::Int(_) => MlirTypeKind::Int(signed),
+        MlirTypeKind::Char(_) => MlirTypeKind::Char(signed),
         _ => ty,
     }
 }
 
-fn get_numeric_signed(ty: &HlirTypeKind) -> bool {
+fn get_numeric_signed(ty: &MlirTypeKind) -> bool {
     match ty {
-        HlirTypeKind::Long(signed) => *signed,
-        HlirTypeKind::Int(signed) => *signed,
-        HlirTypeKind::Char(signed) => *signed,
+        MlirTypeKind::Long(signed) => *signed,
+        MlirTypeKind::Int(signed) => *signed,
+        MlirTypeKind::Char(signed) => *signed,
         _ => false,
     }
 }
 
-fn demote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
+fn demote_numeric(ty: &MlirTypeKind) -> MlirTypeKind {
     // does not include double -> float, as this needs to be handled directly
     match ty {
-        HlirTypeKind::Double => HlirTypeKind::Long(false),
-        HlirTypeKind::Float => HlirTypeKind::Int(false),
-        HlirTypeKind::Long(_) => HlirTypeKind::Int(false),
-        HlirTypeKind::Int(_) => HlirTypeKind::Char(false),
+        MlirTypeKind::Double => MlirTypeKind::Long(false),
+        MlirTypeKind::Float => MlirTypeKind::Int(false),
+        MlirTypeKind::Long(_) => MlirTypeKind::Int(false),
+        MlirTypeKind::Int(_) => MlirTypeKind::Char(false),
         _ => unreachable!(),
     }
 }
 
-fn promote_numeric(ty: &HlirTypeKind) -> HlirTypeKind {
+fn promote_numeric(ty: &MlirTypeKind) -> MlirTypeKind {
     // does not include int -> float
     match ty {
-        HlirTypeKind::Float => HlirTypeKind::Double,
-        HlirTypeKind::Long(_) => HlirTypeKind::Double,
-        HlirTypeKind::Int(_) => HlirTypeKind::Long(false),
-        HlirTypeKind::Char(_) => HlirTypeKind::Int(false),
+        MlirTypeKind::Float => MlirTypeKind::Double,
+        MlirTypeKind::Long(_) => MlirTypeKind::Double,
+        MlirTypeKind::Int(_) => MlirTypeKind::Long(false),
+        MlirTypeKind::Char(_) => MlirTypeKind::Int(false),
         _ => unreachable!(),
     }
 }
 
-fn get_numeric_cast_hierarchy(ty: &HlirTypeKind) -> u8 {
+fn get_numeric_cast_hierarchy(ty: &MlirTypeKind) -> u8 {
     match ty {
-        HlirTypeKind::Double => 4,
-        HlirTypeKind::Long(_) => 3,
-        HlirTypeKind::Int(_) => 2,
-        HlirTypeKind::Char(_) => 1,
+        MlirTypeKind::Double => 4,
+        MlirTypeKind::Long(_) => 3,
+        MlirTypeKind::Int(_) => 2,
+        MlirTypeKind::Char(_) => 1,
         _ => unreachable!(),
     }
 }
 
 #[cfg(test)]
-fn test_cast_structure(expr: HlirExpr, cast_to: HlirType, order: &[HlirTypeKind]) {
+fn test_cast_structure(expr: MlirExpr, cast_to: MlirType, order: &[MlirTypeKind]) {
     let cast_structure = cast_numeric_to_numeric(cast_to, expr, Span::default());
 
     let mut given = cast_structure;
@@ -210,7 +210,7 @@ fn test_cast_structure(expr: HlirExpr, cast_to: HlirType, order: &[HlirTypeKind]
         let given_ty = given.ty.clone();
         assert_eq!(given_ty.kind, *kind);
         given = match *given.kind {
-            HlirExprKind::Cast(ty, expr) => {
+            MlirExprKind::Cast(ty, expr) => {
                 assert_eq!(ty.kind, *kind);
                 expr
             }
@@ -221,24 +221,24 @@ fn test_cast_structure(expr: HlirExpr, cast_to: HlirType, order: &[HlirTypeKind]
 
 #[test]
 fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_upcast() {
-    let expr = HlirExpr {
+    let expr = MlirExpr {
         span: Span::default(),
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Char(1))),
-        ty: HlirType {
-            kind: HlirTypeKind::Char(false),
-            decl: HlirTypeDecl::Basic,
+        kind: Box::new(MlirExprKind::Literal(MlirLiteral::Char(1))),
+        ty: MlirType {
+            kind: MlirTypeKind::Char(false),
+            decl: MlirTypeDecl::Basic,
         },
         is_lval: false,
     };
-    let cast_to = HlirType {
-        kind: HlirTypeKind::Double,
-        decl: HlirTypeDecl::Basic,
+    let cast_to = MlirType {
+        kind: MlirTypeKind::Double,
+        decl: MlirTypeDecl::Basic,
     };
 
     let expected = [
-        HlirTypeKind::Double,
-        HlirTypeKind::Long(false),
-        HlirTypeKind::Int(false),
+        MlirTypeKind::Double,
+        MlirTypeKind::Long(false),
+        MlirTypeKind::Int(false),
     ];
 
     test_cast_structure(expr, cast_to, &expected);
@@ -246,25 +246,25 @@ fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_upcast() {
 
 #[test]
 fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_downcast() {
-    let expr = HlirExpr {
+    let expr = MlirExpr {
         span: Span::default(),
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Float(1.0))),
-        ty: HlirType {
-            kind: HlirTypeKind::Double,
-            decl: HlirTypeDecl::Basic,
+        kind: Box::new(MlirExprKind::Literal(MlirLiteral::Float(1.0))),
+        ty: MlirType {
+            kind: MlirTypeKind::Double,
+            decl: MlirTypeDecl::Basic,
         },
         is_lval: false,
     };
 
-    let cast_to = HlirType {
-        kind: HlirTypeKind::Char(false),
-        decl: HlirTypeDecl::Basic,
+    let cast_to = MlirType {
+        kind: MlirTypeKind::Char(false),
+        decl: MlirTypeDecl::Basic,
     };
 
     let expected = [
-        HlirTypeKind::Char(false),
-        HlirTypeKind::Int(false),
-        HlirTypeKind::Long(false),
+        MlirTypeKind::Char(false),
+        MlirTypeKind::Int(false),
+        MlirTypeKind::Long(false),
     ];
 
     test_cast_structure(expr, cast_to, &expected);
@@ -272,16 +272,16 @@ fn test_cast_numeric_to_numeric_creates_proper_cast_structure_for_downcast() {
 
 #[test]
 fn test_cast_type_to_itself_returns_initial_expression_for_struct_pointer() {
-    let ty = HlirType {
-        kind: HlirTypeKind::Struct(crate::util::str_intern::intern("test")),
-        decl: HlirTypeDecl::Pointer,
+    let ty = MlirType {
+        kind: MlirTypeKind::Struct(crate::util::str_intern::intern("test")),
+        decl: MlirTypeDecl::Pointer,
     };
-    let expr = HlirExpr {
+    let expr = MlirExpr {
         span: Span::default(),
-        kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(0))), // kind can be anything here, it is not used
-        ty: HlirType {
-            kind: HlirTypeKind::Struct(crate::util::str_intern::intern("test")), // separate interning is important
-            decl: HlirTypeDecl::Pointer,
+        kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(0))), // kind can be anything here, it is not used
+        ty: MlirType {
+            kind: MlirTypeKind::Struct(crate::util::str_intern::intern("test")), // separate interning is important
+            decl: MlirTypeDecl::Pointer,
         },
         is_lval: false,
     };

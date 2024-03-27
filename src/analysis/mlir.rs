@@ -10,78 +10,84 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-pub const VOID_TYPE: HlirType = HlirType {
-    kind: HlirTypeKind::Void,
-    decl: HlirTypeDecl::Basic,
+pub const VOID_TYPE: MlirType = MlirType {
+    kind: MlirTypeKind::Void,
+    decl: MlirTypeDecl::Basic,
 };
 #[derive(Debug, Default)]
-pub struct HighLevelIR {
-    pub functions: HashMap<InternedStr, HlirFunction>,
-    pub structs: HashMap<InternedStr, HlirStruct>,
-    pub globals: HashMap<InternedStr, HlirVariable>,
+pub struct MidLevelIR {
+    pub functions: HashMap<InternedStr, MlirFunction>,
+    pub structs: HashMap<InternedStr, MlirStruct>,
+    pub globals: HashMap<InternedStr, MlirVariable>,
 }
 
 #[derive(Debug)]
-pub struct HlirStruct {
+pub struct MlirStruct {
     pub ident: Locatable<InternedStr>,
-    pub fields: Vec<Locatable<HlirVariable>>,
+    pub fields: Vec<Locatable<MlirVariable>>,
     pub size: u64,
 }
 
 #[derive(Debug)]
-pub struct HlirFunction {
+pub struct MlirFunction {
     pub span: Span,
-    pub ty: Locatable<HlirType>,
+    pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,
-    pub parameters: Vec<Locatable<HlirVariable>>,
+    pub parameters: Vec<Locatable<MlirVariable>>,
     pub body: Locatable<HlirBlock>,
 }
 
 #[derive(Debug)]
-pub struct HlirVariable {
+pub struct MlirVariable {
     pub span: Span,
-    pub ty: Locatable<HlirType>,
+    pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,
     pub is_const: bool,
-    pub initializer: Option<Locatable<HlirVarInit>>,
+    pub initializer: Option<Locatable<MlirVarInit>>,
 }
 
 #[derive(Debug)]
-pub enum HlirVarInit {
-    Expr(HlirExpr),
-    Array(Vec<HlirExpr>),
+pub enum MlirVarInit {
+    Expr(MlirExpr),
+    Array(Vec<MlirExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq, new)]
-pub struct HlirType {
-    pub(crate) kind: HlirTypeKind,
-    pub(crate) decl: HlirTypeDecl,
+pub struct MlirType {
+    pub(crate) kind: MlirTypeKind,
+    pub(crate) decl: MlirTypeDecl,
 }
 
-impl HlirType {
+impl Display for MlirType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.kind, self.decl)
+    }
+}
+
+impl MlirType {
     pub fn is_array(&self) -> bool {
-        matches!(self.decl, HlirTypeDecl::Array(_)) && !self.is_pointer()
+        matches!(self.decl, MlirTypeDecl::Array(_)) && !self.is_pointer()
     }
 
     pub fn is_pointer(&self) -> bool {
-        matches!(self.decl, HlirTypeDecl::Pointer)
+        matches!(self.decl, MlirTypeDecl::Pointer)
     }
 
     pub fn is_numeric(&self) -> bool {
-        use HlirTypeKind::*;
+        use MlirTypeKind::*;
         matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double) && !self.is_pointer()
     }
 
     pub fn is_integer(&self) -> bool {
-        use HlirTypeKind::*;
+        use MlirTypeKind::*;
         matches!(&self.kind, Char(_) | Int(_) | Long(_)) && !self.is_pointer()
     }
-    pub fn try_implicit_cast(&self, to: &HlirType) -> Option<HlirType> {
+    pub fn try_implicit_cast(&self, to: &MlirType) -> Option<MlirType> {
         if self == to {
             return None;
         }
-        use HlirTypeDecl::*;
-        use HlirTypeKind::*;
+        use MlirTypeDecl::*;
+        use MlirTypeKind::*;
         let ty_kind = match (&self.kind, &to.kind, &self.decl, &to.decl) {
             (Char(_), Int(unsigned), Basic, Basic) => Some(Int(*unsigned)),
             (Char(_), Long(unsigned), Basic, Basic) => Some(Long(*unsigned)),
@@ -90,16 +96,16 @@ impl HlirType {
             (Int(_), Double, Basic, Basic) => Some(Double),
             _ => None,
         };
-        ty_kind.map(|kind| HlirType::new(kind, Basic))
+        ty_kind.map(|kind| MlirType::new(kind, Basic))
     }
-    pub fn try_explicit_cast(&self, other: &HlirType) -> Option<HlirType> {
+    pub fn try_explicit_cast(&self, other: &MlirType) -> Option<MlirType> {
         let implicit = self.try_implicit_cast(other);
         if implicit.is_some() {
             return implicit;
         }
 
-        use HlirTypeDecl::*;
-        use HlirTypeKind::*;
+        use MlirTypeDecl::*;
+        use MlirTypeKind::*;
         let ty_kind = match (&self.kind, &other.kind, &self.decl, &other.decl) {
             (Int(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
             (Long(_), Char(unsigned), Basic, Basic) => Some(Char(*unsigned)),
@@ -111,20 +117,20 @@ impl HlirType {
             _ => None,
         };
 
-        ty_kind.map(|kind| HlirType::new(kind, Basic))
+        ty_kind.map(|kind| MlirType::new(kind, Basic))
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum HlirTypeDecl {
+pub enum MlirTypeDecl {
     Basic,
     Pointer, // true if pointer is const
     Array(u64),
 }
 
-impl Display for HlirTypeDecl {
+impl Display for MlirTypeDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use HlirTypeDecl::*;
+        use MlirTypeDecl::*;
         match self {
             Basic => Ok(()),
             Pointer => write!(f, " *"),
@@ -133,14 +139,8 @@ impl Display for HlirTypeDecl {
     }
 }
 
-impl Display for HlirType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.kind, self.decl)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
-pub enum HlirTypeKind {
+pub enum MlirTypeKind {
     Void,
     Char(bool), // 8
     Int(bool),  // signed/unsigned
@@ -150,7 +150,7 @@ pub enum HlirTypeKind {
     Struct(InternedStr),
 }
 
-impl Display for HlirTypeKind {
+impl Display for MlirTypeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         macro_rules! write_signed {
             ($name:literal, $unsigned:expr) => {
@@ -162,7 +162,7 @@ impl Display for HlirTypeKind {
                 )
             };
         }
-        use HlirTypeKind::*;
+        use MlirTypeKind::*;
         match self {
             Void => write!(f, "void"),
             Char(unsigned) => write_signed!("char", *unsigned),
@@ -176,7 +176,7 @@ impl Display for HlirTypeKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum HlirLiteral {
+pub enum MlirLiteral {
     Int(i64),
     UInt(u64),
     Float(f64),
@@ -185,21 +185,21 @@ pub enum HlirLiteral {
 }
 
 #[derive(Debug, Clone, new)]
-pub struct HlirExpr {
+pub struct MlirExpr {
     pub span: Span,
-    pub kind: Box<HlirExprKind>,
-    pub ty: HlirType,
+    pub kind: Box<MlirExprKind>,
+    pub ty: MlirType,
     pub is_lval: bool,
 }
 
-impl HlirExpr {
+impl MlirExpr {
     pub fn is_literal(&self) -> bool {
-        matches!(self.kind.as_ref(), HlirExprKind::Literal(_))
+        matches!(self.kind.as_ref(), MlirExprKind::Literal(_))
     }
     pub fn is_string(&self) -> bool {
         matches!(
             self.kind.as_ref(),
-            HlirExprKind::Literal(HlirLiteral::String(_))
+            MlirExprKind::Literal(MlirLiteral::String(_))
         )
     }
     pub fn is_integer_or_pointer(&self) -> bool {
@@ -224,98 +224,98 @@ impl HlirExpr {
 }
 
 #[derive(Debug, Clone)]
-pub enum HlirExprKind {
-    Literal(HlirLiteral),
+pub enum MlirExprKind {
+    Literal(MlirLiteral),
     Variable(InternedStr),
 
     // unary
-    PostIncrement(HlirExpr),
-    PostDecrement(HlirExpr),
-    Negate(HlirExpr),
-    LogicalNot(HlirExpr),
-    BitwiseNot(HlirExpr),
-    Deref(HlirExpr),
-    AddressOf(HlirExpr),
+    PostIncrement(MlirExpr),
+    PostDecrement(MlirExpr),
+    Negate(MlirExpr),
+    LogicalNot(MlirExpr),
+    BitwiseNot(MlirExpr),
+    Deref(MlirExpr),
+    AddressOf(MlirExpr),
 
     // binary
-    Add(HlirExpr, HlirExpr),
-    Sub(HlirExpr, HlirExpr),
-    Mul(HlirExpr, HlirExpr),
-    Div(HlirExpr, HlirExpr),
-    Mod(HlirExpr, HlirExpr),
-    Equal(HlirExpr, HlirExpr),
-    NotEqual(HlirExpr, HlirExpr),
-    GreaterThan(HlirExpr, HlirExpr),
-    GreaterThanEqual(HlirExpr, HlirExpr),
-    LessThan(HlirExpr, HlirExpr),
-    LessThanEqual(HlirExpr, HlirExpr),
-    LogicalAnd(HlirExpr, HlirExpr),
-    LogicalOr(HlirExpr, HlirExpr),
-    BitwiseAnd(HlirExpr, HlirExpr),
-    BitwiseOr(HlirExpr, HlirExpr),
-    BitwiseXor(HlirExpr, HlirExpr),
-    LeftShift(HlirExpr, HlirExpr),
-    RightShift(HlirExpr, HlirExpr),
+    Add(MlirExpr, MlirExpr),
+    Sub(MlirExpr, MlirExpr),
+    Mul(MlirExpr, MlirExpr),
+    Div(MlirExpr, MlirExpr),
+    Mod(MlirExpr, MlirExpr),
+    Equal(MlirExpr, MlirExpr),
+    NotEqual(MlirExpr, MlirExpr),
+    GreaterThan(MlirExpr, MlirExpr),
+    GreaterThanEqual(MlirExpr, MlirExpr),
+    LessThan(MlirExpr, MlirExpr),
+    LessThanEqual(MlirExpr, MlirExpr),
+    LogicalAnd(MlirExpr, MlirExpr),
+    LogicalOr(MlirExpr, MlirExpr),
+    BitwiseAnd(MlirExpr, MlirExpr),
+    BitwiseOr(MlirExpr, MlirExpr),
+    BitwiseXor(MlirExpr, MlirExpr),
+    LeftShift(MlirExpr, MlirExpr),
+    RightShift(MlirExpr, MlirExpr),
 
     // assign
-    Assign(HlirExpr, HlirExpr),
+    Assign(MlirExpr, MlirExpr),
 
     // other
     FunctionCall {
         location: Option<&'static str>,
         ident: InternedStr,
-        args: Vec<HlirExpr>,
+        args: Vec<MlirExpr>,
     },
-    Index(HlirExpr, HlirExpr),
-    Member(HlirExpr, InternedStr),
-    Cast(HlirType, HlirExpr),
+    Index(MlirExpr, MlirExpr),
+    Member(MlirExpr, InternedStr),
+    Cast(MlirType, MlirExpr),
 }
 
-impl HlirExprKind {
+impl MlirExprKind {
     pub fn is_literal(&self) -> bool {
-        matches!(self, HlirExprKind::Literal(_))
+        matches!(self, MlirExprKind::Literal(_))
     }
-    pub fn try_from_binop(op: BinaryOp, left: HlirExpr, right: HlirExpr) -> Result<Self, ()> {
+    pub fn try_from_binop(op: BinaryOp, left: MlirExpr, right: MlirExpr) -> Result<Self, ()> {
         match op {
-            BinaryOp::Add => Ok(HlirExprKind::Add(left, right)),
-            BinaryOp::Sub => Ok(HlirExprKind::Sub(left, right)),
-            BinaryOp::Mul => Ok(HlirExprKind::Mul(left, right)),
-            BinaryOp::Div => Ok(HlirExprKind::Div(left, right)),
-            BinaryOp::Mod => Ok(HlirExprKind::Mod(left, right)),
-            BinaryOp::Equal => Ok(HlirExprKind::Equal(left, right)),
-            BinaryOp::NotEqual => Ok(HlirExprKind::NotEqual(left, right)),
-            BinaryOp::GreaterThan => Ok(HlirExprKind::GreaterThan(left, right)),
-            BinaryOp::GreaterThanEqual => Ok(HlirExprKind::GreaterThanEqual(left, right)),
-            BinaryOp::LessThan => Ok(HlirExprKind::LessThan(left, right)),
-            BinaryOp::LessThanEqual => Ok(HlirExprKind::LessThanEqual(left, right)),
-            BinaryOp::LogicalAnd => Ok(HlirExprKind::LogicalAnd(left, right)),
-            BinaryOp::LogicalOr => Ok(HlirExprKind::LogicalOr(left, right)),
-            BinaryOp::BitwiseAnd => Ok(HlirExprKind::BitwiseAnd(left, right)),
-            BinaryOp::BitwiseOr => Ok(HlirExprKind::BitwiseOr(left, right)),
-            BinaryOp::BitwiseXor => Ok(HlirExprKind::BitwiseXor(left, right)),
-            BinaryOp::LeftShift => Ok(HlirExprKind::LeftShift(left, right)),
-            BinaryOp::RightShift => Ok(HlirExprKind::RightShift(left, right)),
+            BinaryOp::Add => Ok(MlirExprKind::Add(left, right)),
+            BinaryOp::Sub => Ok(MlirExprKind::Sub(left, right)),
+            BinaryOp::Mul => Ok(MlirExprKind::Mul(left, right)),
+            BinaryOp::Div => Ok(MlirExprKind::Div(left, right)),
+            BinaryOp::Mod => Ok(MlirExprKind::Mod(left, right)),
+            BinaryOp::Equal => Ok(MlirExprKind::Equal(left, right)),
+            BinaryOp::NotEqual => Ok(MlirExprKind::NotEqual(left, right)),
+            BinaryOp::GreaterThan => Ok(MlirExprKind::GreaterThan(left, right)),
+            BinaryOp::GreaterThanEqual => Ok(MlirExprKind::GreaterThanEqual(left, right)),
+            BinaryOp::LessThan => Ok(MlirExprKind::LessThan(left, right)),
+            BinaryOp::LessThanEqual => Ok(MlirExprKind::LessThanEqual(left, right)),
+            BinaryOp::LogicalAnd => Ok(MlirExprKind::LogicalAnd(left, right)),
+            BinaryOp::LogicalOr => Ok(MlirExprKind::LogicalOr(left, right)),
+            BinaryOp::BitwiseAnd => Ok(MlirExprKind::BitwiseAnd(left, right)),
+            BinaryOp::BitwiseOr => Ok(MlirExprKind::BitwiseOr(left, right)),
+            BinaryOp::BitwiseXor => Ok(MlirExprKind::BitwiseXor(left, right)),
+            BinaryOp::LeftShift => Ok(MlirExprKind::LeftShift(left, right)),
+            BinaryOp::RightShift => Ok(MlirExprKind::RightShift(left, right)),
             _ => Err(()),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct HlirBlock(pub Vec<HlirStmt>);
+pub struct HlirBlock(pub Vec<MlirStmt>);
 impl Deref for HlirBlock {
-    type Target = Vec<HlirStmt>;
+    type Target = Vec<MlirStmt>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 #[derive(Debug)]
-pub enum HlirStmt {
+pub enum MlirStmt {
     Block(HlirBlock),
-    Expression(HlirExpr),
-    VariableDeclaration(HlirVariable),
+    Expression(MlirExpr),
+    VariableDeclaration(MlirVariable),
     Label(InternedStr),
     Goto(InternedStr),
-    ConditionalGoto(HlirExpr, InternedStr),
-    Return(Option<HlirExpr>),
+    ConditionalGoto(MlirExpr, InternedStr),
+    Return(Option<MlirExpr>),
 }

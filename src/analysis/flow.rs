@@ -1,5 +1,5 @@
-use crate::analysis::hlir::{
-    HighLevelIR, HlirBlock, HlirExpr, HlirFunction, HlirStmt, HlirType, HlirTypeDecl, HlirTypeKind,
+use crate::analysis::mlir::{
+    HlirBlock, MidLevelIR, MlirExpr, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
     VOID_TYPE,
 };
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ static mut BLOCK_COUNT: usize = 0;
 
 struct BasicBlock<'a> {
     kind: BasicBlockKind,
-    statements: Vec<&'a HlirStmt>,
+    statements: Vec<&'a MlirStmt>,
     incoming: Vec<Rc<BasicBlock<'a>>>,
     outgoing: Vec<Rc<BasicBlock<'a>>>,
     id: usize,
@@ -40,11 +40,11 @@ enum BasicBlockKind {
 struct BasicBlockEdge<'a> {
     from: Rc<BasicBlock<'a>>,
     to: Rc<BasicBlock<'a>>,
-    condition: Option<&'a HlirExpr>,
+    condition: Option<&'a MlirExpr>,
 }
 
 struct BasicBlockFactory<'a> {
-    statements: Vec<&'a HlirStmt>,
+    statements: Vec<&'a MlirStmt>,
     blocks: Vec<Rc<BasicBlock<'a>>>,
 }
 
@@ -52,17 +52,19 @@ impl<'a> BasicBlockFactory<'a> {
     pub fn build(block: &HlirBlock) {
         for stmt in block.iter() {
             match stmt {
-                HlirStmt::Block(_) => {}
-                HlirStmt::Expression(_) | HlirStmt::VariableDeclaration(_) => {}
-                HlirStmt::Return(_) => {}
-                _ => {}
+                MlirStmt::Expression(_) | MlirStmt::VariableDeclaration(_) => {}
+                MlirStmt::Return(_) => {}
+                MlirStmt::Label(_) => {}
+                MlirStmt::Goto(_) => {}
+                MlirStmt::ConditionalGoto(_, _) => {}
+                _ => panic!("Unexpected statement."),
             }
         }
     }
 }
 
 pub struct ControlFlowGraph<'a> {
-    function: &'a HlirFunction,
+    function: &'a MlirFunction,
     start: Rc<BasicBlock<'a>>,
     end: Rc<BasicBlock<'a>>,
     blocks: Vec<Rc<BasicBlock<'a>>>,
@@ -71,7 +73,7 @@ pub struct ControlFlowGraph<'a> {
 }
 
 impl<'a> ControlFlowGraph<'a> {
-    fn new(function: &'a HlirFunction) -> Self {
+    fn new(function: &'a MlirFunction) -> Self {
         let ty_is_void = (function.ty.value == VOID_TYPE);
         Self {
             function,

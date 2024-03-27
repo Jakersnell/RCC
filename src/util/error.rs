@@ -1,4 +1,4 @@
-use crate::analysis::hlir::HlirType;
+use crate::analysis::mlir::MlirType;
 use crate::parser::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
 use crate::util::str_intern::InternedStr;
 use crate::util::Span;

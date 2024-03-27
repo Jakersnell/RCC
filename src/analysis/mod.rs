@@ -3,11 +3,11 @@ mod casting;
 mod declarations;
 mod expressions;
 mod flow;
-pub mod hlir;
+pub mod mlir;
 mod statements;
 mod symbols;
 
-use crate::analysis::hlir::*;
+use crate::analysis::mlir::*;
 use crate::analysis::symbols::SymbolResolver;
 use crate::parser::ast::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
@@ -48,7 +48,7 @@ pub struct GlobalValidator {
     ast: Option<AbstractSyntaxTree>,
     scope: Box<RefCell<SymbolResolver>>,
     reporter: SharedReporter,
-    return_ty: Option<HlirType>, // for functions
+    return_ty: Option<MlirType>, // for functions
     loop_label_stack: VecDeque<InternedStr>,
 }
 
@@ -63,7 +63,7 @@ impl GlobalValidator {
         }
     }
 
-    pub fn validate(mut self) -> Result<HighLevelIR, SharedReporter> {
+    pub fn validate(mut self) -> Result<MidLevelIR, SharedReporter> {
         let mut globals = HashMap::new();
         let mut functions = HashMap::new();
         let mut structs = HashMap::new();
@@ -140,7 +140,7 @@ impl GlobalValidator {
         if self.reporter.borrow().status().is_err() {
             Err(self.reporter)
         } else {
-            Ok(HighLevelIR {
+            Ok(MidLevelIR {
                 functions,
                 structs,
                 globals,
@@ -157,9 +157,9 @@ impl GlobalValidator {
         self.reporter.0.borrow_mut().report_warning(warning);
     }
 
-    fn add_variable_to_scope(&mut self, var: &HlirVariable, span: Span) -> Result<(), ()> {
+    fn add_variable_to_scope(&mut self, var: &MlirVariable, span: Span) -> Result<(), ()> {
         let array_size = match &var.ty.decl {
-            HlirTypeDecl::Array(size) => Some(*size),
+            MlirTypeDecl::Array(size) => Some(*size),
             _ => None,
         };
         let result = self.scope.borrow_mut().add_variable(
@@ -218,7 +218,7 @@ impl GlobalValidator {
         location: Span,
         is_function_return_ty: bool,
         is_struct_dec: bool,
-    ) -> Result<HlirType, ()> {
+    ) -> Result<MlirType, ()> {
         #[derive(Debug, PartialEq)]
         enum State {
             Start,
@@ -226,22 +226,22 @@ impl GlobalValidator {
             SeenSigned,
             End,
         }
-        let mut hlir_type: Option<HlirTypeKind> = None;
+        let mut hlir_type: Option<MlirTypeKind> = None;
         let mut state = State::Start;
         let mut iter = declaration.ty.iter();
         macro_rules! seen_signed_or_unsigned {
             ($ty_spec:ident, $unsigned:literal) => {
                 match $ty_spec {
                     Some(TypeSpecifier::Char) => {
-                        hlir_type = Some(HlirTypeKind::Char($unsigned));
+                        hlir_type = Some(MlirTypeKind::Char($unsigned));
                         state = State::End;
                     }
                     Some(TypeSpecifier::Int) => {
-                        hlir_type = Some(HlirTypeKind::Int($unsigned));
+                        hlir_type = Some(MlirTypeKind::Int($unsigned));
                         state = State::End;
                     }
                     Some(TypeSpecifier::Long) => {
-                        hlir_type = Some(HlirTypeKind::Long($unsigned));
+                        hlir_type = Some(MlirTypeKind::Long($unsigned));
                         state = State::End;
                     }
                     Some(ty) => {
@@ -269,27 +269,27 @@ impl GlobalValidator {
             match state {
                 State::Start => match ty_spec {
                     Some(TypeSpecifier::Void) => {
-                        hlir_type = Some(HlirTypeKind::Void);
+                        hlir_type = Some(MlirTypeKind::Void);
                         state = State::End;
                     }
                     Some(TypeSpecifier::Char) => {
-                        hlir_type = Some(HlirTypeKind::Char(false));
+                        hlir_type = Some(MlirTypeKind::Char(false));
                         state = State::End;
                     }
                     Some(TypeSpecifier::Int) => {
-                        hlir_type = Some(HlirTypeKind::Int(false));
+                        hlir_type = Some(MlirTypeKind::Int(false));
                         state = State::End;
                     }
                     Some(TypeSpecifier::Long) => {
-                        hlir_type = Some(HlirTypeKind::Long(false));
+                        hlir_type = Some(MlirTypeKind::Long(false));
                         state = State::End;
                     }
                     Some(TypeSpecifier::Double) => {
-                        hlir_type = Some(HlirTypeKind::Double);
+                        hlir_type = Some(MlirTypeKind::Double);
                         state = State::End;
                     }
                     Some(TypeSpecifier::Struct(ident)) => {
-                        hlir_type = Some(HlirTypeKind::Struct(ident.clone()));
+                        hlir_type = Some(MlirTypeKind::Struct(ident.clone()));
                         state = State::End;
                     }
                     Some(TypeSpecifier::Signed) => {
@@ -314,7 +314,7 @@ impl GlobalValidator {
         let ty_kind = hlir_type.unwrap();
 
         match &ty_kind {
-            HlirTypeKind::Struct(ident) if !is_struct_dec => {
+            MlirTypeKind::Struct(ident) if !is_struct_dec => {
                 let result = self.scope.borrow_mut().check_struct_exists(ident, location);
                 if let Err(err) = result {
                     self.report_error(err);
@@ -325,20 +325,20 @@ impl GlobalValidator {
         }
 
         let ty_dec = if declaration.pointer {
-            HlirTypeDecl::Pointer
+            MlirTypeDecl::Pointer
         } else {
-            HlirTypeDecl::Basic
+            MlirTypeDecl::Basic
         };
 
         if !is_function_return_ty
-            && matches!(ty_kind, HlirTypeKind::Void)
-            && !matches!(ty_dec, HlirTypeDecl::Pointer)
+            && matches!(ty_kind, MlirTypeKind::Void)
+            && !matches!(ty_dec, MlirTypeDecl::Pointer)
         {
             self.report_error(CompilerError::IncompleteType(location));
             return Err(());
         }
 
-        Ok(HlirType {
+        Ok(MlirType {
             kind: ty_kind,
             decl: ty_dec,
         })
@@ -384,35 +384,35 @@ fn test_validate_type_returns_error_for_invalid_type_orientations() {
 fn test_validate_type_returns_ok_for_valid_type_orientations() {
     use TypeSpecifier::*;
     let type_tests = [
-        (vec![Int], HlirTypeKind::Int(false), HlirTypeDecl::Basic),
-        (vec![Long], HlirTypeKind::Long(false), HlirTypeDecl::Basic),
+        (vec![Int], MlirTypeKind::Int(false), MlirTypeDecl::Basic),
+        (vec![Long], MlirTypeKind::Long(false), MlirTypeDecl::Basic),
         (
             vec![Unsigned, Int],
-            HlirTypeKind::Int(true),
-            HlirTypeDecl::Basic,
+            MlirTypeKind::Int(true),
+            MlirTypeDecl::Basic,
         ),
         (
             vec![Unsigned, Long],
-            HlirTypeKind::Long(true),
-            HlirTypeDecl::Basic,
+            MlirTypeKind::Long(true),
+            MlirTypeDecl::Basic,
         ),
         (
             vec![Signed, Int],
-            HlirTypeKind::Int(false),
-            HlirTypeDecl::Basic,
+            MlirTypeKind::Int(false),
+            MlirTypeDecl::Basic,
         ),
         (
             vec![Signed, Long],
-            HlirTypeKind::Long(false),
-            HlirTypeDecl::Basic,
+            MlirTypeKind::Long(false),
+            MlirTypeDecl::Basic,
         ),
-        (vec![Double], HlirTypeKind::Double, HlirTypeDecl::Basic),
-        (vec![Void], HlirTypeKind::Void, HlirTypeDecl::Pointer),
+        (vec![Double], MlirTypeKind::Double, MlirTypeDecl::Basic),
+        (vec![Void], MlirTypeKind::Void, MlirTypeDecl::Pointer),
     ];
     for (types, expected, decl) in type_tests {
         let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
-        let dec_spec = make_dec_specifier!(types, decl == HlirTypeDecl::Pointer);
-        let expected = HlirType {
+        let dec_spec = make_dec_specifier!(types, decl == MlirTypeDecl::Pointer);
+        let expected = MlirType {
             decl,
             kind: expected,
         };

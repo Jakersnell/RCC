@@ -1,4 +1,4 @@
-use crate::analysis::hlir::*;
+use crate::analysis::mlir::*;
 use crate::analysis::symbols::SymbolResolver;
 use crate::analysis::{GlobalValidator, SharedReporter};
 use crate::parser::ast::*;
@@ -11,7 +11,7 @@ impl GlobalValidator {
     pub(super) fn validate_struct_definition(
         &mut self,
         _struct: &Locatable<StructDeclaration>,
-    ) -> Result<HlirStruct, ()> {
+    ) -> Result<MlirStruct, ()> {
         if _struct.declaration.specifier.pointer {
             self.report_error(CompilerError::StructDeclarationPointer(_struct.location));
         }
@@ -28,7 +28,7 @@ impl GlobalValidator {
             true,
         )?;
         let ident = match &as_ty.kind {
-            HlirTypeKind::Struct(ident) => ident.clone(),
+            MlirTypeKind::Struct(ident) => ident.clone(),
             _ => panic!(),
         };
         let ident = _struct.declaration.location.into_locatable(ident);
@@ -41,7 +41,7 @@ impl GlobalValidator {
             size += self.sizeof(&member.ty, span);
             fields.push(span.into_locatable(member));
         }
-        let _struct = HlirStruct {
+        let _struct = MlirStruct {
             ident,
             fields,
             size,
@@ -59,7 +59,7 @@ impl GlobalValidator {
     pub(super) fn validate_function_definition(
         &mut self,
         func: &Locatable<FunctionDeclaration>,
-    ) -> Result<HlirFunction, ()> {
+    ) -> Result<MlirFunction, ()> {
         let (func_span, func) = (func.location, &func.value);
         let (dec_span, dec) = (func.declaration.location, &func.declaration.value);
         if !dec.specifier.specifiers.is_empty() {
@@ -108,7 +108,7 @@ impl GlobalValidator {
         let body = func.body.location.into_locatable(body);
         self.return_ty = None;
 
-        Ok(HlirFunction {
+        Ok(MlirFunction {
             span: func_span,
             ty,
             ident,
@@ -123,10 +123,10 @@ impl GlobalValidator {
         HlirBlock(block)
     }
 
-    fn flatten_blocks_recursive(hlir_block: HlirBlock, vec: &mut Vec<HlirStmt>) {
+    fn flatten_blocks_recursive(hlir_block: HlirBlock, vec: &mut Vec<MlirStmt>) {
         for stmt in hlir_block.0 {
             match stmt {
-                HlirStmt::Block(inner_block) => Self::flatten_blocks_recursive(inner_block, vec),
+                MlirStmt::Block(inner_block) => Self::flatten_blocks_recursive(inner_block, vec),
                 other => vec.push(other),
             }
         }
@@ -135,7 +135,7 @@ impl GlobalValidator {
     pub(crate) fn validate_function_param_declaration(
         &mut self,
         param: &Locatable<Declaration>,
-    ) -> Result<HlirVariable, ()> {
+    ) -> Result<MlirVariable, ()> {
         if !param.specifier.specifiers.is_empty() {
             self.report_error(CompilerError::ParamStorageSpecifiers(param.location));
             return Err(());
@@ -154,7 +154,7 @@ impl GlobalValidator {
     pub(super) fn validate_variable_declaration(
         &mut self,
         locatable_variable: &Locatable<VariableDeclaration>,
-    ) -> Result<HlirVariable, ()> {
+    ) -> Result<MlirVariable, ()> {
         let span = locatable_variable.location;
         let var = &locatable_variable.value;
 
@@ -181,14 +181,14 @@ impl GlobalValidator {
 
         let array_size = var.array_size.map(|size| size as u64).or_else(|| {
             initializer.as_ref().and_then(|init| match &init.value {
-                HlirVarInit::Array(arr) => Some(arr.len() as u64),
-                HlirVarInit::Expr(_) => None,
+                MlirVarInit::Array(arr) => Some(arr.len() as u64),
+                MlirVarInit::Expr(_) => None,
             })
         });
 
         let ty = if let Some(array_size) = array_size {
             let mut ty = ty;
-            ty.decl = HlirTypeDecl::Array(array_size);
+            ty.decl = MlirTypeDecl::Array(array_size);
             ty
         } else {
             ty
@@ -206,7 +206,7 @@ impl GlobalValidator {
         &mut self,
         dec: &Declaration,
         span: Span,
-    ) -> Result<HlirVariable, ()> {
+    ) -> Result<MlirVariable, ()> {
         let ident = dec.ident.as_ref().unwrap();
         let ident_span = ident.location;
         let ident = ident.location.into_locatable(ident.value.clone());
@@ -234,7 +234,7 @@ impl GlobalValidator {
         }
         let ty = span.into_locatable(self.validate_type(&dec.specifier, span, false, false)?);
 
-        Ok(HlirVariable {
+        Ok(MlirVariable {
             span,
             ty,
             ident,
@@ -247,17 +247,17 @@ impl GlobalValidator {
         &mut self,
         expr: &Expression,
         span: Span,
-    ) -> Result<HlirVarInit, ()> {
+    ) -> Result<MlirVarInit, ()> {
         if let Expression::ArrayInitializer(arr) = expr {
             let mut inits = Vec::with_capacity(arr.len());
             for init in arr {
                 let init = self.validate_expression(init)?;
                 inits.push(init);
             }
-            Ok(HlirVarInit::Array(inits))
+            Ok(MlirVarInit::Array(inits))
         } else {
             let expr = self.validate_expression(expr)?;
-            Ok(HlirVarInit::Expr(expr))
+            Ok(MlirVarInit::Expr(expr))
         }
     }
 }

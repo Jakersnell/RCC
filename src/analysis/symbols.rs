@@ -1,6 +1,6 @@
-use crate::analysis::hlir::{
-    HlirExpr, HlirExprKind, HlirLiteral, HlirStruct, HlirType, HlirTypeDecl, HlirTypeKind,
-    HlirVariable,
+use crate::analysis::mlir::{
+    MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
+    MlirVariable,
 };
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
@@ -15,9 +15,9 @@ pub struct BuiltinFunctionSymbol {
     ty: &'static str,
     location: &'static str,
     ident: &'static str,
-    params: Vec<HlirType>,
+    params: Vec<MlirType>,
     varargs: bool,
-    return_ty: HlirType,
+    return_ty: MlirType,
 }
 thread_local! {
     static BUILTINS: [(&'static str, FunctionSymbol); 3] = [
@@ -25,14 +25,14 @@ thread_local! {
             "printf",
             FunctionSymbol {
                 location: Some("stdio.h"),
-                params: vec![HlirType {
-                    kind: HlirTypeKind::Char(true),
-                    decl: HlirTypeDecl::Pointer,
+                params: vec![MlirType {
+                    kind: MlirTypeKind::Char(true),
+                    decl: MlirTypeDecl::Pointer,
                 }],
                 varargs: true,
-                return_ty: HlirType {
-                    kind: HlirTypeKind::Void,
-                    decl: HlirTypeDecl::Basic,
+                return_ty: MlirType {
+                    kind: MlirTypeKind::Void,
+                    decl: MlirTypeDecl::Basic,
                 },
             }
         ),
@@ -40,14 +40,14 @@ thread_local! {
             "malloc",
             FunctionSymbol {
                 location: Some("stdlib.h"),
-                  params: vec![HlirType {
-                    kind: HlirTypeKind::Int(true),
-                    decl: HlirTypeDecl::Basic,
+                  params: vec![MlirType {
+                    kind: MlirTypeKind::Int(true),
+                    decl: MlirTypeDecl::Basic,
                 }],
                 varargs: false,
-                return_ty: HlirType {
-                    kind: HlirTypeKind::Void,
-                    decl: HlirTypeDecl::Basic,
+                return_ty: MlirType {
+                    kind: MlirTypeKind::Void,
+                    decl: MlirTypeDecl::Basic,
                 },
             }
         ),
@@ -55,14 +55,14 @@ thread_local! {
             "free",
             FunctionSymbol {
                 location: Some("stdlib.h"),
-                params: vec![HlirType {
-                    kind: HlirTypeKind::Void,
-                    decl: HlirTypeDecl::Pointer,
+                params: vec![MlirType {
+                    kind: MlirTypeKind::Void,
+                    decl: MlirTypeDecl::Pointer,
                 }],
                 varargs: false,
-                return_ty: HlirType {
-                    kind: HlirTypeKind::Void,
-                    decl: HlirTypeDecl::Basic,
+                return_ty: MlirType {
+                    kind: MlirTypeKind::Void,
+                    decl: MlirTypeDecl::Basic,
                 },
             }
         ),
@@ -79,21 +79,21 @@ pub(super) enum SymbolKind {
 #[derive(Debug, Clone)]
 pub(super) struct StructSymbol {
     pub(super) size: u64,
-    pub(super) as_type: HlirType,
+    pub(super) as_type: MlirType,
     pub(super) body: HashMap<InternedStr, VariableSymbol>,
 }
 
 #[derive(Clone, Debug)]
 pub(super) struct FunctionSymbol {
     pub(super) location: Option<&'static str>,
-    pub(super) return_ty: HlirType,
+    pub(super) return_ty: MlirType,
     pub(super) varargs: bool,
-    pub(super) params: Vec<HlirType>,
+    pub(super) params: Vec<MlirType>,
 }
 
 #[derive(Clone, Debug)]
 pub(super) struct VariableSymbol {
-    pub(super) ty: HlirType,
+    pub(super) ty: MlirType,
     pub(super) is_const: bool,
     pub(super) is_initialized: bool,
     pub(super) array_size: Option<u64>,
@@ -144,8 +144,8 @@ impl SymbolResolver {
     pub fn add_function(
         &mut self,
         ident: &InternedStr,
-        return_ty: HlirType,
-        params: Vec<HlirType>,
+        return_ty: MlirType,
+        params: Vec<MlirType>,
         span: Span,
     ) -> SymbolResult {
         let symbol = SymbolKind::Function(FunctionSymbol {
@@ -161,7 +161,7 @@ impl SymbolResolver {
     pub fn add_variable(
         &mut self,
         ident: &InternedStr,
-        ty: &HlirType,
+        ty: &MlirType,
         is_const: bool,
         is_initialized: bool,
         array_size: Option<u64>,
@@ -209,7 +209,7 @@ impl SymbolResolver {
     pub fn check_valid_assignment(
         &mut self,
         ident: &InternedStr,
-        ty: &HlirType,
+        ty: &MlirType,
         span: Span,
     ) -> SymbolResult {
         let var = match self.retrieve(ident, span)? {
@@ -234,7 +234,7 @@ impl SymbolResolver {
         &mut self,
         ident: &InternedStr,
         span: Span,
-    ) -> Result<HlirType, CompilerError> {
+    ) -> Result<MlirType, CompilerError> {
         match self.retrieve(ident, span)? {
             SymbolKind::Variable(var) => Ok(var.ty.clone()),
             _ => Err(CompilerError::NotAVariable(span)),
@@ -255,21 +255,21 @@ impl SymbolResolver {
 
     pub fn add_struct(
         &mut self,
-        as_type: HlirType,
-        _struct: &HlirStruct,
+        as_type: MlirType,
+        _struct: &MlirStruct,
         span: Span,
     ) -> SymbolResult {
         let ident = _struct.ident.clone();
         if cfg!(debug_assertions) {
             let ty_ident = match &as_type.kind {
-                HlirTypeKind::Struct(ident) => ident,
+                MlirTypeKind::Struct(ident) => ident,
                 _ => panic!(),
             };
             assert_eq!(ident, *ty_ident);
         }
         let mut body = HashMap::default();
         for field in &_struct.fields {
-            let array_size = if let HlirTypeDecl::Array(size) = &field.ty.decl {
+            let array_size = if let MlirTypeDecl::Array(size) = &field.ty.decl {
                 Some(*size)
             } else {
                 None
@@ -306,11 +306,11 @@ impl SymbolResolver {
     }
     pub fn validate_struct_member_access(
         &mut self,
-        _struct: Locatable<HlirExpr>,
+        _struct: Locatable<MlirExpr>,
         member: Locatable<InternedStr>,
-    ) -> Result<HlirExpr, CompilerError> {
+    ) -> Result<MlirExpr, CompilerError> {
         let ident = match &_struct.ty.kind {
-            HlirTypeKind::Struct(ident) => ident,
+            MlirTypeKind::Struct(ident) => ident,
             _ => panic!("`validate_struct_member_access` called on non struct expression."),
         };
         let _match = self.get_struct(ident, _struct.location)?;
@@ -323,9 +323,9 @@ impl SymbolResolver {
                 member.location,
             ));
         let ty = ty?.ty.clone();
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span: _struct.location.merge(member.location),
-            kind: Box::new(HlirExprKind::Member(_struct.value, member.value)),
+            kind: Box::new(MlirExprKind::Member(_struct.value, member.value)),
             is_lval: true,
             ty,
         })
@@ -361,9 +361,9 @@ fn test_parent_scope_is_accessed_in_retrieve() {
     let mut resolver = SymbolResolver::create_root();
     let symbol = SymbolKind::Struct(StructSymbol {
         size: 0,
-        as_type: HlirType {
-            kind: HlirTypeKind::Void,
-            decl: HlirTypeDecl::Basic,
+        as_type: MlirType {
+            kind: MlirTypeKind::Void,
+            decl: MlirTypeDecl::Basic,
         },
         body: Default::default(),
     });

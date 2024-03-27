@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::analysis::hlir::HlirTypeKind;
+use crate::analysis::mlir::MlirTypeKind;
 use crate::parser::ast::AbstractSyntaxTree;
 use crate::util::error::{CompilerError, CompilerWarning};
 use std::cell::RefCell;
