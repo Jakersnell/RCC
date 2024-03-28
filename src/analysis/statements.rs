@@ -1,7 +1,7 @@
 use crate::analysis::mlir::MlirTypeDecl::Basic;
 use crate::analysis::mlir::MlirTypeKind::Void;
 use crate::analysis::mlir::{
-    HlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl,
+    MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl,
     MlirTypeKind,
 };
 use crate::analysis::GlobalValidator;
@@ -22,7 +22,7 @@ fn invert_condition(expr: Locatable<MlirExpr>) -> Locatable<MlirExpr> {
 }
 
 impl GlobalValidator {
-    pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<HlirBlock, ()> {
+    pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
         self.push_scope();
         let mut statements = Vec::new();
         for raw_stmt in &block.0 {
@@ -31,7 +31,7 @@ impl GlobalValidator {
             }
         }
         self.pop_scope();
-        Ok(HlirBlock(statements))
+        Ok(MlirBlock(statements))
     }
 
     pub(super) fn validate_statement(
@@ -134,7 +134,7 @@ impl GlobalValidator {
         let end_label = MlirStmt::Label(end_label);
         block.push(end_label);
 
-        Ok(Some(MlirStmt::Block(HlirBlock(block))))
+        Ok(Some(MlirStmt::Block(MlirBlock(block))))
     }
 
     fn validate_while_loop_statement(
@@ -172,7 +172,7 @@ impl GlobalValidator {
         self.loop_label_stack.pop_front();
         self.pop_scope();
 
-        Ok(Some(MlirStmt::Block(HlirBlock(block))))
+        Ok(Some(MlirStmt::Block(MlirBlock(block))))
     }
 
     fn validate_return_statement(
@@ -255,6 +255,6 @@ impl GlobalValidator {
         self.pop_scope();
         self.loop_label_stack.pop_front();
 
-        Ok(Some(MlirStmt::Block(HlirBlock(block))))
+        Ok(Some(MlirStmt::Block(MlirBlock(block))))
     }
 }
