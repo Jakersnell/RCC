@@ -27,7 +27,7 @@ macro_rules! block {
 static mut BLOCK_COUNT: usize = 0;
 
 #[derive(PartialEq, Hash, PartialOrd)]
-struct BasicBlock<'a> {
+pub struct BasicBlock<'a> {
     kind: BasicBlockKind,
     statements: Vec<&'a MlirStmt>,
     incoming: Vec<Rc<BasicBlockEdge<'a>>>,
@@ -72,14 +72,14 @@ impl<'a> Display for BasicBlock<'a> {
 }
 
 #[derive(PartialEq, Hash, PartialOrd, Eq)]
-enum BasicBlockKind {
+pub enum BasicBlockKind {
     Base,
     Start,
     End,
 }
 
 #[derive(PartialEq, PartialOrd)]
-struct BasicBlockEdge<'a> {
+pub struct BasicBlockEdge<'a> {
     from: Rc<RefCell<BasicBlock<'a>>>,
     to: Rc<RefCell<BasicBlock<'a>>>,
     condition: Option<(&'a MlirExpr, bool)>,
@@ -96,7 +96,7 @@ impl<'a> std::hash::Hash for BasicBlockEdge<'a> {
 }
 
 impl<'a> BasicBlockEdge<'a> {
-    fn new(
+    pub fn new(
         from: Rc<RefCell<BasicBlock<'a>>>,
         to: Rc<RefCell<BasicBlock<'a>>>,
         condition: Option<(&'a MlirExpr, bool)>,
@@ -119,7 +119,7 @@ impl<'a> Display for BasicBlockEdge<'a> {
     }
 }
 
-struct BasicBlockFactory<'a> {
+pub struct BasicBlockFactory<'a> {
     mlir: &'a MlirBlock,
     statements: Vec<&'a MlirStmt>,
     blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
@@ -133,7 +133,7 @@ impl<'a> BasicBlockFactory<'a> {
             blocks: Vec::new(),
         }
     }
-    fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
+    pub fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
         for stmt in self.mlir.0.iter() {
             match &stmt {
                 MlirStmt::Label(_ident) => {
@@ -179,7 +179,7 @@ pub struct GraphFactory<'a> {
 }
 
 impl<'a> GraphFactory<'a> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             block_from_statement: HashMap::new(),
             block_from_label: HashMap::new(),
@@ -189,7 +189,7 @@ impl<'a> GraphFactory<'a> {
         }
     }
 
-    fn build(mut self, blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>) -> ControlFlowGraph<'a> {
+    pub fn build(mut self, blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>) -> ControlFlowGraph<'a> {
         let mut blocks = blocks;
         if let Some(block) = blocks.first() {
             self.connect(self.start.clone(), block.clone(), None);
