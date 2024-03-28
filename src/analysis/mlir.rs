@@ -7,6 +7,7 @@ use derive_new::new;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::hash::Hasher;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
@@ -14,30 +15,30 @@ pub const VOID_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Void,
     decl: MlirTypeDecl::Basic,
 };
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct MidLevelIR {
     pub functions: HashMap<InternedStr, MlirFunction>,
     pub structs: HashMap<InternedStr, MlirStruct>,
     pub globals: HashMap<InternedStr, MlirVariable>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct MlirStruct {
     pub ident: Locatable<InternedStr>,
     pub fields: Vec<Locatable<MlirVariable>>,
     pub size: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct MlirFunction {
     pub span: Span,
     pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,
     pub parameters: Vec<Locatable<MlirVariable>>,
-    pub body: Locatable<HlirBlock>,
+    pub body: Locatable<MlirBlock>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirVariable {
     pub span: Span,
     pub ty: Locatable<MlirType>,
@@ -46,13 +47,13 @@ pub struct MlirVariable {
     pub initializer: Option<Locatable<MlirVarInit>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirVarInit {
     Expr(MlirExpr),
     Array(Vec<MlirExpr>),
 }
 
-#[derive(Debug, Clone, PartialEq, new)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, new, Eq)]
 pub struct MlirType {
     pub(crate) kind: MlirTypeKind,
     pub(crate) decl: MlirTypeDecl,
@@ -121,7 +122,7 @@ impl MlirType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirTypeDecl {
     Basic,
     Pointer, // true if pointer is const
@@ -139,7 +140,7 @@ impl Display for MlirTypeDecl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirTypeKind {
     Void,
     Char(bool), // 8
@@ -175,7 +176,7 @@ impl Display for MlirTypeKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum MlirLiteral {
     Int(i64),
     UInt(u64),
@@ -184,7 +185,21 @@ pub enum MlirLiteral {
     Char(u8),
 }
 
-#[derive(Debug, Clone, new)]
+impl std::cmp::Eq for MlirLiteral {}
+
+impl std::hash::Hash for MlirLiteral {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            MlirLiteral::Int(int) => int.hash(state),
+            MlirLiteral::UInt(int) => int.hash(state),
+            MlirLiteral::String(string) => string.hash(state),
+            MlirLiteral::Char(char) => char.hash(state),
+            MlirLiteral::Float(float) => float.to_ne_bytes().hash(state),
+        }
+    }
+}
+
+#[derive(Debug, Clone, new, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirExpr {
     pub span: Span,
     pub kind: Box<MlirExprKind>,
@@ -223,7 +238,7 @@ impl MlirExpr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
     Literal(MlirLiteral),
     Variable(InternedStr),
@@ -300,22 +315,37 @@ impl MlirExprKind {
     }
 }
 
-#[derive(Debug)]
-pub struct HlirBlock(pub Vec<MlirStmt>);
-impl Deref for HlirBlock {
+#[derive(Debug, PartialEq, Hash, PartialOrd)]
+pub struct MlirBlock(pub Vec<MlirStmt>);
+impl std::cmp::Eq for MlirBlock {}
+impl Deref for MlirBlock {
     type Target = Vec<MlirStmt>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirStmt {
-    Block(HlirBlock),
+    Block(MlirBlock),
     Expression(MlirExpr),
     VariableDeclaration(MlirVariable),
     Label(InternedStr),
     Goto(InternedStr),
     ConditionalGoto(MlirExpr, InternedStr),
     Return(Option<MlirExpr>),
+}
+impl MlirStmt {
+    pub fn type_to_string(&self) -> String {
+        match self {
+            MlirStmt::Block(_) => "block",
+            MlirStmt::Expression(_) => "expression",
+            MlirStmt::VariableDeclaration(_) => "declaration",
+            MlirStmt::Label(_) => "label",
+            MlirStmt::Goto(_) => "goto",
+            MlirStmt::ConditionalGoto(_, _) => "conditional goto",
+            MlirStmt::Return(_) => "return",
+        }
+        .to_string()
+    }
 }
