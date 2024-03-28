@@ -20,7 +20,7 @@ use std::sync::Arc;
 pub type LocatableToken = Locatable<LexToken>;
 pub type CompilerResult<T> = Result<T, Vec<CompilerError>>;
 
-#[derive(Debug, PartialEq, new)]
+#[derive(Debug, PartialEq, new, Hash, PartialOrd, Eq)]
 pub struct Locatable<T> {
     pub location: Span,
     pub value: T,
@@ -63,7 +63,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Default)]
+#[derive(Debug, PartialEq, Clone, Copy, Default, Hash, PartialOrd, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
