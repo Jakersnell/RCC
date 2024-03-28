@@ -117,13 +117,13 @@ impl GlobalValidator {
         })
     }
 
-    fn flatten_blocks(hlir_block: HlirBlock) -> HlirBlock {
+    fn flatten_blocks(hlir_block: MlirBlock) -> MlirBlock {
         let mut block = Vec::new();
         Self::flatten_blocks_recursive(hlir_block, &mut block);
-        HlirBlock(block)
+        MlirBlock(block)
     }
 
-    fn flatten_blocks_recursive(hlir_block: HlirBlock, vec: &mut Vec<MlirStmt>) {
+    fn flatten_blocks_recursive(hlir_block: MlirBlock, vec: &mut Vec<MlirStmt>) {
         for stmt in hlir_block.0 {
             match stmt {
                 MlirStmt::Block(inner_block) => Self::flatten_blocks_recursive(inner_block, vec),
