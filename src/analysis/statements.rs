@@ -11,16 +11,6 @@ use crate::util::{str_intern, Locatable, Span};
 use std::env::var;
 use std::fmt::format;
 
-fn invert_condition(expr: Locatable<MlirExpr>) -> Locatable<MlirExpr> {
-    let ty = expr.ty.clone();
-    expr.location.into_locatable(MlirExpr {
-        span: expr.location,
-        kind: Box::new(MlirExprKind::LogicalNot(expr.value)),
-        is_lval: false,
-        ty,
-    })
-}
-
 impl GlobalValidator {
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
         self.push_scope();
@@ -103,16 +93,13 @@ impl GlobalValidator {
         let end_label = str_intern::intern(format!("{}_end", start_label));
         let mut block = Vec::new();
 
-        let condition = condition
-            .location
-            .into_locatable(self.validate_expression(condition)?);
+        let condition = self.validate_expression(condition)?;
         let jump_to = if otherwise.is_some() {
             else_label.clone()
         } else {
             end_label.clone()
         };
-        let conditional_goto =
-            MlirStmt::ConditionalGoto(invert_condition(condition).value, jump_to);
+        let conditional_goto = MlirStmt::GotoFalse(condition, jump_to);
         block.push(conditional_goto);
 
         let then_span = then.location;
@@ -152,11 +139,8 @@ impl GlobalValidator {
         let label = MlirStmt::Label(label_string.clone());
         block.push(label);
 
-        let condition = condition
-            .location
-            .into_locatable(self.validate_expression(condition)?);
-        let goto_end =
-            MlirStmt::ConditionalGoto(invert_condition(condition).value, label_string_end.clone());
+        let condition = self.validate_expression(condition)?;
+        let goto_end = MlirStmt::GotoFalse(condition, label_string_end.clone());
         block.push(goto_end);
 
         if let Some(body) = self.validate_statement(body)? {
@@ -228,11 +212,8 @@ impl GlobalValidator {
         block.push(start_label);
 
         if let Some(condition) = condition {
-            let condition = condition
-                .location
-                .into_locatable(self.validate_expression(condition)?);
-            let condition =
-                MlirStmt::ConditionalGoto(invert_condition(condition).value, loop_end.clone());
+            let condition = self.validate_expression(condition)?;
+            let condition = MlirStmt::GotoFalse(condition, loop_end.clone());
             block.push(condition);
         }
 

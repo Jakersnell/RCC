@@ -79,6 +79,7 @@ impl GlobalValidator {
         }
         let ident = ident.as_ref().unwrap();
         let ident = ident.location.into_locatable(ident.value.clone());
+
         let raw_params = &func.parameters;
         let mut parameters = Vec::new();
         for parameter in raw_params {

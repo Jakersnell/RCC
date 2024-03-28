@@ -61,7 +61,7 @@ enum BasicBlockKind {
 struct BasicBlockEdge<'a> {
     from: Rc<RefCell<BasicBlock<'a>>>,
     to: Rc<RefCell<BasicBlock<'a>>>,
-    condition: Option<&'a MlirExpr>,
+    condition: Option<(&'a MlirExpr, bool)>,
 }
 
 impl<'a> std::hash::Hash for BasicBlockEdge<'a> {
@@ -78,7 +78,7 @@ impl<'a> BasicBlockEdge<'a> {
     fn new(
         from: Rc<RefCell<BasicBlock<'a>>>,
         to: Rc<RefCell<BasicBlock<'a>>>,
-        condition: Option<&'a MlirExpr>,
+        condition: Option<(&'a MlirExpr, bool)>,
     ) -> Self {
         Self {
             from,
@@ -102,7 +102,7 @@ impl<'a> BasicBlockFactory<'a> {
             blocks: Vec::new(),
         }
     }
-    pub fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
+    fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
         for stmt in self.mlir.0.iter() {
             match &stmt {
                 MlirStmt::Label(_ident) => {
@@ -112,7 +112,10 @@ impl<'a> BasicBlockFactory<'a> {
                 MlirStmt::Expression(_) | MlirStmt::VariableDeclaration(_) => {
                     self.statements.push(stmt);
                 }
-                MlirStmt::Return(_) | MlirStmt::Goto(_) | MlirStmt::ConditionalGoto(_, _) => {
+                MlirStmt::Return(_)
+                | MlirStmt::Goto(_)
+                | MlirStmt::GotoFalse(_, _)
+                | MlirStmt::GotoTrue(_, _) => {
                     self.statements.push(stmt);
                     self.transition_block();
                 }
@@ -155,27 +158,105 @@ impl<'a> GraphFactory<'a> {
         }
     }
 
-    fn build(&mut self, blocks: &[Rc<RefCell<BasicBlock<'a>>>]) -> ControlFlowGraph<'a> {
+    fn build(mut self, blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>) -> ControlFlowGraph<'a> {
+        let mut blocks = blocks;
         if let Some(block) = blocks.iter().next() {
             self.connect(self.start.clone(), block.clone(), None);
         } else {
             self.connect(self.start.clone(), self.end.clone(), None);
         }
 
-        for block in blocks {
+        for block in blocks.iter() {
             for stmt in &block.borrow().statements {
                 self.block_from_statement.insert(*stmt, block.clone());
+                if let MlirStmt::Label(marker) = stmt {
+                    self.block_from_label.insert(marker.clone(), block.clone());
+                }
             }
         }
 
-        todo!()
+        for i in 0..blocks.len() {
+            let current = blocks[i].clone();
+            let next = if (i == blocks.len() - 1) {
+                self.end.clone()
+            } else {
+                blocks[i + 1].clone()
+            };
+            for stmt in &current.borrow().statements {
+                let is_last_in_block = current
+                    .borrow()
+                    .statements
+                    .last()
+                    .is_some_and(|last| **last == **stmt);
+                match stmt {
+                    MlirStmt::Goto(label) => {
+                        let to_block = self
+                            .block_from_label
+                            .get(label)
+                            .expect("Corresponding label not found.");
+                        self.connect(current.clone(), to_block.clone(), None);
+                    }
+                    MlirStmt::GotoFalse(condition, label)
+                    | MlirStmt::GotoTrue(condition, label) => {
+                        let jump_if_true = matches!(stmt, MlirStmt::GotoTrue(_, _));
+                        let to_block = self
+                            .block_from_label
+                            .get(label)
+                            .expect("Corresponding label not found.");
+                        let else_block = &next;
+                        self.connect(
+                            current.clone(),
+                            to_block.clone(),
+                            Some((condition, jump_if_true)),
+                        );
+                        self.connect(
+                            current.clone(),
+                            else_block.clone(),
+                            Some((condition, !jump_if_true)),
+                        );
+                    }
+                    MlirStmt::Return(_) => {
+                        self.connect(current.clone(), self.end.clone(), None);
+                    }
+                    MlirStmt::Expression(_)
+                    | MlirStmt::VariableDeclaration(_)
+                    | MlirStmt::Label(_)
+                        if is_last_in_block =>
+                    {
+                        self.connect(current.clone(), next.clone(), None);
+                    }
+                    _ => panic!("Unexpected statement: {}", stmt.type_to_string()),
+                }
+            }
+        }
+
+        let mut index = 0;
+        while let Some(block) = blocks.get(index) {
+            if block.borrow().incoming.is_empty() {
+                let block = block.clone();
+                self.remove_block(&mut blocks, block);
+                index = 0;
+            } else {
+                index += 1;
+            }
+        }
+
+        blocks.insert(0, self.start.clone());
+        blocks.push(self.end.clone());
+
+        ControlFlowGraph {
+            start: std::mem::replace(&mut self.start, block!(BasicBlockKind::Start)),
+            end: std::mem::replace(&mut self.end, block!(BasicBlockKind::End)),
+            edges: std::mem::take(&mut self.edges),
+            blocks,
+        }
     }
 
     fn connect(
         &mut self,
         from: Rc<RefCell<BasicBlock<'a>>>,
         to: Rc<RefCell<BasicBlock<'a>>>,
-        condition: Option<&'a MlirExpr>,
+        condition: Option<(&'a MlirExpr, bool)>,
     ) {
         // in the future id like to have a folded literal check here.
         let mut edge = Rc::new(BasicBlockEdge::new(from.clone(), to.clone(), condition));
@@ -216,24 +297,8 @@ impl<'a> GraphFactory<'a> {
 }
 
 pub struct ControlFlowGraph<'a> {
-    function: &'a MlirFunction,
     start: Rc<RefCell<BasicBlock<'a>>>,
     end: Rc<RefCell<BasicBlock<'a>>>,
     blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
     edges: Vec<Rc<BasicBlockEdge<'a>>>,
-    ty_is_void: bool,
-}
-
-impl<'a> ControlFlowGraph<'a> {
-    fn new(function: &'a MlirFunction) -> Self {
-        let ty_is_void = (function.ty.value == VOID_TYPE);
-        Self {
-            function,
-            start: block!(BasicBlockKind::Start),
-            end: block!(BasicBlockKind::End),
-            blocks: Vec::new(),
-            edges: Vec::new(),
-            ty_is_void,
-        }
-    }
 }
