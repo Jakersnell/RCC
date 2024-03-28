@@ -1,6 +1,6 @@
 use crate::analysis::casting::{explicit_cast, implicit_cast};
-use crate::analysis::hlir::{
-    HlirExpr, HlirExprKind, HlirLiteral, HlirType, HlirTypeDecl, HlirTypeKind,
+use crate::analysis::mlir::{
+    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
 };
 use crate::analysis::symbols::SymbolResult;
 use crate::analysis::GlobalValidator;
@@ -14,7 +14,7 @@ use crate::util::{Locatable, Span};
 use std::env::var;
 
 impl GlobalValidator {
-    pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<HlirExpr, ()> {
+    pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
         match expr {
             Expression::Literal(literal) => self.validate_literal(literal, literal.location),
             Expression::Variable(variable) => self.validate_variable_call(variable),
@@ -35,14 +35,14 @@ impl GlobalValidator {
     fn validate_variable_call(
         &mut self,
         variable: &Locatable<InternedStr>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let result = self
             .scope
             .borrow_mut()
             .get_variable_type(&variable.value, variable.location)
-            .map(|ty| HlirExpr {
+            .map(|ty| MlirExpr {
                 span: variable.location,
-                kind: Box::new(HlirExprKind::Variable(variable.value.clone())),
+                kind: Box::new(MlirExprKind::Variable(variable.value.clone())),
                 ty,
                 is_lval: true,
             });
@@ -57,7 +57,7 @@ impl GlobalValidator {
     fn validate_sizeof(
         &mut self,
         ty_or_expr: &Locatable<TypeOrExpression>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let size = match &ty_or_expr.value {
             TypeOrExpression::Type(ty) => {
                 let ty = self.validate_type(&ty.specifier, ty_or_expr.location, false, false)?;
@@ -67,7 +67,7 @@ impl GlobalValidator {
                 let expr = self.validate_expression(expr)?;
                 if !matches!(
                     &*expr.kind,
-                    HlirExprKind::Variable(_) | HlirExprKind::Literal(_)
+                    MlirExprKind::Variable(_) | MlirExprKind::Literal(_)
                 ) {
                     let warning = CompilerWarning::ExprNoEffect(ty_or_expr.location);
                     self.report_warning(warning);
@@ -75,29 +75,29 @@ impl GlobalValidator {
                 self.sizeof(&expr.ty, ty_or_expr.location)
             }
         };
-        let ty = HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic);
-        Ok(HlirExpr {
+        let ty = MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic);
+        Ok(MlirExpr {
             span: ty_or_expr.location,
-            kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(size as i64))),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(size as i64))),
             ty,
             is_lval: false,
         })
     }
 
-    pub(super) fn sizeof(&mut self, ty: &HlirType, span: Span) -> u64 {
+    pub(super) fn sizeof(&mut self, ty: &MlirType, span: Span) -> u64 {
         use crate::util::arch::*;
         if ty.is_pointer() {
             return POINTER_SIZE;
         }
 
         let size = match &ty.kind {
-            HlirTypeKind::Char(_) => CHAR_SIZE,
-            HlirTypeKind::Int(_) => INT_SIZE,
-            HlirTypeKind::Long(_) => LONG_SIZE,
-            HlirTypeKind::Double => DOUBLE_SIZE,
-            HlirTypeKind::Void => 0,
-            HlirTypeKind::Float => FLOAT_SIZE,
-            HlirTypeKind::Struct(ident) => {
+            MlirTypeKind::Char(_) => CHAR_SIZE,
+            MlirTypeKind::Int(_) => INT_SIZE,
+            MlirTypeKind::Long(_) => LONG_SIZE,
+            MlirTypeKind::Double => DOUBLE_SIZE,
+            MlirTypeKind::Void => 0,
+            MlirTypeKind::Float => FLOAT_SIZE,
+            MlirTypeKind::Struct(ident) => {
                 let result = self.scope.borrow_mut().get_struct_size(ident, span);
                 if let Err(err) = result {
                     self.report_error(err);
@@ -108,7 +108,7 @@ impl GlobalValidator {
             }
         };
 
-        if let HlirTypeDecl::Array(array_size) = &ty.decl {
+        if let MlirTypeDecl::Array(array_size) = &ty.decl {
             size * array_size
         } else {
             size
@@ -120,7 +120,7 @@ impl GlobalValidator {
         op: &PostfixOp,
         expr: &Expression,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let expr = self.validate_expression(expr)?;
 
         if self.not_incremental(&expr, span) {
@@ -128,10 +128,10 @@ impl GlobalValidator {
         }
         let ty = expr.ty.clone();
         let kind = Box::new(match op {
-            PostfixOp::Increment => HlirExprKind::PostIncrement(expr),
-            PostfixOp::Decrement => HlirExprKind::PostDecrement(expr),
+            PostfixOp::Increment => MlirExprKind::PostIncrement(expr),
+            PostfixOp::Decrement => MlirExprKind::PostDecrement(expr),
         });
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span,
             is_lval: false,
             kind,
@@ -143,7 +143,7 @@ impl GlobalValidator {
         &mut self,
         op: &UnaryOp,
         expr: &Locatable<Box<Expression>>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let span = expr.location;
         let expr = self.validate_expression(expr)?;
         self.validate_unary_expression(op, expr, span)
@@ -154,7 +154,7 @@ impl GlobalValidator {
         op: &BinaryOp,
         left: &Locatable<Box<Expression>>,
         right: &Locatable<Box<Expression>>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let span = left.location.merge(right.location);
         let left = self.validate_expression(left)?;
         let right = self.validate_expression(right)?;
@@ -165,7 +165,7 @@ impl GlobalValidator {
         &mut self,
         ident: &Locatable<InternedStr>,
         args: &Vec<Locatable<Expression>>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let span = ident.location;
         let ident = ident.value.clone();
         let mut resolver = self.scope.borrow_mut();
@@ -192,12 +192,12 @@ impl GlobalValidator {
         let hlir_args = self.try_cast_function_args(hlir_args, &params)?;
 
         self.validate_function_params(varargs, &params, &hlir_args, span)?;
-        let kind = HlirExprKind::FunctionCall {
+        let kind = MlirExprKind::FunctionCall {
             location,
             ident,
             args: hlir_args.into_iter().map(|arg| arg.0).collect(),
         };
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span: span.merge(last_arg_span),
             kind: Box::new(kind),
             ty: return_ty,
@@ -206,9 +206,9 @@ impl GlobalValidator {
     }
     fn try_cast_function_args(
         &mut self,
-        args: Vec<(HlirExpr, Span)>,
-        param_types: &[HlirType],
-    ) -> Result<Vec<(HlirExpr, Span)>, ()> {
+        args: Vec<(MlirExpr, Span)>,
+        param_types: &[MlirType],
+    ) -> Result<Vec<(MlirExpr, Span)>, ()> {
         let mut args = args;
         let var_args = args.split_off(param_types.len());
         let mut processed_args = Vec::new();
@@ -233,8 +233,8 @@ impl GlobalValidator {
     fn validate_function_params(
         &mut self,
         varargs: bool,
-        params: &[HlirType],
-        args: &[(HlirExpr, Span)],
+        params: &[MlirType],
+        args: &[(MlirExpr, Span)],
         span: Span,
     ) -> Result<(), ()> {
         for (param, arg) in params.iter().zip(args.iter()) {
@@ -257,7 +257,7 @@ impl GlobalValidator {
         &mut self,
         left: &Locatable<Box<Expression>>,
         index: &Locatable<Box<Expression>>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let (left_span, left) = (left.location, self.validate_expression(left)?);
         let (index_span, index) = (index.location, self.validate_expression(index)?);
         self.validate_index_access(left, index, left_span, index_span)
@@ -267,7 +267,7 @@ impl GlobalValidator {
         &mut self,
         body: &Locatable<Box<Expression>>,
         member: &Locatable<InternedStr>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let (body_span, body) = (body.location, self.validate_expression(body)?);
         let (member_span, member) = (member.location, (**member).clone());
         self.validate_member_access(body, member, body_span, member_span)
@@ -277,7 +277,7 @@ impl GlobalValidator {
         &mut self,
         body: &Locatable<Box<Expression>>,
         member: &Locatable<InternedStr>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let (body_span, body) = (body.location, self.validate_expression(body)?);
         let (member_span, member) = (member.location, (**member).clone());
         self.validate_pointer_member_access(body, member, body_span, member_span)
@@ -287,7 +287,7 @@ impl GlobalValidator {
         &mut self,
         dec: &Locatable<Declaration>,
         expr: &Locatable<Box<Expression>>,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let (expr_location, expr) = (expr.location, self.validate_expression(expr)?);
         debug_assert!(dec.ident.is_none());
         let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false, false)?;
@@ -307,7 +307,7 @@ impl GlobalValidator {
         &mut self,
         literal: &Literal,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let (literal, ty) = match literal {
             Literal::Integer { value, suffix } => {
                 if suffix.is_some() {
@@ -316,20 +316,20 @@ impl GlobalValidator {
                 }
                 if *value <= i64::MAX as isize {
                     (
-                        HlirLiteral::Int(*value as i64),
-                        HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+                        MlirLiteral::Int(*value as i64),
+                        MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
                     )
                 } else if *value <= u64::MAX as isize {
                     (
-                        HlirLiteral::UInt(*value as u64),
-                        HlirType::new(HlirTypeKind::Int(true), HlirTypeDecl::Basic),
+                        MlirLiteral::UInt(*value as u64),
+                        MlirType::new(MlirTypeKind::Int(true), MlirTypeDecl::Basic),
                     )
                 } else {
                     let err = CompilerError::NumberTooLarge(span);
                     self.report_error(err);
                     (
-                        HlirLiteral::Int(0),
-                        HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+                        MlirLiteral::Int(0),
+                        MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
                     )
                 }
             }
@@ -339,25 +339,25 @@ impl GlobalValidator {
                     self.report_warning(warning);
                 }
                 (
-                    HlirLiteral::Float(*value),
-                    HlirType::new(HlirTypeKind::Double, HlirTypeDecl::Basic),
+                    MlirLiteral::Float(*value),
+                    MlirType::new(MlirTypeKind::Double, MlirTypeDecl::Basic),
                 )
             }
             Literal::Char { value } => (
-                HlirLiteral::Char(*value as u8),
-                HlirType::new(HlirTypeKind::Char(false), HlirTypeDecl::Basic),
+                MlirLiteral::Char(*value as u8),
+                MlirType::new(MlirTypeKind::Char(false), MlirTypeDecl::Basic),
             ),
             Literal::String { value } => {
                 let value = value.as_str().bytes().collect();
                 (
-                    HlirLiteral::String(value),
-                    HlirType::new(HlirTypeKind::Char(false), HlirTypeDecl::Pointer),
+                    MlirLiteral::String(value),
+                    MlirType::new(MlirTypeKind::Char(false), MlirTypeDecl::Pointer),
                 )
             }
         };
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span,
-            kind: Box::new(HlirExprKind::Literal(literal)),
+            kind: Box::new(MlirExprKind::Literal(literal)),
             ty,
             is_lval: false,
         })
@@ -365,11 +365,11 @@ impl GlobalValidator {
 
     pub(super) fn validate_index_access(
         &mut self,
-        left: HlirExpr,
-        index: HlirExpr,
+        left: MlirExpr,
+        index: MlirExpr,
         left_span: Span,
         index_span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         if !left.is_pointer() && !left.is_array() {
             self.report_error(CompilerError::InvalidLeftOfSubScript(
                 left.ty.to_string(),
@@ -385,9 +385,9 @@ impl GlobalValidator {
         }
 
         let ty = left.ty.clone();
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span: left_span.merge(index_span),
-            kind: Box::new(HlirExprKind::Index(left, index)),
+            kind: Box::new(MlirExprKind::Index(left, index)),
             ty,
             is_lval: false,
         })
@@ -395,20 +395,20 @@ impl GlobalValidator {
 
     pub(super) fn validate_pointer_member_access(
         &mut self,
-        body: HlirExpr,
+        body: MlirExpr,
         member: InternedStr,
         body_span: Span,
         member_span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         if !body.is_pointer() {
             self.report_error(CompilerError::ArrowOnNonPointer(body_span));
         }
         // dereference to underlying type,
         let mut ty = body.ty.clone();
-        ty.decl = HlirTypeDecl::Basic;
-        let expr = HlirExpr {
+        ty.decl = MlirTypeDecl::Basic;
+        let expr = MlirExpr {
             span: body_span.merge(member_span),
-            kind: Box::new(HlirExprKind::Deref(body)),
+            kind: Box::new(MlirExprKind::Deref(body)),
             ty,
             is_lval: true,
         };
@@ -417,12 +417,12 @@ impl GlobalValidator {
 
     pub(super) fn validate_member_access(
         &mut self,
-        body: HlirExpr,
+        body: MlirExpr,
         member: InternedStr,
         body_span: Span,
         member_span: Span,
-    ) -> Result<HlirExpr, ()> {
-        if !matches!(&body.ty.kind, HlirTypeKind::Struct(_)) || body.is_array() {
+    ) -> Result<MlirExpr, ()> {
+        if !matches!(&body.ty.kind, MlirTypeKind::Struct(_)) || body.is_array() {
             self.report_error(CompilerError::CannotMemberAccessOnType(
                 body.ty.to_string(),
                 body_span,
@@ -451,9 +451,9 @@ impl GlobalValidator {
     pub(super) fn validate_unary_expression(
         &mut self,
         op: &UnaryOp,
-        expr: HlirExpr,
+        expr: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         match op {
             UnaryOp::Increment | UnaryOp::Decrement => self.validate_pre_inc_or_dec(op, expr, span),
             UnaryOp::Plus => Ok(expr),
@@ -463,9 +463,9 @@ impl GlobalValidator {
                     Ok(expr)
                 } else {
                     let ty = expr.ty.clone();
-                    Ok(HlirExpr {
+                    Ok(MlirExpr {
                         span,
-                        kind: Box::new(HlirExprKind::Negate(expr)),
+                        kind: Box::new(MlirExprKind::Negate(expr)),
                         is_lval: false,
                         ty,
                     })
@@ -477,20 +477,20 @@ impl GlobalValidator {
                     Ok(expr)
                 } else {
                     let expr = implicit_cast(
-                        HlirType {
-                            decl: HlirTypeDecl::Basic,
-                            kind: HlirTypeKind::Int(false),
+                        MlirType {
+                            decl: MlirTypeDecl::Basic,
+                            kind: MlirTypeKind::Int(false),
                         },
                         expr,
                         span,
                     )?;
                     let ty = expr.ty.clone();
                     let expr = match op {
-                        UnaryOp::LogicalNot => HlirExprKind::LogicalNot(expr),
-                        UnaryOp::BitwiseNot => HlirExprKind::BitwiseNot(expr),
+                        UnaryOp::LogicalNot => MlirExprKind::LogicalNot(expr),
+                        UnaryOp::BitwiseNot => MlirExprKind::BitwiseNot(expr),
                         _ => unreachable!(),
                     };
-                    Ok(HlirExpr {
+                    Ok(MlirExpr {
                         span,
                         kind: Box::new(expr),
                         is_lval: false,
@@ -506,11 +506,11 @@ impl GlobalValidator {
                 }
                 let ty_kind = expr.ty.kind.clone();
 
-                Ok(HlirExpr {
+                Ok(MlirExpr {
                     span,
-                    kind: Box::new(HlirExprKind::Deref(expr)),
-                    ty: HlirType {
-                        decl: HlirTypeDecl::Basic,
+                    kind: Box::new(MlirExprKind::Deref(expr)),
+                    ty: MlirType {
+                        decl: MlirTypeDecl::Basic,
                         kind: ty_kind,
                     },
                     is_lval: true,
@@ -523,12 +523,12 @@ impl GlobalValidator {
                     return Ok(expr);
                 }
                 let ty_kind = expr.ty.kind.clone();
-                Ok(HlirExpr {
+                Ok(MlirExpr {
                     span,
-                    kind: Box::new(HlirExprKind::AddressOf(expr)),
-                    ty: HlirType {
+                    kind: Box::new(MlirExprKind::AddressOf(expr)),
+                    ty: MlirType {
                         kind: ty_kind,
-                        decl: HlirTypeDecl::Pointer,
+                        decl: MlirTypeDecl::Pointer,
                     },
                     is_lval: false,
                 })
@@ -536,7 +536,7 @@ impl GlobalValidator {
         }
     }
 
-    pub(super) fn not_incremental(&mut self, expr: &HlirExpr, span: Span) -> bool {
+    pub(super) fn not_incremental(&mut self, expr: &MlirExpr, span: Span) -> bool {
         if !expr.is_lval {
             let err = CompilerError::LeftHandNotLVal(span);
             self.report_error(err);
@@ -555,19 +555,19 @@ impl GlobalValidator {
     pub(super) fn validate_pre_inc_or_dec(
         &mut self,
         op: &UnaryOp,
-        expr: HlirExpr,
+        expr: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         if self.not_incremental(&expr, span) {
             return Ok(expr);
         }
 
-        let literal_one = HlirExpr {
+        let literal_one = MlirExpr {
             span,
-            kind: Box::new(HlirExprKind::Literal(HlirLiteral::Char(1))),
-            ty: HlirType {
-                decl: HlirTypeDecl::Basic,
-                kind: HlirTypeKind::Char(false),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Char(1))),
+            ty: MlirType {
+                decl: MlirTypeDecl::Basic,
+                kind: MlirTypeKind::Char(false),
             },
             is_lval: false,
         };

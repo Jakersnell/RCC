@@ -1,5 +1,5 @@
 use crate::analysis::casting::*;
-use crate::analysis::hlir::*;
+use crate::analysis::mlir::*;
 use crate::analysis::*;
 use crate::parser::ast::{AbstractSyntaxTree, AssignOp, BinaryOp};
 use crate::util::error::CompilerError;
@@ -9,10 +9,10 @@ impl GlobalValidator {
     pub(super) fn validate_binary_expression(
         &mut self,
         op: &BinaryOp,
-        left: HlirExpr,
-        right: HlirExpr,
+        left: MlirExpr,
+        right: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
                 self.validate_arithmetic_binary_op(op, left, right, span)
@@ -44,10 +44,10 @@ impl GlobalValidator {
     pub(super) fn validate_arithmetic_binary_op(
         &mut self,
         op: &BinaryOp,
-        left: HlirExpr,
-        right: HlirExpr,
+        left: MlirExpr,
+        right: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         let ty = left.ty.clone();
         let kind = if left.ty.is_pointer() && right.ty.is_pointer() {
             // pointers can add and subtract from each other, resulting in a long.
@@ -59,41 +59,41 @@ impl GlobalValidator {
         } else if left.ty.is_pointer() && right.ty.is_numeric() {
             // only addition/subtraction
             let left = implicit_cast(
-                HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
                 left,
                 Span::default(),
             )
             .unwrap();
             let right = implicit_cast(
-                HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
                 right,
                 span,
             )
             .unwrap();
             match op {
-                BinaryOp::Add => HlirExprKind::Add(left, right),
-                BinaryOp::Sub => HlirExprKind::Sub(left, right),
+                BinaryOp::Add => MlirExprKind::Add(left, right),
+                BinaryOp::Sub => MlirExprKind::Sub(left, right),
                 _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
             }
         } else if left.ty.is_numeric() && right.ty.is_numeric() {
             let left = implicit_cast(
-                HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
                 left,
                 span,
             )
             .unwrap();
             let right = implicit_cast(
-                HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
                 right,
                 span,
             )
             .unwrap();
             match op {
-                BinaryOp::Add => HlirExprKind::Add(left, right),
-                BinaryOp::Sub => HlirExprKind::Sub(left, right),
-                BinaryOp::Mul => HlirExprKind::Mul(left, right),
-                BinaryOp::Div => HlirExprKind::Div(left, right),
-                BinaryOp::Mod => HlirExprKind::Mod(left, right),
+                BinaryOp::Add => MlirExprKind::Add(left, right),
+                BinaryOp::Sub => MlirExprKind::Sub(left, right),
+                BinaryOp::Mul => MlirExprKind::Mul(left, right),
+                BinaryOp::Div => MlirExprKind::Div(left, right),
+                BinaryOp::Mod => MlirExprKind::Mod(left, right),
                 _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
             }
         } else {
@@ -105,7 +105,7 @@ impl GlobalValidator {
             ));
             return Ok(left);
         };
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span,
             kind: Box::new(kind),
             ty,
@@ -115,10 +115,10 @@ impl GlobalValidator {
     pub(super) fn validate_assign_op(
         &mut self,
         op: &AssignOp,
-        left: HlirExpr,
-        right: HlirExpr,
+        left: MlirExpr,
+        right: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         if !left.is_lval {
             let err = CompilerError::LeftHandNotLVal(span);
             self.report_error(err);
@@ -148,11 +148,11 @@ impl GlobalValidator {
         let ty = left.ty.clone();
         let kind = if let Some(op) = op {
             let expr = self.validate_binary_expression(&op, left.clone(), right, span)?;
-            HlirExprKind::Assign(left, expr)
+            MlirExprKind::Assign(left, expr)
         } else {
-            HlirExprKind::Assign(left, right)
+            MlirExprKind::Assign(left, right)
         };
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span,
             kind: Box::new(kind),
             ty,
@@ -163,10 +163,10 @@ impl GlobalValidator {
     pub(super) fn validate_binary_equivalence_expression(
         &mut self,
         op: &BinaryOp,
-        left: HlirExpr,
-        right: HlirExpr,
+        left: MlirExpr,
+        right: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
+    ) -> Result<MlirExpr, ()> {
         debug_assert!(!left.ty.is_array());
         debug_assert!(!right.ty.is_array());
         if (left.ty.is_pointer() && !right.ty.is_pointer())
@@ -184,14 +184,14 @@ impl GlobalValidator {
 
         let left_ty = left.ty.clone();
         let left = implicit_cast(
-            HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+            MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
             left,
             span,
         );
 
         let right_ty = right.ty.clone();
         let right = implicit_cast(
-            HlirType::new(HlirTypeKind::Long(true), HlirTypeDecl::Basic),
+            MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
             right,
             span,
         );
@@ -208,18 +208,18 @@ impl GlobalValidator {
         let (left, right) = (left.unwrap(), right.unwrap());
 
         let kind = match op {
-            BinaryOp::Equal => HlirExprKind::Equal(left, right),
-            BinaryOp::NotEqual => HlirExprKind::NotEqual(left, right),
-            BinaryOp::GreaterThan => HlirExprKind::GreaterThan(left, right),
-            BinaryOp::GreaterThanEqual => HlirExprKind::GreaterThanEqual(left, right),
-            BinaryOp::LessThan => HlirExprKind::LessThan(left, right),
-            BinaryOp::LessThanEqual => HlirExprKind::LessThanEqual(left, right),
+            BinaryOp::Equal => MlirExprKind::Equal(left, right),
+            BinaryOp::NotEqual => MlirExprKind::NotEqual(left, right),
+            BinaryOp::GreaterThan => MlirExprKind::GreaterThan(left, right),
+            BinaryOp::GreaterThanEqual => MlirExprKind::GreaterThanEqual(left, right),
+            BinaryOp::LessThan => MlirExprKind::LessThan(left, right),
+            BinaryOp::LessThanEqual => MlirExprKind::LessThanEqual(left, right),
             _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
         };
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span,
             kind: Box::new(kind),
-            ty: HlirType::new(HlirTypeKind::Int(false), HlirTypeDecl::Basic),
+            ty: MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
             is_lval: false,
         })
     }
@@ -227,13 +227,13 @@ impl GlobalValidator {
     pub(super) fn validate_binary_bitwise_expression(
         &mut self,
         op: &BinaryOp,
-        left: HlirExpr,
-        right: HlirExpr,
+        left: MlirExpr,
+        right: MlirExpr,
         span: Span,
-    ) -> Result<HlirExpr, ()> {
-        let ty = HlirType {
-            kind: HlirTypeKind::Long(true),
-            decl: HlirTypeDecl::Basic,
+    ) -> Result<MlirExpr, ()> {
+        let ty = MlirType {
+            kind: MlirTypeKind::Long(true),
+            decl: MlirTypeDecl::Basic,
         };
         let (left, right) = if left.is_pointer() && right.is_pointer() {
             (
@@ -256,14 +256,14 @@ impl GlobalValidator {
             return Err(());
         };
         let kind = match op {
-            BinaryOp::BitwiseAnd => HlirExprKind::BitwiseAnd(left, right),
-            BinaryOp::BitwiseOr => HlirExprKind::BitwiseOr(left, right),
-            BinaryOp::BitwiseXor => HlirExprKind::BitwiseXor(left, right),
-            BinaryOp::LeftShift => HlirExprKind::LeftShift(left, right),
-            BinaryOp::RightShift => HlirExprKind::RightShift(left, right),
+            BinaryOp::BitwiseAnd => MlirExprKind::BitwiseAnd(left, right),
+            BinaryOp::BitwiseOr => MlirExprKind::BitwiseOr(left, right),
+            BinaryOp::BitwiseXor => MlirExprKind::BitwiseXor(left, right),
+            BinaryOp::LeftShift => MlirExprKind::LeftShift(left, right),
+            BinaryOp::RightShift => MlirExprKind::RightShift(left, right),
             _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
         };
-        Ok(HlirExpr {
+        Ok(MlirExpr {
             span,
             kind: Box::new(kind),
             ty,
@@ -276,20 +276,20 @@ impl GlobalValidator {
 fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
     let test_cases = [
         (
-            HlirTypeKind::Int(false), // left
-            HlirTypeKind::Long(true), // right
+            MlirTypeKind::Int(false), // left
+            MlirTypeKind::Long(true), // right
         ),
-        (HlirTypeKind::Int(false), HlirTypeKind::Char(false)),
-        (HlirTypeKind::Long(false), HlirTypeKind::Int(false)),
-        (HlirTypeKind::Long(false), HlirTypeKind::Long(false)),
+        (MlirTypeKind::Int(false), MlirTypeKind::Char(false)),
+        (MlirTypeKind::Long(false), MlirTypeKind::Int(false)),
+        (MlirTypeKind::Long(false), MlirTypeKind::Long(false)),
     ];
-    use super::hlir::*;
+    use super::mlir::*;
     macro_rules! make_expr {
         ($kind:expr) => {
-            HlirExpr {
+            MlirExpr {
                 span: Span::default(),
-                kind: Box::new(HlirExprKind::Literal(HlirLiteral::Int(1))),
-                ty: HlirType::new($kind, HlirTypeDecl::Basic),
+                kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(1))),
+                ty: MlirType::new($kind, MlirTypeDecl::Basic),
                 is_lval: false,
             }
         };
@@ -301,6 +301,6 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         let result = GlobalValidator::new(AbstractSyntaxTree::default())
             .validate_binary_bitwise_expression(&BinaryOp::BitwiseAnd, left, right, span);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().ty.kind, HlirTypeKind::Long(true),);
+        assert_eq!(result.unwrap().ty.kind, MlirTypeKind::Long(true),);
     }
 }

@@ -1,4 +1,4 @@
-use crate::analysis::hlir::HlirType;
+use crate::analysis::mlir::MlirType;
 use crate::parser::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
 use crate::util::str_intern::InternedStr;
 use crate::util::Span;
@@ -273,6 +273,9 @@ pub enum CompilerError {
 
     #[error("Keyword 'break' has no corresponding loop: {0}")]
     BreakWithoutLoop(Span),
+
+    #[error("Function '{0}' has no return or is not guaranteed to return: {1}")]
+    FunctionMissingReturn(String, Span),
 }
 
 #[derive(Error, Debug)]
