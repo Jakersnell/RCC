@@ -6,6 +6,7 @@ use crate::util::str_intern::InternedStr;
 use derive_new::new;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::{write, Display, Formatter};
 use std::hash::Hasher;
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -50,7 +51,27 @@ impl<'a> BasicBlock<'a> {
     }
 }
 
-#[derive(PartialEq, Hash, PartialOrd)]
+impl<'a> Eq for BasicBlock<'a> {}
+impl<'a> Display for BasicBlock<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            BasicBlockKind::Start => {
+                write!(f, "<start>")
+            }
+            BasicBlockKind::End => {
+                write!(f, "<end>")
+            }
+            BasicBlockKind::Base => {
+                for stmt in &self.statements {
+                    write!(f, "{}", stmt.type_to_string())?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Hash, PartialOrd, Eq)]
 enum BasicBlockKind {
     Base,
     Start,
@@ -84,6 +105,16 @@ impl<'a> BasicBlockEdge<'a> {
             from,
             to,
             condition,
+        }
+    }
+}
+
+impl<'a> Display for BasicBlockEdge<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.condition.is_some() {
+            write!(f, "<has condition>")
+        } else {
+            write!(f, "<no condition>")
         }
     }
 }
@@ -148,19 +179,19 @@ pub struct GraphFactory<'a> {
 }
 
 impl<'a> GraphFactory<'a> {
-    fn new(start: Rc<RefCell<BasicBlock<'a>>>, end: Rc<RefCell<BasicBlock<'a>>>) -> Self {
+    fn new() -> Self {
         Self {
             block_from_statement: HashMap::new(),
             block_from_label: HashMap::new(),
             edges: Vec::new(),
-            start,
-            end,
+            start: block!(BasicBlockKind::Start),
+            end: block!(BasicBlockKind::End),
         }
     }
 
     fn build(mut self, blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>) -> ControlFlowGraph<'a> {
         let mut blocks = blocks;
-        if let Some(block) = blocks.iter().next() {
+        if let Some(block) = blocks.first() {
             self.connect(self.start.clone(), block.clone(), None);
         } else {
             self.connect(self.start.clone(), self.end.clone(), None);
@@ -301,4 +332,68 @@ pub struct ControlFlowGraph<'a> {
     end: Rc<RefCell<BasicBlock<'a>>>,
     blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
     edges: Vec<Rc<BasicBlockEdge<'a>>>,
+}
+
+impl<'a> ControlFlowGraph<'a> {
+    pub fn new(mlir: &'a MlirBlock) -> Self {
+        let block_factory = BasicBlockFactory::new(mlir);
+        let blocks = block_factory.build();
+        let graph_factory = GraphFactory::new();
+        graph_factory.build(blocks)
+    }
+
+    pub fn all_paths_return(&self) -> bool {
+        for edge in &self.end.borrow().incoming {
+            let borrow = edge.from.borrow();
+            let last = borrow.incoming.last().and_then(|edge| {
+                edge.from
+                    .borrow()
+                    .statements
+                    .last()
+                    .map(|stmt| !matches!(stmt, MlirStmt::Return(_)))
+            });
+            if last.is_none() || last.unwrap() {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl<'a> Display for ControlFlowGraph<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        macro_rules! quote {
+            ($text:expr) => {
+                format!(
+                    "\"{}\"",
+                    $text
+                        .trim_end()
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"")
+                        .replace("\n", "\\l")
+                )
+            };
+        }
+        write!(f, "digraph G {{")?;
+        macro_rules! id {
+            ($block:expr) => {
+                format!("N{}", $block.borrow().id)
+            };
+        }
+
+        for block in &self.blocks {
+            let id = id!(block);
+            let label = quote!(block.borrow().to_string());
+            write!(f, "    {id}[label = {label}, shape = box]")?;
+        }
+
+        for edge in &self.edges {
+            let from_id = edge.from.borrow().id;
+            let to_id = edge.to.borrow().id;
+            let label = quote!(edge.to_string());
+            write!(f, "    {from_id} -> {to_id} [label = {label}]")?;
+        }
+
+        writeln!(f, "}}")
+    }
 }
