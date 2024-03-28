@@ -18,6 +18,10 @@ mod util;
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't have a compiler.
 
+static DISPLAY_AST: bool = false;
+static OUTPUT_GRAPH: bool = true;
+static DISPLAY_MLIR: bool = false;
+static PRETTY_PRINT_AST: bool = false;
 fn main() {}
 
 /// Contains integration tests for the components and their cohesion

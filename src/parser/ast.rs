@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
 use crate::lexer::tokens::{Keyword, Literal, Symbol, Token};
@@ -18,6 +18,15 @@ impl Deref for AbstractSyntaxTree {
     type Target = Vec<InitDeclaration>;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Display for AbstractSyntaxTree {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for init in &self.0 {
+            write!(f, "{}", init)?;
+        }
+        Ok(())
     }
 }
 

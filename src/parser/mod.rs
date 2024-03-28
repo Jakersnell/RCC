@@ -1,3 +1,4 @@
+use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
 use arcstr::ArcStr;
 use ast::*;
 use macros::*;
@@ -68,9 +69,15 @@ where
             }
             global.push(init_dec.unwrap());
         }
-        Ok(AbstractSyntaxTree::new(
-            global.into_iter().map(|dec| dec.value).collect(),
-        ))
+        let ast = AbstractSyntaxTree::new(global.into_iter().map(|dec| dec.value).collect());
+        if DISPLAY_AST || PRETTY_PRINT_AST {
+            if cfg!(PRETTY_PRINT_AST) {
+                println!("{}", ast);
+            } else {
+                println!("{:#?}", ast);
+            }
+        }
+        Ok(ast)
     }
 
     #[inline(always)]
