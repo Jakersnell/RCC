@@ -3,11 +3,14 @@ use crate::analysis::mlir::{
     VOID_TYPE,
 };
 use crate::util::str_intern::InternedStr;
+use crate::OUTPUT_GRAPH;
 use derive_new::new;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{write, Debug, Display, Formatter};
+use std::fs::File;
 use std::hash::Hasher;
+use std::io::{BufWriter, Write};
 use std::ops::{DerefMut, Index};
 use std::rc::Rc;
 
@@ -98,7 +101,7 @@ impl<'a> Display for BasicBlock<'a> {
             }
             BasicBlockKind::Base => {
                 for stmt in &self.statements {
-                    write!(f, "{}", stmt.type_to_string())?;
+                    writeln!(f, "{:#?}", stmt.type_to_string())?;
                 }
                 Ok(())
             }
@@ -199,7 +202,6 @@ impl<'a> BasicBlockFactory<'a> {
                 .borrow_mut()
                 .statements
                 .extend(std::mem::take(&mut self.statements));
-            debug_assert!(self.statements.is_empty());
             self.blocks.push(block);
         }
     }
@@ -363,13 +365,24 @@ pub struct ControlFlowGraph<'a> {
     blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
     edges: Vec<Rc<BasicBlockEdge<'a>>>,
 }
-
+static mut GRAPH_COUNT: usize = 0;
 impl<'a> ControlFlowGraph<'a> {
     pub fn new(mlir: &'a MlirBlock) -> Self {
         let block_factory = BasicBlockFactory::new(mlir);
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
-        graph_factory.build(blocks)
+        let cfg = graph_factory.build(blocks);
+        if OUTPUT_GRAPH {
+            let cfg_to_string = cfg.to_string();
+            let mut file = File::create(format!("graph_{}.dot", unsafe {
+                GRAPH_COUNT += 1;
+                GRAPH_COUNT
+            }))
+            .unwrap();
+            let mut writer = BufWriter::new(file);
+            writer.write_all(cfg_to_string.as_bytes());
+        }
+        cfg
     }
 
     pub fn all_paths_return(&self) -> bool {
@@ -398,7 +411,7 @@ impl<'a> Display for ControlFlowGraph<'a> {
                 )
             };
         }
-        write!(f, "digraph G {{")?;
+        writeln!(f, "digraph G {{")?;
         macro_rules! id {
             ($block:expr) => {
                 format!("N{}", $block.borrow().id)
@@ -408,14 +421,14 @@ impl<'a> Display for ControlFlowGraph<'a> {
         for block in &self.blocks {
             let id = id!(block);
             let label = quote!(block.borrow().to_string());
-            write!(f, "    {id}[label = {label}, shape = box]")?;
+            writeln!(f, "    {id}[label = {label}, shape = box]")?;
         }
 
         for edge in &self.edges {
             let from_id = edge.from.borrow().id;
             let to_id = edge.to.borrow().id;
             let label = quote!(edge.to_string());
-            write!(f, "    {from_id} -> {to_id} [label = {label}]")?;
+            writeln!(f, "    N{from_id} -> N{to_id} [label = {label}]")?;
         }
 
         writeln!(f, "}}")
