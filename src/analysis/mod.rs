@@ -98,13 +98,7 @@ impl GlobalValidator {
                 Function(locatable_function) => {
                     push_locatable!(
                         functions,
-                        |item| {
-                            let func = self.validate_function_definition(item);
-                            if let Ok(func) = &func {
-                                self.validate_function_return(func, locatable_function.location);
-                            }
-                            func
-                        },
+                        |item| self.validate_function_definition(item),
                         locatable_function
                     )
                 }
@@ -151,16 +145,6 @@ impl GlobalValidator {
                 structs,
                 globals,
             })
-        }
-    }
-
-    fn validate_function_return(&mut self, function: &MlirFunction, span: Span) {
-        let cfg = control_flow::ControlFlowGraph::new(&function.body);
-        if !cfg.all_paths_return() {
-            self.report_error(CompilerError::FunctionMissingReturn(
-                function.ident.to_string(),
-                span,
-            ));
         }
     }
 

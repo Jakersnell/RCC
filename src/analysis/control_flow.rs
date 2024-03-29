@@ -6,9 +6,9 @@ use crate::util::str_intern::InternedStr;
 use derive_new::new;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{write, Display, Formatter};
+use std::fmt::{write, Debug, Display, Formatter};
 use std::hash::Hasher;
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Index};
 use std::rc::Rc;
 
 /*
@@ -28,11 +28,46 @@ static mut BLOCK_COUNT: usize = 0;
 
 #[derive(PartialEq, Hash, PartialOrd)]
 pub struct BasicBlock<'a> {
+    id: usize,
     kind: BasicBlockKind,
     statements: Vec<&'a MlirStmt>,
     incoming: Vec<Rc<BasicBlockEdge<'a>>>,
     outgoing: Vec<Rc<BasicBlockEdge<'a>>>,
-    id: usize,
+}
+
+impl<'a> Debug for BasicBlock<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "BasicBlock {{")?;
+        writeln!(f, "    id: {},", self.id)?;
+        writeln!(f, "    kind: {:#?}", self.kind)?;
+        writeln!(f, "    statements: [")?;
+        for stmt in &self.statements {
+            writeln!(f, "        {},", stmt.type_to_string())?;
+        }
+        writeln!(f, "    ],")?;
+        macro_rules! write_edges {
+            ($location:ident) => {
+                writeln!(f, "    {}: [", stringify!($location));
+                for edge in &self.$location {
+                    writeln!(
+                        f,
+                        "        edge {{ from: {}, to: {}, condition: {} }},",
+                        edge.from.borrow().id,
+                        edge.to.borrow().id,
+                        if edge.condition.is_some() {
+                            "Some"
+                        } else {
+                            "None"
+                        }
+                    )?;
+                }
+                writeln!(f, "    ],")?;
+            };
+        }
+        write_edges!(incoming);
+        write_edges!(outgoing);
+        Ok(())
+    }
 }
 
 impl<'a> BasicBlock<'a> {
@@ -71,14 +106,14 @@ impl<'a> Display for BasicBlock<'a> {
     }
 }
 
-#[derive(PartialEq, Hash, PartialOrd, Eq)]
+#[derive(PartialEq, Hash, PartialOrd, Eq, Debug)]
 pub enum BasicBlockKind {
     Base,
     Start,
     End,
 }
 
-#[derive(PartialEq, PartialOrd)]
+#[derive(PartialEq, PartialOrd, Debug)]
 pub struct BasicBlockEdge<'a> {
     from: Rc<RefCell<BasicBlock<'a>>>,
     to: Rc<RefCell<BasicBlock<'a>>>,
@@ -180,12 +215,14 @@ pub struct GraphFactory<'a> {
 
 impl<'a> GraphFactory<'a> {
     pub fn new() -> Self {
+        let start = Rc::new(RefCell::new(BasicBlock::new(BasicBlockKind::Start)));
+        let end = Rc::new(RefCell::new(BasicBlock::new(BasicBlockKind::End)));
         Self {
             block_from_statement: HashMap::new(),
             block_from_label: HashMap::new(),
             edges: Vec::new(),
-            start: block!(BasicBlockKind::Start),
-            end: block!(BasicBlockKind::End),
+            start,
+            end,
         }
     }
 
@@ -213,7 +250,7 @@ impl<'a> GraphFactory<'a> {
             } else {
                 blocks[i + 1].clone()
             };
-            for stmt in &current.borrow().statements {
+            for stmt in unsafe { &current.try_borrow_unguarded().unwrap().statements } {
                 let is_last_in_block = current
                     .borrow()
                     .statements
@@ -251,10 +288,10 @@ impl<'a> GraphFactory<'a> {
                     }
                     MlirStmt::Expression(_)
                     | MlirStmt::VariableDeclaration(_)
-                    | MlirStmt::Label(_)
-                        if is_last_in_block =>
-                    {
-                        self.connect(current.clone(), next.clone(), None);
+                    | MlirStmt::Label(_) => {
+                        if is_last_in_block {
+                            self.connect(current.clone(), next.clone(), None);
+                        }
                     }
                     _ => panic!("Unexpected statement: {}", stmt.type_to_string()),
                 }
@@ -276,9 +313,9 @@ impl<'a> GraphFactory<'a> {
         blocks.push(self.end.clone());
 
         ControlFlowGraph {
-            start: std::mem::replace(&mut self.start, block!(BasicBlockKind::Start)),
-            end: std::mem::replace(&mut self.end, block!(BasicBlockKind::End)),
-            edges: std::mem::take(&mut self.edges),
+            start: self.start,
+            end: self.end,
+            edges: self.edges,
             blocks,
         }
     }
@@ -301,32 +338,25 @@ impl<'a> GraphFactory<'a> {
         blocks: &mut Vec<Rc<RefCell<BasicBlock<'a>>>>,
         block: Rc<RefCell<BasicBlock<'a>>>,
     ) {
-        macro_rules! remove_edge {
-            ($remove_from:ident, $location:ident, $sub_location:ident) => {
-                for edge in &block.borrow().$remove_from {
-                    if let Some(index) = edge
-                        .$location
-                        .borrow()
-                        .$sub_location
-                        .iter()
-                        .position(|iter_edge| **iter_edge == **edge)
-                    {
-                        edge.$location.borrow_mut().$sub_location.remove(index);
-                    }
-                }
-            };
+        for edge in unsafe { &block.try_borrow_unguarded().unwrap().incoming } {
+            edge.from
+                .borrow_mut()
+                .outgoing
+                .retain(|_edge| **_edge != **edge);
+            self.edges.retain(|_edge| **_edge != **edge);
         }
-        remove_edge!(incoming, from, outgoing);
-        remove_edge!(outgoing, to, incoming);
-        blocks.remove(
-            blocks
-                .iter()
-                .position(|_block| **_block == *block)
-                .expect("Block not properly inserted into main vec."),
-        );
+        for edge in unsafe { &block.try_borrow_unguarded().unwrap().outgoing } {
+            edge.to
+                .borrow_mut()
+                .incoming
+                .retain(|_edge| **_edge != **edge);
+            self.edges.retain(|_edge| **_edge != **edge);
+        }
+        blocks.retain(|_block| **_block != *block);
     }
 }
 
+#[derive(Debug)]
 pub struct ControlFlowGraph<'a> {
     start: Rc<RefCell<BasicBlock<'a>>>,
     end: Rc<RefCell<BasicBlock<'a>>>,
@@ -345,14 +375,8 @@ impl<'a> ControlFlowGraph<'a> {
     pub fn all_paths_return(&self) -> bool {
         for edge in &self.end.borrow().incoming {
             let borrow = edge.from.borrow();
-            let last = borrow.incoming.last().and_then(|edge| {
-                edge.from
-                    .borrow()
-                    .statements
-                    .last()
-                    .map(|stmt| !matches!(stmt, MlirStmt::Return(_)))
-            });
-            if last.is_none() || last.unwrap() {
+            let last = borrow.statements.last();
+            if !last.is_some_and(|last| matches!(last, MlirStmt::Return(_))) {
                 return false;
             }
         }

@@ -10,4 +10,5 @@ struct test2 {
 
 int main() {
     struct test2 t2;
+    return 0;
 }

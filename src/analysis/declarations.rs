@@ -1,6 +1,6 @@
 use crate::analysis::mlir::*;
 use crate::analysis::symbols::SymbolResolver;
-use crate::analysis::{GlobalValidator, SharedReporter};
+use crate::analysis::{control_flow, GlobalValidator, SharedReporter};
 use crate::parser::ast::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::{Locatable, Span};
@@ -112,14 +112,25 @@ impl GlobalValidator {
         }
         let body = func.body.location.into_locatable(body);
         self.return_ty = None;
-
-        Ok(MlirFunction {
+        let func = MlirFunction {
             span: func_span,
             ty,
             ident,
             parameters,
             body,
-        })
+        };
+        self.validate_function_return(&func, func_span);
+        Ok(func)
+    }
+
+    fn validate_function_return(&mut self, function: &MlirFunction, span: Span) {
+        let cfg = control_flow::ControlFlowGraph::new(&function.body);
+        if !cfg.all_paths_return() {
+            self.report_error(CompilerError::FunctionMissingReturn(
+                function.ident.to_string(),
+                span,
+            ));
+        }
     }
 
     fn flatten_blocks(hlir_block: MlirBlock) -> MlirBlock {
