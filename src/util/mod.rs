@@ -1,10 +1,9 @@
-pub mod arch;
 pub mod ast_pretty_print;
 pub mod error;
 pub mod str_intern;
 
-use crate::lexer::tokens::Token as LexToken;
-use crate::parser::ast::InitDeclaration;
+use crate::data::ast::InitDeclaration;
+use crate::data::tokens::Token as LexToken;
 use crate::util::error::CompilerWarning;
 use arcstr::ArcStr;
 use derive_new::new;

@@ -1,9 +1,9 @@
 #![allow(unused)]
 
-use crate::analysis::mlir::MlirTypeKind;
 use crate::analysis::GlobalValidator;
+use crate::data::ast::AbstractSyntaxTree;
+use crate::data::mlir::MlirTypeKind;
 use crate::lexer::Lexer;
-use crate::parser::ast::AbstractSyntaxTree;
 use crate::parser::Parser;
 use crate::util::error::{CompilerError, CompilerWarning};
 use std::cell::RefCell;
@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 mod analysis;
+mod data;
 mod lexer;
 mod parser;
 mod util;
@@ -22,24 +23,17 @@ mod util;
 /// Cant compile a program if you don't have a compiler.
 
 static DISPLAY_AST: bool = false;
-static OUTPUT_GRAPH: bool = true;
+static OUTPUT_GRAPH: bool = false;
 static DISPLAY_MLIR: bool = false;
 static PRETTY_PRINT_AST: bool = false;
-fn main() {
-    let source =
-        std::fs::read_to_string("_c_test_files/should_fail/control_flow_analysis.c").unwrap();
-    let lexer = Lexer::new(source.into());
-    let parser = Parser::new(lexer);
-    let analyzer = GlobalValidator::new(parser.parse_all().unwrap());
-    let result = analyzer.validate();
-}
+fn main() {}
 
 /// Contains integration tests for the components and their cohesion
 #[cfg(test)]
 mod tests {
 
     use crate::analysis::SharedReporter;
-    use crate::parser::ast::{AbstractSyntaxTree, Expression, InitDeclaration};
+    use crate::data::ast::{AbstractSyntaxTree, Expression, InitDeclaration};
     use crate::parser::ParseResult;
     use crate::util::error::{CompilerError, CompilerWarning};
     use crate::util::{CompilerResult, Locatable};
@@ -137,7 +131,7 @@ mod tests {
             .expect("Expected initializer in variable declaration.");
 
         match init {
-            Expression::Unary(crate::parser::ast::UnaryOp::AddressOf, _) => (),
+            Expression::Unary(crate::data::ast::UnaryOp::AddressOf, _) => (),
             _ => panic!("Incorrect Parse Tree: Expected unary operator AddressOf '&'"),
         };
     }
