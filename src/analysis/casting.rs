@@ -1,4 +1,4 @@
-use crate::analysis::mlir::*;
+use crate::data::mlir::*;
 use crate::util::Span;
 use std::cmp::Ordering;
 

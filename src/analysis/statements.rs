@@ -1,11 +1,11 @@
-use crate::analysis::mlir::MlirTypeDecl::Basic;
-use crate::analysis::mlir::MlirTypeKind::Void;
-use crate::analysis::mlir::{
+use crate::analysis::GlobalValidator;
+use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
+use crate::data::mlir::MlirTypeDecl::Basic;
+use crate::data::mlir::MlirTypeKind::Void;
+use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl,
     MlirTypeKind,
 };
-use crate::analysis::GlobalValidator;
-use crate::parser::ast::{Block, Expression, Statement, VariableDeclaration};
 use crate::util::error::CompilerError;
 use crate::util::{str_intern, Locatable, Span};
 use std::env::var;
@@ -102,7 +102,6 @@ impl GlobalValidator {
         let conditional_goto = MlirStmt::GotoFalse(condition, jump_to);
         block.push(conditional_goto);
 
-        let then_span = then.location;
         if let Some(then) = self.validate_statement(then)? {
             block.push(then);
         }

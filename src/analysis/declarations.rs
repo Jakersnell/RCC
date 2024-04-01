@@ -1,7 +1,7 @@
-use crate::analysis::mlir::*;
 use crate::analysis::symbols::SymbolResolver;
 use crate::analysis::{control_flow, GlobalValidator, SharedReporter};
-use crate::parser::ast::*;
+use crate::data::ast::*;
+use crate::data::mlir::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::{Locatable, Span};
 use std::cell::RefCell;

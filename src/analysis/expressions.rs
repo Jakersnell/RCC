@@ -1,13 +1,13 @@
 use crate::analysis::casting::{explicit_cast, implicit_cast};
-use crate::analysis::mlir::{
-    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
-};
 use crate::analysis::symbols::SymbolResult;
 use crate::analysis::GlobalValidator;
-use crate::lexer::tokens::Literal;
-use crate::parser::ast::{
+use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
+use crate::data::mlir::{
+    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
+};
+use crate::data::tokens::Literal;
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
@@ -85,7 +85,7 @@ impl GlobalValidator {
     }
 
     pub(super) fn sizeof(&mut self, ty: &MlirType, span: Span) -> u64 {
-        use crate::util::arch::*;
+        use crate::data::arch::*;
         if ty.is_pointer() {
             return POINTER_SIZE;
         }

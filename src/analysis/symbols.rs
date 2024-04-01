@@ -1,4 +1,4 @@
-use crate::analysis::mlir::{
+use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
     MlirVariable,
 };

@@ -1,4 +1,4 @@
-use crate::parser::ast::{BinaryOp, Block, TypeSpecifier};
+use crate::data::ast::{BinaryOp, Block, TypeSpecifier};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};

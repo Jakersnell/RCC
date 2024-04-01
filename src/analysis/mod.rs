@@ -3,13 +3,12 @@ mod casting;
 mod control_flow;
 mod declarations;
 mod expressions;
-pub mod mlir;
 mod statements;
 mod symbols;
 
-use crate::analysis::mlir::*;
 use crate::analysis::symbols::SymbolResolver;
-use crate::parser::ast::*;
+use crate::data::ast::*;
+use crate::data::mlir::*;
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
@@ -80,7 +79,7 @@ impl GlobalValidator {
             };
         }
         for node in &*ast {
-            use crate::parser::ast::InitDeclaration::*;
+            use crate::data::ast::InitDeclaration::*;
             match node {
                 Declaration(locatable_variable) => {
                     push_locatable!(

@@ -1,4 +1,4 @@
-use crate::analysis::mlir::{
+use crate::data::mlir::{
     MidLevelIR, MlirBlock, MlirExpr, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
     VOID_TYPE,
 };
@@ -328,7 +328,6 @@ impl<'a> GraphFactory<'a> {
         to: Rc<RefCell<BasicBlock<'a>>>,
         condition: Option<(&'a MlirExpr, bool)>,
     ) {
-        // in the future id like to have a folded literal check here.
         let mut edge = Rc::new(BasicBlockEdge::new(from.clone(), to.clone(), condition));
         from.borrow_mut().outgoing.push(edge.clone());
         to.borrow_mut().incoming.push(edge.clone());
