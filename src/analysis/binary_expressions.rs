@@ -1,7 +1,7 @@
 use crate::analysis::casting::*;
-use crate::analysis::mlir::*;
 use crate::analysis::*;
-use crate::parser::ast::{AbstractSyntaxTree, AssignOp, BinaryOp};
+use crate::data::ast::{AbstractSyntaxTree, AssignOp, BinaryOp};
+use crate::data::mlir::*;
 use crate::util::error::CompilerError;
 use crate::util::Span;
 
@@ -283,7 +283,7 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         (MlirTypeKind::Long(false), MlirTypeKind::Int(false)),
         (MlirTypeKind::Long(false), MlirTypeKind::Long(false)),
     ];
-    use super::mlir::*;
+    use crate::data::mlir::*;
     macro_rules! make_expr {
         ($kind:expr) => {
             MlirExpr {

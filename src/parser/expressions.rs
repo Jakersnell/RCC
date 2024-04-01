@@ -1,7 +1,7 @@
 use super::macros::*;
-use crate::lexer::tokens::{Symbol, Token};
+use crate::data::ast::{BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp};
+use crate::data::tokens::{Symbol, Token};
 use crate::lexer::LexResult;
-use crate::parser::ast::{BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp};
 use crate::parser::{ParseResult, Parser};
 use crate::util::error::CompilerError;
 use crate::util::Locatable;

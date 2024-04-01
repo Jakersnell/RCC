@@ -1,19 +1,18 @@
+use crate::data::ast::*;
 use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
 use arcstr::ArcStr;
-use ast::*;
 use macros::*;
 use rand::RngCore;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::lexer::tokens::{Keyword, Literal};
-use crate::lexer::tokens::{Symbol, Token};
+use crate::data::tokens::{Keyword, Literal};
+use crate::data::tokens::{Symbol, Token};
 use crate::lexer::{LexResult, Lexer};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, LocatableToken, Span};
 
-pub mod ast;
 pub(super) mod declarations;
 pub(super) mod expressions;
 pub(super) mod macros;

@@ -1,6 +1,6 @@
-use crate::lexer::tokens::{Keyword, Symbol, Token};
+use crate::data::ast::{Block, Expression, Statement};
+use crate::data::tokens::{Keyword, Symbol, Token};
 use crate::lexer::LexResult;
-use crate::parser::ast::{Block, Expression, Statement};
 use crate::parser::macros::{confirm, is};
 use crate::parser::{ParseResult, Parser};
 use crate::util::error::CompilerError;
