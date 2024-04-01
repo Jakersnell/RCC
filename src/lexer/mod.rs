@@ -1,16 +1,13 @@
 mod literals;
 mod symbols;
-pub mod tokens;
 mod trivial;
 
-use crate::lexer::tokens::Token;
-use crate::util::error::{CompilerError, CompilerWarning};
+use crate::data::tokens::Token;
+use crate::util::error::CompilerError;
 use crate::util::*;
 use crate::util::{Locatable, Span};
 use arcstr::ArcStr;
-use std::cell::RefCell;
 use std::io::Read;
-use std::rc::Rc;
 
 pub type LexResult = Result<Locatable<Token>, Vec<CompilerError>>;
 
@@ -141,10 +138,7 @@ impl Iterator for Lexer {
 #[cfg(test)]
 mod tests {
     use super::Lexer;
-    use crate::lexer::tokens::{Literal, Symbol, Token};
-    use crate::util::error::{CompilerError, CompilerWarning};
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use crate::data::tokens::{Literal, Symbol, Token};
 
     #[test]
     fn test_current_is_first_char() {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::lexer::tokens::Literal;
+use crate::data::tokens::Literal;
 
 impl Lexer {
     pub(super) fn eat_number(&mut self) -> Option<Token> {

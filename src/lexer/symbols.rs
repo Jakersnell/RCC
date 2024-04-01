@@ -1,5 +1,5 @@
 use super::*;
-use crate::lexer::tokens::{Keyword, Symbol};
+use crate::data::tokens::{Keyword, Symbol};
 
 impl Lexer {
     pub(super) fn eat_ident_or_keyword(&mut self) -> Option<Token> {
@@ -31,7 +31,7 @@ impl Lexer {
     }
 
     pub(super) fn eat_symbol(&mut self) -> Option<Token> {
-        use crate::lexer::tokens::Symbol::*;
+        use crate::data::tokens::Symbol::*;
         macro_rules! single {
             ($kind:ident) => {
                 Some({

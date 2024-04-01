@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
-use crate::lexer::tokens::{Keyword, Literal, Symbol, Token};
+use crate::data::tokens::{Keyword, Literal, Symbol, Token};
 use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
 

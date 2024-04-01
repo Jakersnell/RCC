@@ -1,6 +1,5 @@
-use crate::lexer::tokens::Literal;
-use crate::parser::ast::UnaryOp::Plus;
-use crate::parser::ast::*;
+use crate::data::ast::*;
+use crate::data::tokens::Literal;
 use std::fmt::{write, Display, Formatter};
 
 // good util for pretty printing the ast
@@ -113,7 +112,7 @@ impl Display for Expression {
 
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::Statement::*;
+        use crate::data::ast::Statement::*;
         write!(f, "<stmt> ");
         match self {
             Expression(expr) => {
@@ -190,7 +189,7 @@ impl Display for Block {
 
 impl Display for InitDeclaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::InitDeclaration::*;
+        use crate::data::ast::InitDeclaration::*;
         match self {
             Declaration(variable) => writeln!(f, "<init-var-dec> {};", variable),
             Function(function) => write!(f, "<fn> {}", function),
@@ -256,7 +255,7 @@ impl Display for Declaration {
 
 impl Display for TypeQualifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::TypeQualifier::*;
+        use crate::data::ast::TypeQualifier::*;
         let str = match self {
             Const => "const",
         }
@@ -267,16 +266,15 @@ impl Display for TypeQualifier {
 
 impl Display for TypeSpecifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::TypeSpecifier::*;
         match self {
-            Void => write!(f, "void"),
-            Char => write!(f, "char"),
-            Int => write!(f, "int"),
-            Long => write!(f, "long"),
-            Double => write!(f, "double"),
-            Signed => write!(f, "signed"),
-            Unsigned => write!(f, "unsigned"),
-            Struct(ident) => write!(f, "struct {}", ident),
+            TypeSpecifier::Void => write!(f, "void"),
+            TypeSpecifier::Char => write!(f, "char"),
+            TypeSpecifier::Int => write!(f, "int"),
+            TypeSpecifier::Long => write!(f, "long"),
+            TypeSpecifier::Double => write!(f, "double"),
+            TypeSpecifier::Signed => write!(f, "signed"),
+            TypeSpecifier::Unsigned => write!(f, "unsigned"),
+            TypeSpecifier::Struct(ident) => write!(f, "struct {}", ident),
         }
     }
 }
@@ -293,10 +291,9 @@ impl Display for StorageSpecifier {
 
 impl Display for TypeOrExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::TypeOrExpression::*;
         match self {
-            Type(ty) => write!(f, "{}", ty),
-            Expr(expr) => write!(f, "{}", expr),
+            TypeOrExpression::Type(ty) => write!(f, "{}", ty),
+            TypeOrExpression::Expr(expr) => write!(f, "{}", expr),
         }
     }
 }
@@ -322,7 +319,7 @@ impl Display for DeclarationSpecifier {
 
 impl Display for UnaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::UnaryOp::*;
+        use crate::data::ast::UnaryOp::*;
         let str = match self {
             Plus => "+",
             Negate => "-",
@@ -340,35 +337,33 @@ impl Display for UnaryOp {
 
 impl Display for BinaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::AssignOp;
-        use crate::parser::ast::BinaryOp::*;
         match self {
-            Add => write!(f, "+"),
-            Sub => write!(f, "-"),
-            Mul => write!(f, "*"),
-            Div => write!(f, "/"),
-            Mod => write!(f, "%"),
-            Equal => write!(f, "=="),
-            NotEqual => write!(f, "!="),
-            GreaterThan => write!(f, ">"),
-            GreaterThanEqual => write!(f, ">="),
-            LessThan => write!(f, "<"),
-            LessThanEqual => write!(f, "<="),
-            LogicalAnd => write!(f, "&&"),
-            LogicalOr => write!(f, "||"),
-            BitwiseAnd => write!(f, "&"),
-            BitwiseOr => write!(f, "|"),
-            BitwiseXor => write!(f, "^"),
-            LeftShift => write!(f, "<<"),
-            RightShift => write!(f, ">>"),
-            Assign(op) => write!(f, "{}", op),
+            BinaryOp::Add => write!(f, "+"),
+            BinaryOp::Sub => write!(f, "-"),
+            BinaryOp::Mul => write!(f, "*"),
+            BinaryOp::Div => write!(f, "/"),
+            BinaryOp::Mod => write!(f, "%"),
+            BinaryOp::Equal => write!(f, "=="),
+            BinaryOp::NotEqual => write!(f, "!="),
+            BinaryOp::GreaterThan => write!(f, ">"),
+            BinaryOp::GreaterThanEqual => write!(f, ">="),
+            BinaryOp::LessThan => write!(f, "<"),
+            BinaryOp::LessThanEqual => write!(f, "<="),
+            BinaryOp::LogicalAnd => write!(f, "&&"),
+            BinaryOp::LogicalOr => write!(f, "||"),
+            BinaryOp::BitwiseAnd => write!(f, "&"),
+            BinaryOp::BitwiseOr => write!(f, "|"),
+            BinaryOp::BitwiseXor => write!(f, "^"),
+            BinaryOp::LeftShift => write!(f, "<<"),
+            BinaryOp::RightShift => write!(f, ">>"),
+            BinaryOp::Assign(op) => write!(f, "{}", op),
         }
     }
 }
 
 impl Display for AssignOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::AssignOp::*;
+        use crate::data::ast::AssignOp::*;
         let str = match self {
             Assign => "=",
             Plus => "+",
@@ -389,7 +384,7 @@ impl Display for AssignOp {
 
 impl Display for PostfixOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use crate::parser::ast::PostfixOp::*;
+        use crate::data::ast::PostfixOp::*;
         let str = match self {
             Increment => "++",
             Decrement => "--",
