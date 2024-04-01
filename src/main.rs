@@ -26,7 +26,14 @@ static DISPLAY_AST: bool = false;
 static OUTPUT_GRAPH: bool = false;
 static DISPLAY_MLIR: bool = false;
 static PRETTY_PRINT_AST: bool = false;
-fn main() {}
+fn main() {
+    let source =
+        std::fs::read_to_string("_c_test_files/should_fail/control_flow_analysis.c").unwrap();
+    let lexer = Lexer::new(source.into());
+    let parser = Parser::new(lexer);
+    let analyzer = GlobalValidator::new(parser.parse_all().unwrap());
+    let result = analyzer.validate();
+}
 
 /// Contains integration tests for the components and their cohesion
 #[cfg(test)]

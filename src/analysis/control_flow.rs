@@ -92,6 +92,7 @@ impl<'a> BasicBlock<'a> {
 impl<'a> Eq for BasicBlock<'a> {}
 impl<'a> Display for BasicBlock<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self.id);
         match self.kind {
             BasicBlockKind::Start => {
                 write!(f, "<start>")
@@ -174,19 +175,19 @@ impl<'a> BasicBlockFactory<'a> {
     pub fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
         for stmt in self.mlir.0.iter() {
             match &stmt {
-                MlirStmt::Label(_ident) => {
-                    self.transition_block();
-                    self.statements.push(stmt);
-                }
-                MlirStmt::Expression(_) | MlirStmt::VariableDeclaration(_) => {
-                    self.statements.push(stmt);
-                }
                 MlirStmt::Return(_)
                 | MlirStmt::Goto(_)
                 | MlirStmt::GotoFalse(_, _)
                 | MlirStmt::GotoTrue(_, _) => {
                     self.statements.push(stmt);
                     self.transition_block();
+                }
+                MlirStmt::Label(_ident) => {
+                    self.transition_block();
+                    self.statements.push(stmt);
+                }
+                MlirStmt::Expression(_) | MlirStmt::VariableDeclaration(_) => {
+                    self.statements.push(stmt);
                 }
                 _ => panic!("Unexpected statement: {}", stmt.type_to_string()),
             }
@@ -268,7 +269,7 @@ impl<'a> GraphFactory<'a> {
                     }
                     MlirStmt::GotoFalse(condition, label)
                     | MlirStmt::GotoTrue(condition, label) => {
-                        let jump_if_true = matches!(stmt, MlirStmt::GotoTrue(_, _));
+                        let jump_if_true = !matches!(stmt, MlirStmt::GotoTrue(_, _));
                         let to_block = self
                             .block_from_label
                             .get(label)
@@ -370,9 +371,9 @@ impl<'a> ControlFlowGraph<'a> {
         let block_factory = BasicBlockFactory::new(mlir);
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
-        let cfg = graph_factory.build(blocks);
-        if OUTPUT_GRAPH {
-            let cfg_to_string = cfg.to_string();
+        let graph = graph_factory.build(blocks);
+        if !cfg!(test) && OUTPUT_GRAPH {
+            let cfg_to_string = graph.to_string();
             let mut file = File::create(format!("graph_{}.dot", unsafe {
                 GRAPH_COUNT += 1;
                 GRAPH_COUNT
@@ -381,7 +382,7 @@ impl<'a> ControlFlowGraph<'a> {
             let mut writer = BufWriter::new(file);
             writer.write_all(cfg_to_string.as_bytes());
         }
-        cfg
+        graph
     }
 
     pub fn all_paths_return(&self) -> bool {

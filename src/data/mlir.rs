@@ -199,7 +199,7 @@ impl std::hash::Hash for MlirLiteral {
     }
 }
 
-#[derive(Debug, Clone, new, PartialEq, Hash, PartialOrd, Eq)]
+#[derive(Clone, new, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirExpr {
     pub span: Span,
     pub kind: Box<MlirExprKind>,
@@ -286,6 +286,12 @@ pub enum MlirExprKind {
     Cast(MlirType, MlirExpr),
 }
 
+impl std::fmt::Debug for MlirExpr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Expr")
+    }
+}
+
 impl MlirExprKind {
     pub fn is_literal(&self) -> bool {
         matches!(self, MlirExprKind::Literal(_))
@@ -336,6 +342,7 @@ pub enum MlirStmt {
     GotoFalse(MlirExpr, InternedStr),
     Return(Option<MlirExpr>),
 }
+
 impl MlirStmt {
     pub fn type_to_string(&self) -> String {
         match self {

@@ -88,31 +88,30 @@ impl GlobalValidator {
         then: &Locatable<Statement>,
         otherwise: &Option<Box<Locatable<Statement>>>,
     ) -> Result<Option<MlirStmt>, ()> {
-        let start_label = str_intern::intern(format!("label_{}", super::create_label()));
+        let start_label = str_intern::intern(format!("if_label_{}", super::create_label()));
         let else_label = str_intern::intern(format!("{}_else", start_label));
         let end_label = str_intern::intern(format!("{}_end", start_label));
         let mut block = Vec::new();
 
-        let condition = self.validate_expression(condition)?;
         let jump_to = if otherwise.is_some() {
             else_label.clone()
         } else {
             end_label.clone()
         };
+        let condition = self.validate_expression(condition)?;
         let conditional_goto = MlirStmt::GotoFalse(condition, jump_to);
         block.push(conditional_goto);
 
         if let Some(then) = self.validate_statement(then)? {
             block.push(then);
+            let goto_end = MlirStmt::Goto(end_label.clone());
+            block.push(goto_end);
         }
 
-        let else_label = MlirStmt::Label(else_label);
-        block.push(else_label);
-
         if let Some(otherwise) = otherwise {
+            let else_label = MlirStmt::Label(else_label);
+            block.push(else_label);
             if let Some(otherwise) = self.validate_statement(otherwise)? {
-                let jump_to_end = MlirStmt::Label(end_label.clone());
-                block.push(jump_to_end);
                 block.push(otherwise);
             }
         }
