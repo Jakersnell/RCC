@@ -1,14 +1,15 @@
 use crate::data::mlir::*;
+use crate::util::str_intern::get;
 use crate::util::Span;
 use std::cmp::Ordering;
 
 macro_rules! cast {
-    ($hlir:expr, $to:expr, $span:expr) => {{
+    ($hlir:expr, $to:expr, $cast_type:expr, $span:expr, $lval:literal) => {{
         MlirExpr {
             span: $span,
-            kind: Box::new(MlirExprKind::Cast($to.clone(), $hlir)),
+            kind: Box::new(MlirExprKind::Cast($cast_type, $hlir)),
             ty: $to,
-            is_lval: false,
+            is_lval: $lval,
         }
     }};
 }
@@ -29,7 +30,9 @@ pub(in crate::analysis) fn explicit_cast(
                 kind: to_kind.clone(),
                 decl: MlirTypeDecl::Pointer
             },
-            span
+            CastType::ArrayToPointer,
+            span,
+            true
         )),
         (kind, MlirTypeDecl::Pointer, to_kind, MlirTypeDecl::Pointer) => Ok(cast!(
             expr,
@@ -37,7 +40,9 @@ pub(in crate::analysis) fn explicit_cast(
                 kind: to_kind.clone(),
                 decl: MlirTypeDecl::Basic
             },
-            span
+            CastType::PointerToPointer,
+            span,
+            true
         )),
         (kind, MlirTypeDecl::Pointer, MlirTypeKind::Long(signed), MlirTypeDecl::Basic) => {
             Ok(cast!(
@@ -46,7 +51,9 @@ pub(in crate::analysis) fn explicit_cast(
                     kind: MlirTypeKind::Long(true),
                     decl: MlirTypeDecl::Basic
                 },
-                span
+                CastType::PointerToLong,
+                span,
+                true
             ))
         }
         (kind, MlirTypeDecl::Basic, cast_kind, MlirTypeDecl::Basic)
@@ -67,29 +74,28 @@ pub(in crate::analysis) fn implicit_cast(
         return Ok(expr);
     }
     match (&cast_to.kind, &cast_to.decl, &expr.ty.kind, &expr.ty.decl) {
-        (_, MlirTypeDecl::Pointer, MlirTypeKind::Void, MlirTypeDecl::Pointer) => {
-            let ty = MlirType {
+        (_, MlirTypeDecl::Pointer, MlirTypeKind::Void, MlirTypeDecl::Pointer) => Ok(cast!(
+            expr,
+            MlirType {
                 kind: MlirTypeKind::Void,
                 decl: MlirTypeDecl::Pointer,
-            };
-            Ok(MlirExpr {
-                kind: Box::new(MlirExprKind::Cast(ty.clone(), expr)),
-                is_lval: false,
-                ty,
-                span,
-            })
-        }
+            },
+            CastType::PointerToPointer,
+            span,
+            false
+        )),
         (kind, MlirTypeDecl::Array(_), cast_kind, MlirTypeDecl::Pointer) if kind == cast_kind => {
-            let ty = MlirType {
-                kind: cast_kind.clone(),
-                decl: MlirTypeDecl::Pointer,
-            };
-            Ok(MlirExpr {
+            let kind = cast_kind.clone();
+            Ok(cast!(
+                expr,
+                MlirType {
+                    kind,
+                    decl: MlirTypeDecl::Pointer,
+                },
+                CastType::ArrayToPointer,
                 span,
-                kind: Box::new(MlirExprKind::Cast(ty.clone(), expr)),
-                is_lval: false,
-                ty,
-            })
+                false
+            ))
         }
         (casting_kind, MlirTypeDecl::Basic, cast_kind, MlirTypeDecl::Basic) => {
             Ok(cast_numeric_to_numeric(cast_to, expr, span))
@@ -107,18 +113,32 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(
     debug_assert!(expr.ty.decl == MlirTypeDecl::Basic);
     if matches!(
         (&expr.ty.kind, &cast_to.kind),
-        (MlirTypeKind::Double, MlirTypeKind::Float) | (MlirTypeKind::Int(_), MlirTypeKind::Float)
+        (MlirTypeKind::Double, MlirTypeKind::Float)
     ) {
-        let ty = MlirType {
-            kind: MlirTypeKind::Float,
-            decl: MlirTypeDecl::Basic,
-        };
-        MlirExpr {
+        cast!(
+            expr,
+            MlirType {
+                kind: MlirTypeKind::Float,
+                decl: MlirTypeDecl::Basic,
+            },
+            CastType::DoubleToFloat,
             span,
-            kind: Box::new(MlirExprKind::Cast(ty.clone(), expr)),
-            is_lval: false,
-            ty,
-        }
+            false
+        )
+    } else if matches!(
+        (&expr.ty.kind, &cast_to.kind),
+        | (MlirTypeKind::Int(_), MlirTypeKind::Float))
+    {
+        cast!(
+            expr,
+            MlirType {
+                kind: MlirTypeKind::Float,
+                decl: MlirTypeDecl::Basic,
+            },
+            CastType::IntToFloat,
+            span,
+            false
+        )
     } else {
         let expr_level = get_numeric_cast_hierarchy(&expr.ty.kind);
         let cast_level = get_numeric_cast_hierarchy(&cast_to.kind);
@@ -127,24 +147,34 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(
             Ordering::Greater => Some(promote_numeric(&cast_to.kind)),
             Ordering::Equal => None,
         };
-        if let Some(kind) = kind {
+        if let Some((cast_type, kind)) = kind {
             let ty = MlirType {
                 decl: MlirTypeDecl::Basic,
                 kind,
             };
             let casted_lower = cast_numeric_to_numeric(ty, expr, span);
+
             MlirExpr {
                 span,
-                kind: Box::new(MlirExprKind::Cast(cast_to.clone(), casted_lower)),
+                kind: Box::new(MlirExprKind::Cast(cast_type, casted_lower)),
                 ty: cast_to,
                 is_lval: false,
             }
         } else {
-            MlirExpr {
-                span,
-                kind: Box::new(MlirExprKind::Cast(cast_to.clone(), expr)),
-                is_lval: false,
-                ty: cast_to,
+            // type is unsigned to signed or vice versa
+            match (
+                get_numeric_signed(&expr.ty.kind),
+                get_numeric_signed(&cast_to.kind),
+            ) {
+                (true, false) => {
+                    let ty = expr.ty.clone();
+                    cast!(expr, ty, CastType::UnsignedToSigned, span, false)
+                }
+                (false, true) => {
+                    let ty = expr.ty.clone();
+                    cast!(expr, ty, CastType::SignedToUnsigned, span, false)
+                }
+                _ => expr,
             }
         }
     }
@@ -168,34 +198,34 @@ fn get_numeric_signed(ty: &MlirTypeKind) -> bool {
     }
 }
 
-fn demote_numeric(ty: &MlirTypeKind) -> MlirTypeKind {
+fn demote_numeric(ty: &MlirTypeKind) -> (CastType, MlirTypeKind) {
     // does not include double -> float, as this needs to be handled directly
     match ty {
-        MlirTypeKind::Double => MlirTypeKind::Long(false),
-        MlirTypeKind::Float => MlirTypeKind::Int(false),
-        MlirTypeKind::Long(_) => MlirTypeKind::Int(false),
-        MlirTypeKind::Int(_) => MlirTypeKind::Char(false),
-        _ => unreachable!(),
+        MlirTypeKind::Double => (CastType::LongToDouble, MlirTypeKind::Long(false)),
+        MlirTypeKind::Float => (CastType::IntToFloat, MlirTypeKind::Int(false)),
+        MlirTypeKind::Long(false) => (CastType::IntToLong, MlirTypeKind::Int(false)),
+        MlirTypeKind::Int(false) => (CastType::CharToInt, MlirTypeKind::Char(false)),
+        _ => panic!("Unexpected type: {:#?}", ty),
     }
 }
 
-fn promote_numeric(ty: &MlirTypeKind) -> MlirTypeKind {
+fn promote_numeric(ty: &MlirTypeKind) -> (CastType, MlirTypeKind) {
     // does not include int -> float
     match ty {
-        MlirTypeKind::Float => MlirTypeKind::Double,
-        MlirTypeKind::Long(_) => MlirTypeKind::Double,
-        MlirTypeKind::Int(_) => MlirTypeKind::Long(false),
-        MlirTypeKind::Char(_) => MlirTypeKind::Int(false),
-        _ => unreachable!(),
+        MlirTypeKind::Float => (CastType::DoubleToFloat, MlirTypeKind::Double),
+        MlirTypeKind::Long(false) => (CastType::DoubleToLong, MlirTypeKind::Double),
+        MlirTypeKind::Int(false) => (CastType::LongToInt, MlirTypeKind::Long(false)),
+        MlirTypeKind::Char(false) => (CastType::IntToChar, MlirTypeKind::Int(false)),
+        _ => panic!("Unexpected type: {:#?}", ty),
     }
 }
 
 fn get_numeric_cast_hierarchy(ty: &MlirTypeKind) -> u8 {
     match ty {
         MlirTypeKind::Double => 4,
-        MlirTypeKind::Long(_) => 3,
-        MlirTypeKind::Int(_) => 2,
-        MlirTypeKind::Char(_) => 1,
+        MlirTypeKind::Long(false) => 3,
+        MlirTypeKind::Int(false) => 2,
+        MlirTypeKind::Char(false) => 1,
         _ => unreachable!(),
     }
 }
@@ -203,7 +233,7 @@ fn get_numeric_cast_hierarchy(ty: &MlirTypeKind) -> u8 {
 #[cfg(test)]
 fn test_cast_structure(expr: MlirExpr, cast_to: MlirType, order: &[MlirTypeKind]) {
     let cast_structure = cast_numeric_to_numeric(cast_to, expr, Span::default());
-
+    println!("{:#?}", cast_structure);
     let mut given = cast_structure;
 
     for kind in order {
@@ -211,7 +241,7 @@ fn test_cast_structure(expr: MlirExpr, cast_to: MlirType, order: &[MlirTypeKind]
         assert_eq!(given_ty.kind, *kind);
         given = match *given.kind {
             MlirExprKind::Cast(ty, expr) => {
-                assert_eq!(ty.kind, *kind);
+                assert_eq!(given.ty.kind, *kind);
                 expr
             }
             _ => panic!("Unexpected expr type, expected HlirExprKind::Cast."),
