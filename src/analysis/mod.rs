@@ -4,6 +4,7 @@ mod constant_folding;
 mod control_flow;
 mod declarations;
 mod expressions;
+mod folding;
 mod statements;
 mod symbols;
 

@@ -199,7 +199,7 @@ impl std::hash::Hash for MlirLiteral {
     }
 }
 
-#[derive(Clone, new, PartialEq, Hash, PartialOrd, Eq)]
+#[derive(Debug, Clone, new, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirExpr {
     pub span: Span,
     pub kind: Box<MlirExprKind>,
@@ -283,13 +283,27 @@ pub enum MlirExprKind {
     },
     Index(MlirExpr, MlirExpr),
     Member(MlirExpr, InternedStr),
-    Cast(MlirType, MlirExpr),
+    Cast(CastType, MlirExpr),
 }
 
-impl std::fmt::Debug for MlirExpr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Expr")
-    }
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
+pub enum CastType {
+    ArrayToPointer,
+    PointerToPointer,
+    PointerToLong,
+    LongToPointer,
+    SignedToUnsigned,
+    UnsignedToSigned,
+    CharToInt,
+    IntToFloat,
+    IntToLong,
+    FloatToDouble,
+    LongToDouble,
+    DoubleToLong,
+    LongToInt,
+    IntToChar,
+    DoubleToFloat,
+    FloatToInt,
 }
 
 impl MlirExprKind {
