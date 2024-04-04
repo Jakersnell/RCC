@@ -67,7 +67,7 @@ impl Display for MlirType {
 
 impl MlirType {
     pub fn is_array(&self) -> bool {
-        matches!(self.decl, MlirTypeDecl::Array(_)) && !self.is_pointer()
+        matches!(self.decl, MlirTypeDecl::Array(_)) && !matches!(&self.decl, MlirTypeDecl::Pointer)
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -76,7 +76,9 @@ impl MlirType {
 
     pub fn is_numeric(&self) -> bool {
         use MlirTypeKind::*;
-        matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double) && !self.is_pointer()
+        matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double)
+            && !matches!(&self.decl, MlirTypeDecl::Pointer)
+            && !matches!(&self.decl, MlirTypeDecl::Array(_))
     }
 
     pub fn is_integer(&self) -> bool {
@@ -119,6 +121,10 @@ impl MlirType {
         };
 
         ty_kind.map(|kind| MlirType::new(kind, Basic))
+    }
+
+    pub fn is_basic(&self) -> bool {
+        self.decl == MlirTypeDecl::Basic
     }
 }
 
@@ -283,27 +289,7 @@ pub enum MlirExprKind {
     },
     Index(MlirExpr, MlirExpr),
     Member(MlirExpr, InternedStr),
-    Cast(CastType, MlirExpr),
-}
-
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
-pub enum CastType {
-    ArrayToPointer,
-    PointerToPointer,
-    PointerToLong,
-    LongToPointer,
-    SignedToUnsigned,
-    UnsignedToSigned,
-    CharToInt,
-    IntToFloat,
-    IntToLong,
-    FloatToDouble,
-    LongToDouble,
-    DoubleToLong,
-    LongToInt,
-    IntToChar,
-    DoubleToFloat,
-    FloatToInt,
+    Cast(MlirType, MlirExpr),
 }
 
 impl MlirExprKind {

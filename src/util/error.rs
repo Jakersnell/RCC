@@ -275,6 +275,12 @@ pub enum CompilerError {
 
     #[error("Function '{0}' has no return or is not guaranteed to return: {1}")]
     FunctionMissingReturn(String, Span),
+
+    #[error("Cannot implicitly cast '{0}' to '{1}': {2}")]
+    CannotImplicitCast(String, String, Span),
+
+    #[error("Cannot cast '{0}' to '{1}': {2}")]
+    CannotExplicitCast(String, String, Span),
 }
 
 #[derive(Error, Debug)]

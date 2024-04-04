@@ -1,4 +1,4 @@
-use crate::analysis::casting::{explicit_cast, implicit_cast};
+use crate::analysis::casting::*;
 use crate::analysis::symbols::SymbolResult;
 use crate::analysis::GlobalValidator;
 use crate::data::ast::{
@@ -215,16 +215,8 @@ impl GlobalValidator {
         for (arg, param_ty) in args.into_iter().zip(param_types.iter()) {
             let arg_ty = arg.0.ty.clone();
             let span = arg.1;
-            if let Ok(arg) = implicit_cast(param_ty.clone(), arg.0, span) {
-                processed_args.push((arg, span));
-            } else {
-                self.report_error(CompilerError::ArgumentTypeMismatch(
-                    arg_ty.to_string(),
-                    param_ty.to_string(),
-                    span,
-                ));
-                return Err(());
-            }
+            let arg = self.implicit_cast(arg.0, param_ty.clone(), span);
+            processed_args.push((arg, span));
         }
         processed_args.extend(var_args);
         Ok(processed_args)
@@ -293,14 +285,7 @@ impl GlobalValidator {
         let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false, false)?;
         let casting_ty_string = cast_to_ty.to_string();
         let expr_ty_string = expr.ty.to_string();
-        explicit_cast(cast_to_ty.clone(), expr, dec.location.merge(expr_location)).map_err(|_| {
-            let err = CompilerError::CannotCast(
-                expr_ty_string,
-                casting_ty_string,
-                dec.location.merge(expr_location),
-            );
-            self.report_error(err);
-        })
+        Ok(self.explicit_cast(expr, cast_to_ty.clone(), dec.location.merge(expr_location)))
     }
 
     pub(super) fn validate_literal(
@@ -476,19 +461,14 @@ impl GlobalValidator {
                     self.report_error(CompilerError::NotLogicalType(expr.ty.to_string(), span));
                     Ok(expr)
                 } else {
-                    let expr = implicit_cast(
-                        MlirType {
-                            decl: MlirTypeDecl::Basic,
-                            kind: MlirTypeKind::Int(false),
-                        },
-                        expr,
-                        span,
-                    )?;
-                    let ty = expr.ty.clone();
                     let expr = match op {
                         UnaryOp::LogicalNot => MlirExprKind::LogicalNot(expr),
                         UnaryOp::BitwiseNot => MlirExprKind::BitwiseNot(expr),
                         _ => unreachable!(),
+                    };
+                    let ty = MlirType {
+                        decl: MlirTypeDecl::Basic,
+                        kind: MlirTypeKind::Int(false),
                     };
                     Ok(MlirExpr {
                         span,
