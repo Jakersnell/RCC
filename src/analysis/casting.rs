@@ -2,6 +2,7 @@ use crate::data::mlir::*;
 use crate::util::str_intern::get;
 use crate::util::Span;
 use std::cmp::Ordering;
+use std::mem::discriminant;
 
 macro_rules! cast {
     ($hlir:expr, $to:expr, $cast_type:expr, $span:expr, $lval:literal) => {{
@@ -111,10 +112,21 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(
 ) -> MlirExpr {
     debug_assert!(cast_to.decl == MlirTypeDecl::Basic);
     debug_assert!(expr.ty.decl == MlirTypeDecl::Basic);
-    if matches!(
+    if expr.ty.kind == cast_to.kind {
+        expr
+    } else if discriminant(&expr.ty.kind) == discriminant(&cast_to.kind) {
+        let ty = expr.ty.clone();
+        if get_numeric_signed(&cast_to.kind) {
+            cast!(expr, ty, CastType::UnsignedToSigned, span, false)
+        } else {
+            cast!(expr, ty, CastType::SignedToUnsigned, span, false)
+        }
+    } else if matches!(
         (&expr.ty.kind, &cast_to.kind),
         (MlirTypeKind::Double, MlirTypeKind::Float)
     ) {
+        // double -> float && int -> float are handled separately
+        // as they would cause a clash in promote/demote logic
         cast!(
             expr,
             MlirType {
@@ -161,25 +173,10 @@ pub(in crate::analysis) fn cast_numeric_to_numeric(
                 is_lval: false,
             }
         } else {
-            // type is unsigned to signed or vice versa
-            match (
-                get_numeric_signed(&expr.ty.kind),
-                get_numeric_signed(&cast_to.kind),
-            ) {
-                (true, false) => {
-                    let ty = expr.ty.clone();
-                    cast!(expr, ty, CastType::UnsignedToSigned, span, false)
-                }
-                (false, true) => {
-                    let ty = expr.ty.clone();
-                    cast!(expr, ty, CastType::SignedToUnsigned, span, false)
-                }
-                _ => expr,
-            }
+            unreachable!()
         }
     }
 }
-
 fn give_numeric_sign(ty: MlirTypeKind, signed: bool) -> MlirTypeKind {
     match ty {
         MlirTypeKind::Long(_) => MlirTypeKind::Long(signed),
@@ -203,8 +200,8 @@ fn demote_numeric(ty: &MlirTypeKind) -> (CastType, MlirTypeKind) {
     match ty {
         MlirTypeKind::Double => (CastType::LongToDouble, MlirTypeKind::Long(false)),
         MlirTypeKind::Float => (CastType::IntToFloat, MlirTypeKind::Int(false)),
-        MlirTypeKind::Long(false) => (CastType::IntToLong, MlirTypeKind::Int(false)),
-        MlirTypeKind::Int(false) => (CastType::CharToInt, MlirTypeKind::Char(false)),
+        MlirTypeKind::Long(signed) => (CastType::IntToLong, MlirTypeKind::Int(*signed)),
+        MlirTypeKind::Int(signed) => (CastType::CharToInt, MlirTypeKind::Char(*signed)),
         _ => panic!("Unexpected type: {:#?}", ty),
     }
 }
@@ -213,9 +210,9 @@ fn promote_numeric(ty: &MlirTypeKind) -> (CastType, MlirTypeKind) {
     // does not include int -> float
     match ty {
         MlirTypeKind::Float => (CastType::DoubleToFloat, MlirTypeKind::Double),
-        MlirTypeKind::Long(false) => (CastType::DoubleToLong, MlirTypeKind::Double),
-        MlirTypeKind::Int(false) => (CastType::LongToInt, MlirTypeKind::Long(false)),
-        MlirTypeKind::Char(false) => (CastType::IntToChar, MlirTypeKind::Int(false)),
+        MlirTypeKind::Long(signed) => (CastType::DoubleToLong, MlirTypeKind::Double),
+        MlirTypeKind::Int(signed) => (CastType::LongToInt, MlirTypeKind::Long(*signed)),
+        MlirTypeKind::Char(signed) => (CastType::IntToChar, MlirTypeKind::Int(*signed)),
         _ => panic!("Unexpected type: {:#?}", ty),
     }
 }
@@ -223,17 +220,16 @@ fn promote_numeric(ty: &MlirTypeKind) -> (CastType, MlirTypeKind) {
 fn get_numeric_cast_hierarchy(ty: &MlirTypeKind) -> u8 {
     match ty {
         MlirTypeKind::Double => 4,
-        MlirTypeKind::Long(false) => 3,
-        MlirTypeKind::Int(false) => 2,
-        MlirTypeKind::Char(false) => 1,
-        _ => unreachable!(),
+        MlirTypeKind::Long(signed) => 3,
+        MlirTypeKind::Int(signed) => 2,
+        MlirTypeKind::Char(signed) => 1,
+        _ => panic!("Unexpected type: {:#?}", ty),
     }
 }
 
 #[cfg(test)]
 fn test_cast_structure(expr: MlirExpr, cast_to: MlirType, order: &[MlirTypeKind]) {
     let cast_structure = cast_numeric_to_numeric(cast_to, expr, Span::default());
-    println!("{:#?}", cast_structure);
     let mut given = cast_structure;
 
     for kind in order {
