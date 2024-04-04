@@ -235,17 +235,8 @@ impl GlobalValidator {
             kind: MlirTypeKind::Long(true),
             decl: MlirTypeDecl::Basic,
         };
-        let (left, right) = if left.is_pointer() && right.is_pointer() {
-            (
-                explicit_cast(ty.clone(), left, span).unwrap(),
-                explicit_cast(ty.clone(), right, span).unwrap(),
-            )
-        } else if !left.is_pointer() && !right.is_pointer() {
-            (
-                implicit_cast(ty.clone(), left, span).unwrap(),
-                implicit_cast(ty.clone(), right, span).unwrap(),
-            )
-        } else {
+
+        if !(left.is_integer() && right.is_integer()) {
             let err = CompilerError::InvalidBinaryOperation(
                 op.to_string(),
                 left.ty.to_string(),
@@ -255,6 +246,12 @@ impl GlobalValidator {
             self.report_error(err);
             return Err(());
         };
+
+        let (left, right) = (
+            implicit_cast(ty.clone(), left, span).unwrap(),
+            implicit_cast(ty.clone(), right, span).unwrap(),
+        );
+
         let kind = match op {
             BinaryOp::BitwiseAnd => MlirExprKind::BitwiseAnd(left, right),
             BinaryOp::BitwiseOr => MlirExprKind::BitwiseOr(left, right),
