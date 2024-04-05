@@ -262,7 +262,7 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         ($kind:expr) => {
             MlirExpr {
                 span: Span::default(),
-                kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(1))),
+                kind: Box::new(MlirExprKind::Literal(MlirLiteral::Long(1))),
                 ty: MlirType::new($kind, MlirTypeDecl::Basic),
                 is_lval: false,
             }

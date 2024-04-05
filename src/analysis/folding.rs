@@ -13,10 +13,23 @@ macro_rules! binary_fold {
     ($a:expr, $op:tt, $b:expr) => {{
         use MlirLiteral::*;
         match (get_constant($a), get_constant($b)) {
-            (Char(a), Char(b)) => Char(a $op b),
-            (Int(a), Int(b)) => Int(a $op b),
-            (UInt(a), UInt(b)) => UInt(a $op b),
-            (Float(a), Float(b)) => Float(a $op b),
+            (UChar(a), UChar(b)) => UChar(a $op b),
+            (UChar(a), Long(b)) => Long(a as i64 $op b),
+            (UChar(a), ULong(b)) => ULong(a as u64 $op b),
+            (UChar(a), Double(b)) => Double(a as f64 $op b),
+
+            (Long(a), UChar(b)) => Long(a $op b as i64),
+            (Long(a), Long(b)) => Long(a $op b),
+            (Long(a), ULong(b)) => Long(a $op b as i64),
+            (Long(a), Double(b)) => Double(a as f64 $op b),
+
+            (ULong(a), UChar(b)) => ULong(a $op b as u64),
+            (ULong(a), Long(b)) => Long(a as i64 $op b),
+            (ULong(a), ULong(b)) => ULong(a $op b),
+            (ULong(a), Double(b)) => Double(a as f64 $op b),
+
+            (ULong(a), ULong(b)) => ULong(a $op b),
+            (Double(a), Double(b)) => Double(a $op b),
             (a, b) => panic!("Cannot use types:\n{:#?}\n{:#?}", a, b)
         }
     }};

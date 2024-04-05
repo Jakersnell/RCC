@@ -184,11 +184,15 @@ impl Display for MlirTypeKind {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum MlirLiteral {
-    Int(i64),
-    UInt(u64),
-    Float(f64),
+    Char(i8),
+    UChar(u8),
+    Int(i32),
+    UInt(u32),
+    Long(i64),
+    ULong(u64),
+    Float(f32),
+    Double(f64),
     String(Vec<u8>),
-    Char(u8),
 }
 
 impl std::cmp::Eq for MlirLiteral {}
@@ -196,10 +200,14 @@ impl std::cmp::Eq for MlirLiteral {}
 impl std::hash::Hash for MlirLiteral {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
+            MlirLiteral::Long(int) => int.hash(state),
+            MlirLiteral::ULong(int) => int.hash(state),
+            MlirLiteral::String(string) => string.hash(state),
+            MlirLiteral::UChar(char) => char.hash(state),
+            MlirLiteral::Double(float) => float.to_ne_bytes().hash(state),
+            MlirLiteral::Char(char) => char.hash(state),
             MlirLiteral::Int(int) => int.hash(state),
             MlirLiteral::UInt(int) => int.hash(state),
-            MlirLiteral::String(string) => string.hash(state),
-            MlirLiteral::Char(char) => char.hash(state),
             MlirLiteral::Float(float) => float.to_ne_bytes().hash(state),
         }
     }

@@ -78,7 +78,7 @@ impl GlobalValidator {
         let ty = MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic);
         Ok(MlirExpr {
             span: ty_or_expr.location,
-            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(size as i64))),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Long(size as i64))),
             ty,
             is_lval: false,
         })
@@ -301,19 +301,19 @@ impl GlobalValidator {
                 }
                 if *value <= i64::MAX as isize {
                     (
-                        MlirLiteral::Int(*value as i64),
+                        MlirLiteral::Long(*value as i64),
                         MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
                     )
                 } else if *value <= u64::MAX as isize {
                     (
-                        MlirLiteral::UInt(*value as u64),
+                        MlirLiteral::ULong(*value as u64),
                         MlirType::new(MlirTypeKind::Int(true), MlirTypeDecl::Basic),
                     )
                 } else {
                     let err = CompilerError::NumberTooLarge(span);
                     self.report_error(err);
                     (
-                        MlirLiteral::Int(0),
+                        MlirLiteral::Long(0),
                         MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
                     )
                 }
@@ -324,12 +324,12 @@ impl GlobalValidator {
                     self.report_warning(warning);
                 }
                 (
-                    MlirLiteral::Float(*value),
+                    MlirLiteral::Double(*value),
                     MlirType::new(MlirTypeKind::Double, MlirTypeDecl::Basic),
                 )
             }
             Literal::Char { value } => (
-                MlirLiteral::Char(*value as u8),
+                MlirLiteral::UChar(*value as u8),
                 MlirType::new(MlirTypeKind::Char(false), MlirTypeDecl::Basic),
             ),
             Literal::String { value } => {
@@ -544,7 +544,7 @@ impl GlobalValidator {
 
         let literal_one = MlirExpr {
             span,
-            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Char(1))),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::UChar(1))),
             ty: MlirType {
                 decl: MlirTypeDecl::Basic,
                 kind: MlirTypeKind::Char(false),

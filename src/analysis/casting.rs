@@ -136,7 +136,7 @@ fn test_cast_double_to_unsigned_long() {
 
     let double_literal = MlirExpr {
         span: Default::default(),
-        kind: Box::new(MlirExprKind::Literal(MlirLiteral::Float(1.0))),
+        kind: Box::new(MlirExprKind::Literal(MlirLiteral::Double(1.0))),
         ty: MlirType {
             kind: MlirTypeKind::Double,
             decl: MlirTypeDecl::Basic,
