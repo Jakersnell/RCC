@@ -75,8 +75,7 @@ impl MlirType {
     }
 
     pub fn is_numeric(&self) -> bool {
-        use MlirTypeKind::*;
-        matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double)
+        self.kind.is_numeric()
             && !matches!(&self.decl, MlirTypeDecl::Pointer)
             && !matches!(&self.decl, MlirTypeDecl::Array(_))
     }
@@ -155,6 +154,13 @@ pub enum MlirTypeKind {
     Float,
     Double,
     Struct(InternedStr),
+}
+
+impl MlirTypeKind {
+    pub fn is_numeric(&self) -> bool {
+        use MlirTypeKind::*;
+        matches!(&self, Char(_) | Int(_) | Long(_) | Float | Double)
+    }
 }
 
 impl Display for MlirTypeKind {
@@ -297,10 +303,10 @@ pub enum MlirExprKind {
     },
     Index(MlirExpr, MlirExpr),
     Member(MlirExpr, InternedStr),
-    Cast(MlirType, MlirExpr),
+    Cast(CastType, MlirExpr),
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq, Copy)]
 pub enum CastType {
     ArrayToPointer,
     PointerToPointer,
