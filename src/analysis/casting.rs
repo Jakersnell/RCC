@@ -20,6 +20,20 @@ macro_rules! cast {
     }};
 }
 
+macro_rules! cast_basic {
+    ($hlir:expr, $to:expr, $span:expr) => {{
+        cast!(
+            $hlir,
+            MlirType {
+                kind: $to,
+                decl: MlirTypeDecl::Basic
+            },
+            $span,
+            false
+        )
+    }};
+}
+
 fn get_numeric_type_hierarchy(ty: &MlirType) -> u8 {
     assert!(ty.is_basic(), "Type must only be basic numeric type.");
     match ty.kind {
@@ -123,6 +137,100 @@ impl GlobalValidator {
                 span,
             ));
             expr
+        }
+    }
+}
+pub mod numeric_casts {
+    use crate::data::mlir::*;
+    use crate::util::Span;
+    use std::cmp::Ordering;
+
+    pub(super) fn cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
+        debug_assert!(expr.ty.is_basic(), "Cast from type must be basic.");
+        debug_assert!(to.is_basic(), "Cast to type must be basic.");
+        debug_assert!(expr.ty.is_numeric(), "Cast from type must be numeric.");
+        debug_assert!(to.is_numeric(), "Cast to type must be numeric.");
+        match (&expr.ty.kind, &to.kind) {
+            (MlirTypeKind::Int(signed), MlirTypeKind::Float) => {
+                if *signed {
+                    cast_basic!(
+                        cast_basic!(expr, MlirTypeKind::Int(false), span),
+                        MlirTypeKind::Float,
+                        span
+                    )
+                } else {
+                    cast_basic!(expr, MlirTypeKind::Float, span)
+                }
+            }
+            (MlirTypeKind::Double, MlirTypeKind::Float) => {
+                cast_basic!(expr, MlirTypeKind::Float, span)
+            }
+            _ => {
+                let (left_pv, right_pv) = (expr.ty.get_promotion_value(), to.get_promotion_value());
+                match left_pv.cmp(&right_pv) {
+                    Ordering::Less => {
+                        // char -> int -> long -> double
+                        cast_basic!(cast(expr, to.demote(), span), to.kind.clone(), span)
+                    }
+                    Ordering::Greater => {
+                        // char <- int <- long <- double
+                        cast_basic!(cast(expr, to.promote(), span), to.kind.clone(), span)
+                    }
+                    Ordering::Equal => expr,
+                }
+            }
+        }
+    }
+
+    impl MlirType {
+        fn get_promotion_value(&self) -> u8 {
+            match &self.kind {
+                MlirTypeKind::Double => 8,
+                MlirTypeKind::Float => 7,
+                MlirTypeKind::Long(true) => 6,
+                MlirTypeKind::Long(false) => 5,
+                MlirTypeKind::Int(true) => 4,
+                MlirTypeKind::Int(false) => 3,
+                MlirTypeKind::Char(true) => 2,
+                MlirTypeKind::Char(false) => 1,
+                non_promotable => panic!("'{:?}' is not a promotable type!", non_promotable),
+            }
+        }
+
+        pub(in crate::analysis) fn promote(&self) -> MlirType {
+            debug_assert!(self.is_basic(), "Promotion type must be basic.");
+            let kind = match &self.kind {
+                MlirTypeKind::Long(false) => MlirTypeKind::Double,
+                MlirTypeKind::Long(true) => MlirTypeKind::Long(false),
+                MlirTypeKind::Float => MlirTypeKind::Long(false),
+                MlirTypeKind::Int(true) => MlirTypeKind::Long(false),
+                MlirTypeKind::Int(false) => MlirTypeKind::Int(false),
+                MlirTypeKind::Char(false) => MlirTypeKind::Int(false),
+                MlirTypeKind::Char(true) => MlirTypeKind::Char(false),
+                cannot_promote => panic!("Type '{:?}' is not able to be promoted!", cannot_promote),
+            };
+            MlirType {
+                decl: MlirTypeDecl::Basic,
+                kind,
+            }
+        }
+
+        pub(in crate::analysis) fn demote(&self) -> MlirType {
+            debug_assert!(self.is_basic(), "Demotion type must be basic.");
+            let kind = match &self.kind {
+                MlirTypeKind::Double => MlirTypeKind::Long(false),
+                MlirTypeKind::Long(true) => MlirTypeKind::Long(false),
+                MlirTypeKind::Long(false) => MlirTypeKind::Int(false),
+                MlirTypeKind::Float => MlirTypeKind::Int(false),
+                MlirTypeKind::Int(true) => MlirTypeKind::Int(false),
+                MlirTypeKind::Int(false) => MlirTypeKind::Char(false),
+                MlirTypeKind::Char(true) => MlirTypeKind::Char(false),
+                cannot_demote => panic!("Type '{:?}' is not able to be demoted!", cannot_demote),
+            };
+            MlirType {
+                decl: MlirTypeDecl::Basic,
+                kind,
+            }
         }
     }
 }

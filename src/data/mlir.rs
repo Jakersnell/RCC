@@ -300,6 +300,26 @@ pub enum MlirExprKind {
     Cast(MlirType, MlirExpr),
 }
 
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
+pub enum CastType {
+    ArrayToPointer,
+    PointerToPointer,
+    PointerToLong,
+    LongToPointer,
+    SignedToUnsigned,
+    UnsignedToSigned,
+    CharToInt,
+    IntToFloat,
+    IntToLong,
+    FloatToDouble,
+    LongToDouble,
+    DoubleToLong,
+    LongToInt,
+    IntToChar,
+    DoubleToFloat,
+    FloatToInt,
+}
+
 impl MlirExprKind {
     pub fn is_literal(&self) -> bool {
         matches!(self, MlirExprKind::Literal(_))
