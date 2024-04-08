@@ -241,6 +241,7 @@ fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
         (MlirTypeKind::Double, MlirTypeKind::Float) => {
             cast_basic!(expr, CastType::DoubleToFloat, MlirTypeKind::Float)
         }
+
         _ => {
             let (left_pv, right_pv) = (expr.ty.get_promotion_value(), to.get_promotion_value());
             match left_pv.cmp(&right_pv) {
