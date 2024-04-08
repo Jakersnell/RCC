@@ -7,77 +7,9 @@ use crate::util::str_intern::get;
 use crate::util::{Locatable, Span};
 use std::cmp::Ordering;
 use std::mem::discriminant;
-
-// macro_rules! cast {
-//     ($expr:expr, $cast_ty:expr, $cast_to:expr, $is_lval: literal, $span: expr) => {
-//         MlirExpr {
-//             kind: Box::new(MlirExprKind::Cast($cast_ty, $expr)),
-//             is_lval: $is_lval,
-//             ty: $cast_to,
-//             $span,
-//         }
-//     };
-// }
+use std::panic::catch_unwind;
 
 impl GlobalValidator {
-    // pub(super) fn binary_cast_together(
-    //     left: Locatable<MlirExpr>,
-    //     right: Locatable<MlirExpr>,
-    // ) -> (MlirExpr, MlirExpr) {
-    //     let (left_lvl, right_lvl) = (
-    //         get_numeric_type_hierarchy(&left.ty),
-    //         get_numeric_type_hierarchy(&right.ty),
-    //     );
-    //     match left_lvl.cmp(&right_lvl) {
-    //         Ordering::Less => (
-    //             cast!(left.value, right.ty.clone(), left.location, false),
-    //             right.value,
-    //         ),
-    //         Ordering::Greater => {
-    //             let left_ty = left.ty.clone();
-    //             (
-    //                 left.value,
-    //                 cast!(right.value, left_ty, right.location, false),
-    //             )
-    //         }
-    //         Ordering::Equal => (left.value, right.value),
-    //     }
-    // }
-
-    // pub(super) fn explicit_cast(
-    //     &mut self,
-    //     expr: MlirExpr,
-    //     cast_to: MlirType,
-    //     span: Span,
-    // ) -> MlirExpr {
-    //     // conversions:
-    //     //
-    //     // - all implicit casts +
-    //     // - any* <-> any*
-    //     // - integer -> any*
-    //     // - any* -> long
-    //     // - array -> any*
-    //
-    //     if expr.ty == cast_to {
-    //         expr
-    //     } else if (expr.ty.is_numeric() && cast_to.is_numeric())
-    //         || (expr.ty.is_pointer() && cast_to.is_pointer())
-    //         || (expr.ty.is_pointer() && cast_to.is_array())
-    //         || ((expr.ty.is_integer() && expr.ty.is_basic() && cast_to.is_pointer())
-    //             || (cast_to.is_integer() && cast_to.is_basic() && expr.ty.is_pointer()))
-    //     {
-    //         let is_lval = cast_to.is_pointer();
-    //         cast!(expr, cast_to, span, is_lval)
-    //     } else {
-    //         self.report_error(CompilerError::CannotExplicitCast(
-    //             expr.ty.to_string(),
-    //             cast_to.to_string(),
-    //             span,
-    //         ));
-    //         expr
-    //     }
-    // }
-
     pub(super) fn explicit_cast(
         &mut self,
         expr: MlirExpr,
@@ -271,7 +203,7 @@ impl GlobalValidator {
     }
 }
 
-pub(super) fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
+fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
     debug_assert!(expr.ty.is_basic(), "Cast from type must be basic.");
     debug_assert!(to.is_basic(), "Cast to type must be basic.");
     debug_assert!(expr.ty.is_numeric(), "Cast from type must be numeric.");
@@ -292,6 +224,8 @@ pub(super) fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr
     }
 
     match (&expr.ty.kind, &to.kind) {
+        (from_kind, to_kind) if from_kind == to_kind => expr,
+
         (MlirTypeKind::Int(unsigned), MlirTypeKind::Float) => {
             if *unsigned {
                 cast_basic!(
@@ -303,29 +237,41 @@ pub(super) fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr
                 cast_basic!(expr, CastType::IntToFloat, MlirTypeKind::Float)
             }
         }
+
         (MlirTypeKind::Double, MlirTypeKind::Float) => {
             cast_basic!(expr, CastType::DoubleToFloat, MlirTypeKind::Float)
         }
         _ => {
             let (left_pv, right_pv) = (expr.ty.get_promotion_value(), to.get_promotion_value());
             match left_pv.cmp(&right_pv) {
+                // char -> int -> long -> double
                 Ordering::Less => {
-                    // char -> int -> long -> double
-                    cast_basic!(
-                        numeric_cast(expr, to.demote(), span),
-                        CastType::IntToFloat,
-                        to.kind.clone()
-                    )
+                    let (ty, cast_type) = expr.ty.promote();
+                    numeric_cast(cast_basic!(expr, cast_type, ty.kind), to, span)
                 }
+
+                // char <- int <- long <- double
                 Ordering::Greater => {
-                    // char <- int <- long <- double
-                    cast_basic!(
-                        numeric_cast(expr, to.promote(), span),
-                        CastType::IntToFloat,
-                        to.kind.clone()
-                    )
+                    let (ty, cast_type) = expr.ty.demote();
+                    numeric_cast(cast_basic!(expr, cast_type, ty.kind), to, span)
                 }
-                Ordering::Equal => expr,
+
+                // sign is different
+                Ordering::Equal => match (&expr.ty.kind, &to.kind) {
+                    (MlirTypeKind::Char(true), MlirTypeKind::Char(false))
+                    | (MlirTypeKind::Int(true), MlirTypeKind::Int(false))
+                    | (MlirTypeKind::Long(true), MlirTypeKind::Long(false)) => {
+                        cast_basic!(expr, CastType::UnsignedToSigned, to.kind.clone())
+                    }
+
+                    (MlirTypeKind::Char(false), MlirTypeKind::Char(true))
+                    | (MlirTypeKind::Int(false), MlirTypeKind::Int(true))
+                    | (MlirTypeKind::Long(false), MlirTypeKind::Long(true)) => {
+                        cast_basic!(expr, CastType::SignedToUnsigned, to.kind.clone())
+                    }
+
+                    _ => unreachable!(),
+                },
             }
         }
     }
@@ -334,73 +280,130 @@ pub(super) fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr
 impl MlirType {
     fn get_promotion_value(&self) -> u8 {
         match &self.kind {
-            MlirTypeKind::Double => 8,
-            MlirTypeKind::Float => 7,
-            MlirTypeKind::Long(true) => 6,
-            MlirTypeKind::Long(false) => 5,
-            MlirTypeKind::Int(true) => 4,
-            MlirTypeKind::Int(false) => 3,
-            MlirTypeKind::Char(true) => 2,
-            MlirTypeKind::Char(false) => 1,
+            MlirTypeKind::Double => 5,
+            MlirTypeKind::Float => 4,
+            MlirTypeKind::Long(_) => 3,
+            MlirTypeKind::Int(_) => 2,
+            MlirTypeKind::Char(_) => 1,
             non_promotable => panic!("'{:?}' is not a promotable type!", non_promotable),
         }
     }
 
-    pub(in crate::analysis) fn promote(&self) -> MlirType {
-        debug_assert!(self.is_basic(), "Promotion type must be basic.");
-        let kind = match &self.kind {
-            MlirTypeKind::Long(false) => MlirTypeKind::Double,
-            MlirTypeKind::Long(true) => MlirTypeKind::Long(false),
-            MlirTypeKind::Float => MlirTypeKind::Long(false),
-            MlirTypeKind::Int(true) => MlirTypeKind::Long(false),
-            MlirTypeKind::Int(false) => MlirTypeKind::Int(false),
-            MlirTypeKind::Char(false) => MlirTypeKind::Int(false),
-            MlirTypeKind::Char(true) => MlirTypeKind::Char(false),
+    fn promote(&self) -> (MlirType, CastType) {
+        debug_assert!(self.is_basic(), "Cannot promote type '{:?}'", self);
+        let (kind, conversion) = match &self.kind {
+            MlirTypeKind::Float => (MlirTypeKind::Double, CastType::DoubleToFloat),
+            MlirTypeKind::Long(_) => (MlirTypeKind::Double, CastType::LongToDouble),
+            MlirTypeKind::Int(unsigned) => (MlirTypeKind::Long(*unsigned), CastType::IntToLong),
+            MlirTypeKind::Char(unsigned) => (MlirTypeKind::Int(*unsigned), CastType::CharToInt),
             cannot_promote => panic!("Type '{:?}' is not able to be promoted!", cannot_promote),
         };
-        MlirType {
-            decl: MlirTypeDecl::Basic,
-            kind,
-        }
+        (
+            MlirType {
+                decl: MlirTypeDecl::Basic,
+                kind,
+            },
+            conversion,
+        )
     }
 
-    pub(in crate::analysis) fn demote(&self) -> MlirType {
-        debug_assert!(self.is_basic(), "Demotion type must be basic.");
-        let kind = match &self.kind {
-            MlirTypeKind::Double => MlirTypeKind::Long(false),
-            MlirTypeKind::Long(true) => MlirTypeKind::Long(false),
-            MlirTypeKind::Long(false) => MlirTypeKind::Int(false),
-            MlirTypeKind::Float => MlirTypeKind::Int(false),
-            MlirTypeKind::Int(true) => MlirTypeKind::Int(false),
-            MlirTypeKind::Int(false) => MlirTypeKind::Char(false),
-            MlirTypeKind::Char(true) => MlirTypeKind::Char(false),
+    fn demote(&self) -> (MlirType, CastType) {
+        debug_assert!(self.is_basic(), "Cannot demote type '{:?}'", self);
+        let (kind, conversion) = match &self.kind {
+            MlirTypeKind::Double => (MlirTypeKind::Long(false), CastType::DoubleToLong),
+            MlirTypeKind::Float => (MlirTypeKind::Int(false), CastType::FloatToInt),
+            MlirTypeKind::Long(unsigned) => (MlirTypeKind::Int(*unsigned), CastType::LongToInt),
+            MlirTypeKind::Int(unsigned) => (MlirTypeKind::Char(*unsigned), CastType::IntToChar),
             cannot_demote => panic!("Type '{:?}' is not able to be demoted!", cannot_demote),
         };
-        MlirType {
-            decl: MlirTypeDecl::Basic,
-            kind,
+        (
+            MlirType {
+                decl: MlirTypeDecl::Basic,
+                kind,
+            },
+            conversion,
+        )
+    }
+}
+
+#[cfg(test)]
+fn test_implicit_cast(cast_from: MlirExpr, cast_to: MlirType, is_ok: bool) -> MlirExpr {
+    let mut analyzer = GlobalValidator::new(AbstractSyntaxTree::default());
+    let cast = analyzer.implicit_cast(cast_from, cast_to, Span::default());
+    assert_eq!(analyzer.reporter.borrow().errors.is_empty(), is_ok);
+    cast
+}
+
+#[test]
+fn test_all_possible_cast_permutations() {
+    static TYPES: [MlirTypeKind; 8] = [
+        MlirTypeKind::Double,
+        MlirTypeKind::Float,
+        MlirTypeKind::Long(true),
+        MlirTypeKind::Long(false),
+        MlirTypeKind::Int(true),
+        MlirTypeKind::Int(false),
+        MlirTypeKind::Char(true),
+        MlirTypeKind::Char(false),
+    ];
+
+    for cast_from in &TYPES {
+        for cast_to in TYPES.iter().rev() {
+            let cast_from = MlirExpr {
+                kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(0))),
+                ty: basic_ty!(cast_from.clone()),
+                span: Default::default(),
+                is_lval: false,
+            };
+
+            let cast_to = basic_ty!(cast_to.clone());
+            test_implicit_cast(cast_from, cast_to, true);
         }
     }
 }
 
+#[cfg(test)]
+macro_rules! create_literal {
+    ($ty:expr, $kind:expr) => {
+        MlirExpr {
+            span: Default::default(),
+            kind: Box::new(MlirExprKind::Literal($ty)),
+            ty: basic_ty!($kind),
+            is_lval: false,
+        }
+    };
+}
+
+#[cfg(test)]
+fn test_cast_type_structure(expected: &[CastType], mut cast: MlirExpr) {
+    for expected_cast_type in expected.iter().rev() {
+        let cast_type = match *cast.kind {
+            MlirExprKind::Cast(cast_type, expr) => {
+                cast = expr;
+                cast_type
+            }
+            kind => panic!("Expected MlirExprKind::Cast, found '{:?}'", kind),
+        };
+        assert_eq!(expected_cast_type, &cast_type);
+    }
+}
+
 #[test]
-fn test_cast_double_to_unsigned_long() {
-    let unsigned_long_ty = MlirType {
-        kind: MlirTypeKind::Long(true),
-        decl: MlirTypeDecl::Basic,
-    };
+fn test_cast_double_to_unsigned_char() {
+    let from = create_literal!(MlirLiteral::Double(1.0), MlirTypeKind::Double);
+    let to = basic_ty!(MlirTypeKind::Char(true));
+    use CastType::*;
+    static EXPECTED: [CastType; 4] = [DoubleToLong, LongToInt, IntToChar, SignedToUnsigned];
+    let mut cast = test_implicit_cast(from, to, true);
+    test_cast_type_structure(&EXPECTED, cast);
+}
 
-    let double_literal = MlirExpr {
-        span: Default::default(),
-        kind: Box::new(MlirExprKind::Literal(MlirLiteral::Double(1.0))),
-        ty: MlirType {
-            kind: MlirTypeKind::Double,
-            decl: MlirTypeDecl::Basic,
-        },
-        is_lval: false,
-    };
-
-    let mut analyzer = GlobalValidator::new(AbstractSyntaxTree::default());
-    analyzer.implicit_cast(double_literal, unsigned_long_ty, Span::default());
-    assert!(analyzer.reporter.borrow().errors.is_empty());
+#[test]
+fn test_cast_char_to_unsigned_long() {
+    let from = create_literal!(MlirLiteral::Char(1), MlirTypeKind::Char(false));
+    let to = basic_ty!(MlirTypeKind::Long(true));
+    use CastType::*;
+    static EXPECTED: [CastType; 3] = [CharToInt, IntToLong, SignedToUnsigned];
+    let cast = test_implicit_cast(from, to, true);
+    test_cast_type_structure(&EXPECTED, cast);
 }

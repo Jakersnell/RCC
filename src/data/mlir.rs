@@ -11,6 +11,16 @@ use std::hash::Hasher;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
+macro_rules! basic_ty {
+    ($kind:expr) => {
+        MlirType {
+            kind: $kind,
+            decl: MlirTypeDecl::Basic,
+        }
+    };
+}
+pub(crate) use basic_ty;
+
 pub const VOID_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Void,
     decl: MlirTypeDecl::Basic,
@@ -127,7 +137,7 @@ impl MlirType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq, Copy)]
 pub enum MlirTypeDecl {
     Basic,
     Pointer, // true if pointer is const
@@ -222,9 +232,9 @@ impl std::hash::Hash for MlirLiteral {
 #[derive(Debug, Clone, new, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirExpr {
     pub span: Span,
-    pub kind: Box<MlirExprKind>,
     pub ty: MlirType,
     pub is_lval: bool,
+    pub kind: Box<MlirExprKind>,
 }
 
 impl MlirExpr {
