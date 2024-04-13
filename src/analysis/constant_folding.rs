@@ -29,6 +29,34 @@ macro_rules! bin_fold {
     }};
 }
 
+macro_rules! unary_fold_literal {
+    ($mac:ident, $op:tt, $unit:expr, $($lit_kind:ident),+) => {
+        match $unit.get_const() {
+            $ (
+                MlirLiteral::$lit_kind(unit) => $mac!(unit, $lit_kind)
+            )+
+            unit => panic!("{}{:?} is not a supported operation.", unit, stringify!($op))
+        }
+    }
+}
+
+macro_rules! unary_fold {
+    ($span:expr, $ty:expr, $kind:ident, $op:tt, $unit:expr, $folding_mac:ident, $mac:ident, $($lit_kind:ident),+) => {{
+        let unit = $unit.fold();
+        let expr_kind = if unit.is_const() {
+            MlirExprKind::Literal($folding_mac!($op, $unit, $($lit_kind)+))
+        } else {
+            MlirExprKind::$kind(unit)
+        };
+        MlirExpr {
+            kind: Box::new(expr_kind),
+            is_lval: false,
+            span: $span,
+            ty: $ty
+        }
+    }};
+}
+
 impl MlirExpr {
     pub(in crate::analysis) fn fold(self) -> Self {
         match &*self.kind {
@@ -62,11 +90,11 @@ impl MlirExpr {
             | MlirExprKind::LeftShift(_, _)
             | MlirExprKind::RightShift(_, _) => self.bitwise_fold(),
 
-            MlirExprKind::LogicalAnd(_, _) | MlirExprKind::LogicalOr(_, _) => todo!(),
+            MlirExprKind::LogicalAnd(_, _) | MlirExprKind::LogicalOr(_, _) => self.logical_fold(),
 
-            MlirExprKind::Negate(_) | MlirExprKind::LogicalNot(_) | MlirExprKind::BitwiseNot(_) => {
-                self.fold_unary()
-            }
+            MlirExprKind::Negate(_) => self.fold_negate(),
+            MlirExprKind::LogicalNot(_) => self.fold_logical_not(),
+            MlirExprKind::BitwiseNot(_) => self.fold_bitwise_not(),
 
             MlirExprKind::Cast(_, _) => self.fold_cast(),
         }
@@ -95,7 +123,7 @@ impl MlirExpr {
                     $l,
                     $op,
                     $r,
-                    fold_literal,
+                    bin_fold_literal,
                     fold_arithmetic_literal,
                     Char,
                     UChar,
@@ -145,7 +173,7 @@ impl MlirExpr {
                     $left,
                     $op,
                     $right,
-                    fold_literal,
+                    bin_fold_literal,
                     fold_eq_literal,
                     Char,
                     UChar,
@@ -190,7 +218,7 @@ impl MlirExpr {
                     $left,
                     $op,
                     $right,
-                    fold_literal,
+                    bin_fold_literal,
                     fold_bit_literal,
                     Char,
                     UChar,
@@ -256,8 +284,109 @@ impl MlirExpr {
         }
     }
 
-    fn fold_unary(self) -> Self {
-        todo!()
+    fn fold_negate(self) -> Self {
+        let MlirExpr { span, ty, kind, .. } = self;
+        let unit = match *kind {
+            MlirExprKind::Negate(unit) => unit.fold(),
+            kind => panic!(
+                "Expression kind '{:?}' is not 'MlirExprKind::Negate' and cannot be folded as such.",
+                kind
+            ),
+        };
+        let expr_kind = if unit.is_const() {
+            let literal = match unit.get_const() {
+                MlirLiteral::Char(x) => MlirLiteral::Char(-x),
+                MlirLiteral::UChar(x) => MlirLiteral::Char(-(x as i8)),
+                MlirLiteral::Int(x) => MlirLiteral::Int(-x),
+                MlirLiteral::UInt(x) => MlirLiteral::Int(-(x as i32)),
+                MlirLiteral::Long(x) => MlirLiteral::Long(-x),
+                MlirLiteral::ULong(x) => MlirLiteral::Long(-(x as i64)),
+                MlirLiteral::Float(x) => MlirLiteral::Float(-x),
+                MlirLiteral::Double(x) => MlirLiteral::Double(-x),
+                literal => panic!("Literal type '{:?}' is not able to be negated!", literal),
+            };
+            MlirExprKind::Literal(literal)
+        } else {
+            MlirExprKind::Negate(unit)
+        };
+        MlirExpr {
+            kind: Box::new(expr_kind),
+            is_lval: false,
+            span,
+            ty,
+        }
+    }
+
+    fn fold_logical_not(self) -> Self {
+        let MlirExpr { span, ty, kind, .. } = self;
+        let unit = match *kind {
+            MlirExprKind::LogicalNot(unit) => unit.fold(),
+            kind => panic!(
+                "Expression kind '{:?}' is not 'MlirExprKind::LogicalNot' and cannot be folded as such.",
+                kind
+            ),
+        };
+        let expr_kind = if unit.is_const() {
+            macro_rules! not {
+                ($x:expr) => {
+                    MlirLiteral::Int(if $x != 0 { 1 } else { 0 })
+                };
+            }
+            macro_rules! float_not {
+                ($x:expr) => {
+                    MlirLiteral::Int(if $x != 0.0 { 1 } else { 0 })
+                };
+            }
+            MlirExprKind::Literal(match unit.get_const() {
+                MlirLiteral::Char(x) => not!(x),
+                MlirLiteral::UChar(x) => not!(x),
+                MlirLiteral::Int(x) => not!(x),
+                MlirLiteral::UInt(x) => not!(x),
+                MlirLiteral::Long(x) => not!(x),
+                MlirLiteral::ULong(x) => not!(x),
+                MlirLiteral::Float(x) => float_not!(x),
+                MlirLiteral::Double(x) => float_not!(x),
+                literal => panic!("Cannot perform logical not on type '{:?}'!", literal),
+            })
+        } else {
+            MlirExprKind::LogicalNot(unit)
+        };
+        MlirExpr {
+            kind: Box::new(expr_kind),
+            is_lval: false,
+            span,
+            ty,
+        }
+    }
+
+    fn fold_bitwise_not(self) -> Self {
+        let MlirExpr { span, ty, kind, .. } = self;
+        let unit = match *kind {
+            MlirExprKind::LogicalNot(unit) => unit.fold(),
+            kind => panic!(
+                "Expression kind '{:?}' is not 'MlirExprKind::LogicalNot' and cannot be folded as such.",
+                kind
+            ),
+        };
+        let expr_kind = if unit.is_const() {
+            MlirExprKind::Literal(match unit.get_const() {
+                MlirLiteral::Char(x) => MlirLiteral::Char(!x),
+                MlirLiteral::UChar(x) => MlirLiteral::UChar(!x),
+                MlirLiteral::Int(x) => MlirLiteral::Int(!x),
+                MlirLiteral::UInt(x) => MlirLiteral::UInt(!x),
+                MlirLiteral::Long(x) => MlirLiteral::Long(!x),
+                MlirLiteral::ULong(x) => MlirLiteral::ULong(!x),
+                literal => panic!("Cannot perform bitwise not on type '{:?}'!", literal),
+            })
+        } else {
+            MlirExprKind::BitwiseNot(unit)
+        };
+        MlirExpr {
+            kind: Box::new(expr_kind),
+            is_lval: false,
+            span,
+            ty,
+        }
     }
 
     fn fold_cast(self) -> Self {

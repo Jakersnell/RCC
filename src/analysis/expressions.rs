@@ -1,5 +1,4 @@
-use crate::analysis::casting::*;
-use crate::analysis::symbols::SymbolResult;
+use crate::analysis::casting::numeric_cast;
 use crate::analysis::GlobalValidator;
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
@@ -11,7 +10,6 @@ use crate::data::tokens::Literal;
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
-use std::env::var;
 
 impl GlobalValidator {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
@@ -443,10 +441,37 @@ impl GlobalValidator {
             UnaryOp::Increment | UnaryOp::Decrement => self.validate_pre_inc_or_dec(op, expr, span),
             UnaryOp::Plus => Ok(expr),
             UnaryOp::Negate => {
-                if !expr.is_numeric() {
+                if !expr.is_numeric() || !expr.ty.is_basic() {
                     self.report_error(CompilerError::NonNumericNegation(span));
                     Ok(expr)
                 } else {
+                    let expr = match &expr.ty.kind {
+                        MlirTypeKind::Char(true) => numeric_cast(
+                            expr,
+                            MlirType {
+                                kind: MlirTypeKind::Char(false),
+                                decl: MlirTypeDecl::Basic,
+                            },
+                            span,
+                        ),
+                        MlirTypeKind::Int(true) => numeric_cast(
+                            expr,
+                            MlirType {
+                                kind: MlirTypeKind::Int(false),
+                                decl: MlirTypeDecl::Basic,
+                            },
+                            span,
+                        ),
+                        MlirTypeKind::Long(true) => numeric_cast(
+                            expr,
+                            MlirType {
+                                kind: MlirTypeKind::Long(false),
+                                decl: MlirTypeDecl::Basic,
+                            },
+                            span,
+                        ),
+                        _ => expr,
+                    };
                     let ty = expr.ty.clone();
                     Ok(MlirExpr {
                         span,

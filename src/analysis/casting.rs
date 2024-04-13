@@ -1,13 +1,10 @@
+use std::cmp::Ordering;
+
 use crate::analysis::GlobalValidator;
 use crate::data::ast::AbstractSyntaxTree;
 use crate::data::mlir::*;
-use crate::data::tokens::Literal;
 use crate::util::error::CompilerError;
-use crate::util::str_intern::get;
-use crate::util::{Locatable, Span};
-use std::cmp::Ordering;
-use std::mem::discriminant;
-use std::panic::catch_unwind;
+use crate::util::Span;
 
 macro_rules! cast_basic {
     ($expr:expr, $cast_ty:expr, $cast_to:expr) => {{
@@ -216,7 +213,7 @@ impl GlobalValidator {
     }
 }
 
-fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
+pub(super) fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
     debug_assert!(expr.ty.is_basic(), "Cast from type must be basic.");
     debug_assert!(to.is_basic(), "Cast to type must be basic.");
     debug_assert!(expr.ty.is_numeric(), "Cast from type must be numeric.");
