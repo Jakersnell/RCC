@@ -9,6 +9,19 @@ use std::cmp::Ordering;
 use std::mem::discriminant;
 use std::panic::catch_unwind;
 
+macro_rules! cast_basic {
+    ($expr:expr, $cast_ty:expr, $cast_to:expr) => {{
+        let expr = $expr;
+        let span = expr.span;
+        MlirExpr {
+            kind: Box::new(MlirExprKind::Cast($cast_ty, expr)),
+            is_lval: false,
+            ty: basic_ty!($cast_to),
+            span,
+        }
+    }};
+}
+
 impl GlobalValidator {
     pub(super) fn explicit_cast(
         &mut self,
@@ -209,20 +222,6 @@ fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
     debug_assert!(expr.ty.is_numeric(), "Cast from type must be numeric.");
     debug_assert!(to.is_numeric(), "Cast to type must be numeric.");
 
-    macro_rules! cast_basic {
-        ($expr:expr, $cast_ty:expr, $cast_to:expr) => {
-            MlirExpr {
-                kind: Box::new(MlirExprKind::Cast($cast_ty, $expr)),
-                is_lval: false,
-                ty: MlirType {
-                    kind: $cast_to,
-                    decl: MlirTypeDecl::Basic,
-                },
-                span,
-            }
-        };
-    }
-
     match (&expr.ty.kind, &to.kind) {
         (from_kind, to_kind) if from_kind == to_kind => expr,
 
@@ -242,39 +241,41 @@ fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
             cast_basic!(expr, CastType::DoubleToFloat, MlirTypeKind::Float)
         }
 
-        _ => {
-            let (left_pv, right_pv) = (expr.ty.get_promotion_value(), to.get_promotion_value());
-            match left_pv.cmp(&right_pv) {
-                // char -> int -> long -> double
-                Ordering::Less => {
-                    let (ty, cast_type) = expr.ty.promote();
-                    numeric_cast(cast_basic!(expr, cast_type, ty.kind), to, span)
-                }
+        _ => promote_or_demote_cast(expr, to, span),
+    }
+}
 
-                // char <- int <- long <- double
-                Ordering::Greater => {
-                    let (ty, cast_type) = expr.ty.demote();
-                    numeric_cast(cast_basic!(expr, cast_type, ty.kind), to, span)
-                }
-
-                // sign is different
-                Ordering::Equal => match (&expr.ty.kind, &to.kind) {
-                    (MlirTypeKind::Char(true), MlirTypeKind::Char(false))
-                    | (MlirTypeKind::Int(true), MlirTypeKind::Int(false))
-                    | (MlirTypeKind::Long(true), MlirTypeKind::Long(false)) => {
-                        cast_basic!(expr, CastType::UnsignedToSigned, to.kind.clone())
-                    }
-
-                    (MlirTypeKind::Char(false), MlirTypeKind::Char(true))
-                    | (MlirTypeKind::Int(false), MlirTypeKind::Int(true))
-                    | (MlirTypeKind::Long(false), MlirTypeKind::Long(true)) => {
-                        cast_basic!(expr, CastType::SignedToUnsigned, to.kind.clone())
-                    }
-
-                    _ => unreachable!(),
-                },
-            }
+fn promote_or_demote_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
+    let (left_pv, right_pv) = (expr.ty.get_promotion_value(), to.get_promotion_value());
+    match left_pv.cmp(&right_pv) {
+        // char -> int -> long -> double
+        Ordering::Less => {
+            let (ty, cast_type) = expr.ty.promote();
+            numeric_cast(cast_basic!(expr, cast_type, ty.kind), to, span)
         }
+
+        // char <- int <- long <- double
+        Ordering::Greater => {
+            let (ty, cast_type) = expr.ty.demote();
+            numeric_cast(cast_basic!(expr, cast_type, ty.kind), to, span)
+        }
+
+        // sign is different
+        Ordering::Equal => match (&expr.ty.kind, &to.kind) {
+            (MlirTypeKind::Char(true), MlirTypeKind::Char(false))
+            | (MlirTypeKind::Int(true), MlirTypeKind::Int(false))
+            | (MlirTypeKind::Long(true), MlirTypeKind::Long(false)) => {
+                cast_basic!(expr, CastType::UnsignedToSigned, to.kind.clone())
+            }
+
+            (MlirTypeKind::Char(false), MlirTypeKind::Char(true))
+            | (MlirTypeKind::Int(false), MlirTypeKind::Int(true))
+            | (MlirTypeKind::Long(false), MlirTypeKind::Long(true)) => {
+                cast_basic!(expr, CastType::SignedToUnsigned, to.kind.clone())
+            }
+
+            _ => unreachable!(),
+        },
     }
 }
 
