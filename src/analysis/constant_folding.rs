@@ -1,6 +1,6 @@
 use crate::data::mlir::*;
 
-macro_rules! fold_literal {
+macro_rules! bin_fold_literal {
     ($mac:ident, $left:expr, $op:tt, $right:expr, $($lit_kind:ident),+) => {
         match ($left.get_const(), $right.get_const()) {
             $(
