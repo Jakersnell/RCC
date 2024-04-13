@@ -60,8 +60,7 @@ macro_rules! unary_fold {
 impl MlirExpr {
     pub(in crate::analysis) fn fold(self) -> Self {
         match &*self.kind {
-            MlirExprKind::PointerLiteral(_)
-            | MlirExprKind::Assign(_, _)
+            MlirExprKind::Assign(_, _)
             | MlirExprKind::FunctionCall { .. }
             | MlirExprKind::Index(_, _)
             | MlirExprKind::Member(_, _)

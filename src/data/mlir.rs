@@ -6,8 +6,8 @@ use std::ops::Deref;
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
-use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
+use crate::util::str_intern::InternedStr;
 
 macro_rules! basic_ty {
     ($kind:expr) => {
@@ -268,7 +268,6 @@ impl MlirExpr {
 
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
-    PointerLiteral(u64),
     Literal(MlirLiteral),
     Variable(InternedStr),
 
