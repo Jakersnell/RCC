@@ -60,7 +60,8 @@ macro_rules! unary_fold {
 impl MlirExpr {
     pub(in crate::analysis) fn fold(self) -> Self {
         match &*self.kind {
-            MlirExprKind::Assign(_, _)
+            MlirExprKind::PointerLiteral(_)
+            | MlirExprKind::Assign(_, _)
             | MlirExprKind::FunctionCall { .. }
             | MlirExprKind::Index(_, _)
             | MlirExprKind::Member(_, _)
@@ -390,6 +391,68 @@ impl MlirExpr {
     }
 
     fn fold_cast(self) -> Self {
+        let MlirExpr { span, ty, kind, .. } = self;
+        let (cast_type, unit) = match *kind {
+            MlirExprKind::Cast(cast_type, casted) => (cast_type, casted.fold()),
+            kind => panic!(
+                "Expression kind '{:?}' is not 'MlirExprKind::LogicalNot' and cannot be folded as such.",
+                kind
+            ),
+        };
+        if unit.is_const() {
+            match cast_type {
+                CastType::ArrayToPointer => {
+                    todo!()
+                }
+                CastType::PointerToPointer => {
+                    todo!()
+                }
+                CastType::PointerToLong => {
+                    todo!()
+                }
+                CastType::LongToPointer => {
+                    todo!()
+                }
+                CastType::SignedToUnsigned => {
+                    todo!()
+                }
+                CastType::UnsignedToSigned => {
+                    todo!()
+                }
+                CastType::CharToInt => {
+                    todo!()
+                }
+                CastType::IntToFloat => {
+                    todo!()
+                }
+                CastType::IntToLong => {
+                    todo!()
+                }
+                CastType::FloatToDouble => {
+                    todo!()
+                }
+                CastType::LongToDouble => {
+                    todo!()
+                }
+                CastType::DoubleToLong => {
+                    todo!()
+                }
+                CastType::LongToInt => {
+                    todo!()
+                }
+                CastType::IntToChar => {
+                    todo!()
+                }
+                CastType::DoubleToFloat => {
+                    todo!()
+                }
+                CastType::FloatToInt => {
+                    todo!()
+                }
+            }
+        } else {
+            todo!()
+        }
         todo!()
     }
 
@@ -405,5 +468,25 @@ impl MlirExpr {
                 non_literal
             ),
         }
+    }
+}
+
+impl CastType {
+    fn can_fold(&self) -> bool {
+        matches!(
+            self,
+            CastType::SignedToUnsigned
+                | CastType::UnsignedToSigned
+                | CastType::CharToInt
+                | CastType::IntToFloat
+                | CastType::IntToLong
+                | CastType::FloatToDouble
+                | CastType::LongToDouble
+                | CastType::DoubleToLong
+                | CastType::LongToInt
+                | CastType::IntToChar
+                | CastType::DoubleToFloat
+                | CastType::FloatToInt
+        )
     }
 }

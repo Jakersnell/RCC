@@ -1,15 +1,13 @@
-use crate::data::ast::{BinaryOp, Block, TypeSpecifier};
-use crate::util::error::CompilerError;
-use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
-use arcstr::ArcStr;
-use derive_new::new;
-use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hasher;
 use std::ops::Deref;
-use std::sync::{Mutex, MutexGuard, OnceLock};
+
+use derive_new::new;
+
+use crate::data::ast::BinaryOp;
+use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, Span};
 
 macro_rules! basic_ty {
     ($kind:expr) => {
@@ -270,6 +268,7 @@ impl MlirExpr {
 
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
+    PointerLiteral(u64),
     Literal(MlirLiteral),
     Variable(InternedStr),
 
