@@ -1,9 +1,20 @@
+# Parser - Phase 2
+
+## [Parser source code](../src/parser/mod.rs)
+
+## [Back to README](../README.md)
+
+The parser takes a stream of tokens as given by the lexer and converts the tokens into an AST, so
+long as the given tokens can produce such, meaning that they present valid syntax.
+
 ### What is an AST?
 
 An Abstract Syntax Tree (AST) is a representation of the logical structure of a program
 as a tree data structure. Each node in the tree denotes a construct occurring in the source code.
 A tree is very convenient for representing the logical structure of a program, as it is easy to traverse
 and evaluate, while preserving the intended logic. The tree is evaluated bottom to top, left to right.
+
+#### The AST source code can be found [here](../src/data/ast.rs)
 
 ##### Example:
 

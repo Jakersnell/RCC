@@ -1,5 +1,9 @@
 # Semantic Analysis
 
+## [Analyzer source code](../src/analysis/mod.rs)
+
+## [Back to README](../README.md)
+
 Semantic analysis is the phase in which the nuanced or more logically complex rules of the language are analyzed and
 enforced.
 These rules involve elements that may be syntactically correct, but are not correct within the language. This phase also

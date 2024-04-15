@@ -1,5 +1,9 @@
 # Lexical Analysis
 
+## [Lexer source code](../src/lexer/mod.rs)
+
+## [Back to README](../README.md)
+
 The lexer is a large system that creates tokens from source text.
 
 ### Tokens
