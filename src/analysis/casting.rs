@@ -43,7 +43,7 @@ impl GlobalValidator {
         }
 
         macro_rules! cast_to_basic {
-            ($cast_ty:expr ) => {
+            ($cast_ty:expr) => {
                 cast!($cast_ty, false)
             };
         }
@@ -127,8 +127,7 @@ impl GlobalValidator {
                 }
                 expr
             }
-        };
-        todo!()
+        }
     }
 
     pub(super) fn implicit_cast(
