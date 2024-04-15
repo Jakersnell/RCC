@@ -61,7 +61,8 @@ the [WasmTime](https://github.com/bytecodealliance/wasmtime) runtime. I initiall
 the [Saltwater](https://github.com/jyn514/saltwater) compiler project. I
 chose this my backend framework as [LLVM](https://llvm.org/) is
 extremely complex and very overkill for this project. [Cranelift](https://cranelift.dev/) is much easier to pick up and
-still provides the necessary features for this project. The backend then emits binary that can be run by the computer.
+still provides the necessary features for this project. After the backend is finished with its work it then emits a
+binary executable that can be run by the computer.
 
 ### Testing
 
