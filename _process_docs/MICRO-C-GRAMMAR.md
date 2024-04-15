@@ -1,5 +1,5 @@
 This document defines a formal grammar for micro C.
-I created this to give myself a better structure for writing the compiler.
+I created this to give myself a structure guideline for writing the compiler.
 Items denoted with a $ at the front such as $start, or $identifier are non-terminal symbols.
 This is done to denote this even though they are text and not a symbol literal. Anything inside of single quotes, such
 as
