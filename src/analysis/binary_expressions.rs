@@ -58,36 +58,32 @@ impl GlobalValidator {
             return Ok(left);
         } else if left.ty.is_pointer() && right.ty.is_numeric() {
             // only addition/subtraction
-            let left = implicit_cast(
-                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
+            let left = self.implicit_cast(
                 left,
-                Span::default(),
-            )
-            .unwrap();
-            let right = implicit_cast(
                 MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
+                Span::default(),
+            );
+            let right = self.implicit_cast(
                 right,
+                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
                 span,
-            )
-            .unwrap();
+            );
             match op {
                 BinaryOp::Add => MlirExprKind::Add(left, right),
                 BinaryOp::Sub => MlirExprKind::Sub(left, right),
                 _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
             }
         } else if left.ty.is_numeric() && right.ty.is_numeric() {
-            let left = implicit_cast(
-                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
+            let left = self.implicit_cast(
                 left,
-                span,
-            )
-            .unwrap();
-            let right = implicit_cast(
                 MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-                right,
                 span,
-            )
-            .unwrap();
+            );
+            let right = self.implicit_cast(
+                right,
+                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
+                span,
+            );
             match op {
                 BinaryOp::Add => MlirExprKind::Add(left, right),
                 BinaryOp::Sub => MlirExprKind::Sub(left, right),
@@ -125,13 +121,7 @@ impl GlobalValidator {
             return Ok(left);
         }
         let right_ty = right.ty.clone();
-        let right = implicit_cast(left.ty.clone(), right, span);
-        if right.is_err() {
-            let err = CompilerError::CannotAssign(left.ty.to_string(), right_ty.to_string(), span);
-            self.report_error(err);
-            return Ok(left);
-        }
-        let right = right.unwrap();
+        let right = self.implicit_cast(right, left.ty.clone(), span);
         let op = match op {
             AssignOp::Assign => None,
             AssignOp::Plus => Some(BinaryOp::Add),
@@ -182,30 +172,17 @@ impl GlobalValidator {
             return Ok(left);
         }
 
-        let left_ty = left.ty.clone();
-        let left = implicit_cast(
-            MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
+        let left = self.implicit_cast(
             left,
-            span,
-        );
-
-        let right_ty = right.ty.clone();
-        let right = implicit_cast(
             MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-            right,
             span,
         );
 
-        if left.is_err() || right.is_err() {
-            self.report_error(CompilerError::CannotEq(
-                left_ty.to_string(),
-                right_ty.to_string(),
-                span,
-            ));
-            return Err(());
-        }
-
-        let (left, right) = (left.unwrap(), right.unwrap());
+        let right = self.implicit_cast(
+            right,
+            MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
+            span,
+        );
 
         let kind = match op {
             BinaryOp::Equal => MlirExprKind::Equal(left, right),
@@ -235,17 +212,8 @@ impl GlobalValidator {
             kind: MlirTypeKind::Long(true),
             decl: MlirTypeDecl::Basic,
         };
-        let (left, right) = if left.is_pointer() && right.is_pointer() {
-            (
-                explicit_cast(ty.clone(), left, span).unwrap(),
-                explicit_cast(ty.clone(), right, span).unwrap(),
-            )
-        } else if !left.is_pointer() && !right.is_pointer() {
-            (
-                implicit_cast(ty.clone(), left, span).unwrap(),
-                implicit_cast(ty.clone(), right, span).unwrap(),
-            )
-        } else {
+
+        if !(left.is_integer() && right.is_integer()) {
             let err = CompilerError::InvalidBinaryOperation(
                 op.to_string(),
                 left.ty.to_string(),
@@ -255,6 +223,12 @@ impl GlobalValidator {
             self.report_error(err);
             return Err(());
         };
+
+        let (left, right) = (
+            self.implicit_cast(left, ty.clone(), span),
+            self.implicit_cast(right, ty.clone(), span),
+        );
+
         let kind = match op {
             BinaryOp::BitwiseAnd => MlirExprKind::BitwiseAnd(left, right),
             BinaryOp::BitwiseOr => MlirExprKind::BitwiseOr(left, right),
@@ -288,7 +262,7 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         ($kind:expr) => {
             MlirExpr {
                 span: Span::default(),
-                kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(1))),
+                kind: Box::new(MlirExprKind::Literal(MlirLiteral::Long(1))),
                 ty: MlirType::new($kind, MlirTypeDecl::Basic),
                 is_lval: false,
             }
