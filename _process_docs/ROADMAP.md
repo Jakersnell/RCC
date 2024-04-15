@@ -32,23 +32,23 @@ This document is a roadmap for the development of the compiler. It will be updat
 [X] Binding postfix operations
 [X] Binding arrays
 [X] Binding function calls
-[ ] Binding struct declarations
-[ ] Binding function declarations
-[ ] Binding variable declarations
-[ ] Binding return statements
-[ ] Binding Control flow
+[X] Binding struct declarations
+[X] Binding function declarations
+[X] Binding variable declarations
+[X] Binding return statements
+[X] Binding Control flow
 
-[ ] Lowering Literals
-[ ] Lowering Binary Expressions
-[ ] Lowering Unary Expressions
-[ ] Lowering postfix operations
-[ ] Lowering structs
-[ ] Lowering arrays
-[ ] Lowering function calls
-[ ] Lowering function declarations
-[ ] Lowering variable declarations
-[ ] Lowering return statements
-[ ] Lowering Control flow
+[X] Lowering Literals
+[X] Lowering Binary Expressions
+[X] Lowering Unary Expressions
+[X] Lowering postfix operations
+[X] Lowering structs
+[X] Lowering arrays
+[X] Lowering function calls
+[X] Lowering function declarations
+[X] Lowering variable declarations
+[X] Lowering return statements
+[X] Lowering Control flow
 
 [ ] Emitting Literals
 [ ] Emitting Binary Expressions
