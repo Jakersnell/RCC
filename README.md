@@ -1,6 +1,6 @@
 # Micro-C
 
-### A small handwritten compiler focusing on a subset of the C language. This compiler only supports apple Arm64 CPUs.
+### A small handwritten compiler focusing on a subset of the C language. 
 
 ---
 
@@ -18,6 +18,9 @@
 
 ---
 
+#### Notice: This compiler only supports apple Arm64 CPUs
+
+---
 ## About the Project
 
 ### Goal
