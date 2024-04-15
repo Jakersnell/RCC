@@ -28,14 +28,14 @@ functions, etc. While not focusing on implementing every C language feature so t
 
 ### Why
 
-I have been programming for a few years now and the compiler always felt like this elusive black box of magic. I was
+I have been programming for a few years now and compilers always felt like this elusive black box of magic. I was
 extremely curious about how this thing may work as going from point A to B seemed so beyond me. I stand by the
 belief that anyone can achieve nearly anything so long as they work hard at it, so I began doing research. I would like
 to give a special thanks to [Immo Landwerth](https://www.youtube.com/@ImmoLandwerth) on YouTube as I watched his
 livestream series where he writes [Minsk](https://github.com/terrajobst/minsk/tree/master)
 and that gave me the inspiration to feel
 that it was possible to write my own compiler.
-I first wrote simple stuff like the .bf interpreter and compiler on my GitHub. Then after doing much more research I
+I first wrote simple stuff like the .bf interpreter and .bf compiler on my GitHub. Then after doing more research I
 decided
 to start writing this compiler. I chose Rust as I wanted more experience in the language, and I really enjoy the
 language.
