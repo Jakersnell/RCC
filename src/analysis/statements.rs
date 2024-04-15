@@ -1,15 +1,10 @@
 use crate::analysis::GlobalValidator;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
+use crate::data::mlir::{MlirBlock, MlirStmt, MlirType};
 use crate::data::mlir::MlirTypeDecl::Basic;
 use crate::data::mlir::MlirTypeKind::Void;
-use crate::data::mlir::{
-    MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl,
-    MlirTypeKind,
-};
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
-use crate::util::{str_intern, Locatable, Span};
-use std::env::var;
-use std::fmt::format;
 
 impl GlobalValidator {
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {

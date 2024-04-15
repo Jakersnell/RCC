@@ -1,5 +1,4 @@
-use crate::analysis::casting::{explicit_cast, implicit_cast};
-use crate::analysis::symbols::SymbolResult;
+use crate::analysis::casting::numeric_cast;
 use crate::analysis::GlobalValidator;
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
@@ -11,7 +10,6 @@ use crate::data::tokens::Literal;
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
-use std::env::var;
 
 impl GlobalValidator {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
@@ -30,6 +28,7 @@ impl GlobalValidator {
             Expression::Cast(dec, expr) => self.route_cast_expression(dec, expr),
             _ => unreachable!(),
         }
+        .map(|expr| expr.fold())
     }
 
     fn validate_variable_call(
@@ -78,7 +77,7 @@ impl GlobalValidator {
         let ty = MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic);
         Ok(MlirExpr {
             span: ty_or_expr.location,
-            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Int(size as i64))),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Long(size as i64))),
             ty,
             is_lval: false,
         })
@@ -215,16 +214,8 @@ impl GlobalValidator {
         for (arg, param_ty) in args.into_iter().zip(param_types.iter()) {
             let arg_ty = arg.0.ty.clone();
             let span = arg.1;
-            if let Ok(arg) = implicit_cast(param_ty.clone(), arg.0, span) {
-                processed_args.push((arg, span));
-            } else {
-                self.report_error(CompilerError::ArgumentTypeMismatch(
-                    arg_ty.to_string(),
-                    param_ty.to_string(),
-                    span,
-                ));
-                return Err(());
-            }
+            let arg = self.implicit_cast(arg.0, param_ty.clone(), span);
+            processed_args.push((arg, span));
         }
         processed_args.extend(var_args);
         Ok(processed_args)
@@ -293,14 +284,7 @@ impl GlobalValidator {
         let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false, false)?;
         let casting_ty_string = cast_to_ty.to_string();
         let expr_ty_string = expr.ty.to_string();
-        explicit_cast(cast_to_ty.clone(), expr, dec.location.merge(expr_location)).map_err(|_| {
-            let err = CompilerError::CannotCast(
-                expr_ty_string,
-                casting_ty_string,
-                dec.location.merge(expr_location),
-            );
-            self.report_error(err);
-        })
+        Ok(self.explicit_cast(expr, cast_to_ty.clone(), dec.location.merge(expr_location)))
     }
 
     pub(super) fn validate_literal(
@@ -316,19 +300,19 @@ impl GlobalValidator {
                 }
                 if *value <= i64::MAX as isize {
                     (
-                        MlirLiteral::Int(*value as i64),
+                        MlirLiteral::Long(*value as i64),
                         MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
                     )
                 } else if *value <= u64::MAX as isize {
                     (
-                        MlirLiteral::UInt(*value as u64),
+                        MlirLiteral::ULong(*value as u64),
                         MlirType::new(MlirTypeKind::Int(true), MlirTypeDecl::Basic),
                     )
                 } else {
                     let err = CompilerError::NumberTooLarge(span);
                     self.report_error(err);
                     (
-                        MlirLiteral::Int(0),
+                        MlirLiteral::Long(0),
                         MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
                     )
                 }
@@ -339,12 +323,12 @@ impl GlobalValidator {
                     self.report_warning(warning);
                 }
                 (
-                    MlirLiteral::Float(*value),
+                    MlirLiteral::Double(*value),
                     MlirType::new(MlirTypeKind::Double, MlirTypeDecl::Basic),
                 )
             }
             Literal::Char { value } => (
-                MlirLiteral::Char(*value as u8),
+                MlirLiteral::UChar(*value as u8),
                 MlirType::new(MlirTypeKind::Char(false), MlirTypeDecl::Basic),
             ),
             Literal::String { value } => {
@@ -458,10 +442,37 @@ impl GlobalValidator {
             UnaryOp::Increment | UnaryOp::Decrement => self.validate_pre_inc_or_dec(op, expr, span),
             UnaryOp::Plus => Ok(expr),
             UnaryOp::Negate => {
-                if !expr.is_numeric() {
+                if !expr.is_numeric() || !expr.ty.is_basic() {
                     self.report_error(CompilerError::NonNumericNegation(span));
                     Ok(expr)
                 } else {
+                    let expr = match &expr.ty.kind {
+                        MlirTypeKind::Char(true) => numeric_cast(
+                            expr,
+                            MlirType {
+                                kind: MlirTypeKind::Char(false),
+                                decl: MlirTypeDecl::Basic,
+                            },
+                            span,
+                        ),
+                        MlirTypeKind::Int(true) => numeric_cast(
+                            expr,
+                            MlirType {
+                                kind: MlirTypeKind::Int(false),
+                                decl: MlirTypeDecl::Basic,
+                            },
+                            span,
+                        ),
+                        MlirTypeKind::Long(true) => numeric_cast(
+                            expr,
+                            MlirType {
+                                kind: MlirTypeKind::Long(false),
+                                decl: MlirTypeDecl::Basic,
+                            },
+                            span,
+                        ),
+                        _ => expr,
+                    };
                     let ty = expr.ty.clone();
                     Ok(MlirExpr {
                         span,
@@ -476,19 +487,14 @@ impl GlobalValidator {
                     self.report_error(CompilerError::NotLogicalType(expr.ty.to_string(), span));
                     Ok(expr)
                 } else {
-                    let expr = implicit_cast(
-                        MlirType {
-                            decl: MlirTypeDecl::Basic,
-                            kind: MlirTypeKind::Int(false),
-                        },
-                        expr,
-                        span,
-                    )?;
-                    let ty = expr.ty.clone();
                     let expr = match op {
                         UnaryOp::LogicalNot => MlirExprKind::LogicalNot(expr),
                         UnaryOp::BitwiseNot => MlirExprKind::BitwiseNot(expr),
                         _ => unreachable!(),
+                    };
+                    let ty = MlirType {
+                        decl: MlirTypeDecl::Basic,
+                        kind: MlirTypeKind::Int(false),
                     };
                     Ok(MlirExpr {
                         span,
@@ -564,7 +570,7 @@ impl GlobalValidator {
 
         let literal_one = MlirExpr {
             span,
-            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Char(1))),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::UChar(1))),
             ty: MlirType {
                 decl: MlirTypeDecl::Basic,
                 kind: MlirTypeKind::Char(false),

@@ -1,15 +1,23 @@
-use crate::data::ast::{BinaryOp, Block, TypeSpecifier};
-use crate::util::error::CompilerError;
-use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
-use arcstr::ArcStr;
-use derive_new::new;
-use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hasher;
 use std::ops::Deref;
-use std::sync::{Mutex, MutexGuard, OnceLock};
+
+use derive_new::new;
+
+use crate::data::ast::BinaryOp;
+use crate::util::{Locatable, Span};
+use crate::util::str_intern::InternedStr;
+
+macro_rules! basic_ty {
+    ($kind:expr) => {
+        MlirType {
+            kind: $kind,
+            decl: MlirTypeDecl::Basic,
+        }
+    };
+}
+pub(crate) use basic_ty;
 
 pub const VOID_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Void,
@@ -67,7 +75,7 @@ impl Display for MlirType {
 
 impl MlirType {
     pub fn is_array(&self) -> bool {
-        matches!(self.decl, MlirTypeDecl::Array(_)) && !self.is_pointer()
+        matches!(self.decl, MlirTypeDecl::Array(_)) && !matches!(&self.decl, MlirTypeDecl::Pointer)
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -75,8 +83,9 @@ impl MlirType {
     }
 
     pub fn is_numeric(&self) -> bool {
-        use MlirTypeKind::*;
-        matches!(&self.kind, Char(_) | Int(_) | Long(_) | Float | Double) && !self.is_pointer()
+        self.kind.is_numeric()
+            && !matches!(&self.decl, MlirTypeDecl::Pointer)
+            && !matches!(&self.decl, MlirTypeDecl::Array(_))
     }
 
     pub fn is_integer(&self) -> bool {
@@ -120,9 +129,13 @@ impl MlirType {
 
         ty_kind.map(|kind| MlirType::new(kind, Basic))
     }
+
+    pub fn is_basic(&self) -> bool {
+        self.decl == MlirTypeDecl::Basic
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq, Copy)]
 pub enum MlirTypeDecl {
     Basic,
     Pointer, // true if pointer is const
@@ -149,6 +162,13 @@ pub enum MlirTypeKind {
     Float,
     Double,
     Struct(InternedStr),
+}
+
+impl MlirTypeKind {
+    pub fn is_numeric(&self) -> bool {
+        use MlirTypeKind::*;
+        matches!(&self, Char(_) | Int(_) | Long(_) | Float | Double)
+    }
 }
 
 impl Display for MlirTypeKind {
@@ -178,11 +198,15 @@ impl Display for MlirTypeKind {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum MlirLiteral {
-    Int(i64),
-    UInt(u64),
-    Float(f64),
+    Char(i8),
+    UChar(u8),
+    Int(i32),
+    UInt(u32),
+    Long(i64),
+    ULong(u64),
+    Float(f32),
+    Double(f64),
     String(Vec<u8>),
-    Char(u8),
 }
 
 impl std::cmp::Eq for MlirLiteral {}
@@ -190,21 +214,25 @@ impl std::cmp::Eq for MlirLiteral {}
 impl std::hash::Hash for MlirLiteral {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
+            MlirLiteral::Long(int) => int.hash(state),
+            MlirLiteral::ULong(int) => int.hash(state),
+            MlirLiteral::String(string) => string.hash(state),
+            MlirLiteral::UChar(char) => char.hash(state),
+            MlirLiteral::Double(float) => float.to_ne_bytes().hash(state),
+            MlirLiteral::Char(char) => char.hash(state),
             MlirLiteral::Int(int) => int.hash(state),
             MlirLiteral::UInt(int) => int.hash(state),
-            MlirLiteral::String(string) => string.hash(state),
-            MlirLiteral::Char(char) => char.hash(state),
             MlirLiteral::Float(float) => float.to_ne_bytes().hash(state),
         }
     }
 }
 
-#[derive(Clone, new, PartialEq, Hash, PartialOrd, Eq)]
+#[derive(Debug, Clone, new, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirExpr {
     pub span: Span,
-    pub kind: Box<MlirExprKind>,
     pub ty: MlirType,
     pub is_lval: bool,
+    pub kind: Box<MlirExprKind>,
 }
 
 impl MlirExpr {
@@ -283,13 +311,27 @@ pub enum MlirExprKind {
     },
     Index(MlirExpr, MlirExpr),
     Member(MlirExpr, InternedStr),
-    Cast(MlirType, MlirExpr),
+    Cast(CastType, MlirExpr),
 }
 
-impl std::fmt::Debug for MlirExpr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Expr")
-    }
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq, Copy)]
+pub enum CastType {
+    ArrayToPointer,
+    PointerToPointer,
+    PointerToLong,
+    LongToPointer,
+    SignedToUnsigned,
+    UnsignedToSigned,
+    CharToInt,
+    IntToFloat,
+    IntToLong,
+    FloatToDouble,
+    LongToDouble,
+    DoubleToLong,
+    LongToInt,
+    IntToChar,
+    DoubleToFloat,
+    FloatToInt,
 }
 
 impl MlirExprKind {
