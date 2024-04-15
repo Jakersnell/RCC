@@ -28,6 +28,7 @@ impl GlobalValidator {
             Expression::Cast(dec, expr) => self.route_cast_expression(dec, expr),
             _ => unreachable!(),
         }
+        .map(|expr| expr.fold())
     }
 
     fn validate_variable_call(

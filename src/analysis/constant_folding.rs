@@ -57,47 +57,78 @@ macro_rules! unary_fold {
     }};
 }
 
+macro_rules! debug_assert_numeric_type_validity {
+    ($lit:expr) => {
+        if cfg!(debug_assertions) {
+            if let MlirExprKind::Literal(literal) = &*$lit.kind {
+                macro_rules! assert_type {
+                    ($ty_kind:expr) => {
+                        if $lit.ty.kind != $ty_kind {
+                            panic!("Invalid literal and type pairing. {:#?}", $lit);
+                        }
+                    };
+                }
+                match literal {
+                    MlirLiteral::Char(_) => assert_type!(MlirTypeKind::Char(false)),
+                    MlirLiteral::UChar(_) => assert_type!(MlirTypeKind::Char(true)),
+                    MlirLiteral::Int(_) => assert_type!(MlirTypeKind::Int(false)),
+                    MlirLiteral::UInt(_) => assert_type!(MlirTypeKind::Int(true)),
+                    MlirLiteral::Long(_) => assert_type!(MlirTypeKind::Long(false)),
+                    MlirLiteral::ULong(_) => assert_type!(MlirTypeKind::Long(true)),
+                    MlirLiteral::Float(_) => assert_type!(MlirTypeKind::Float),
+                    MlirLiteral::Double(_) => assert_type!(MlirTypeKind::Double),
+                    literal => panic!("Literal type '{:?}' is non numeric! {:#?}", literal, $lit),
+                }
+            } else {
+                panic!("Type is not a literal!")
+            }
+        }
+    };
+}
+
 impl MlirExpr {
     pub(in crate::analysis) fn fold(self) -> Self {
-        match &*self.kind {
-            MlirExprKind::Assign(_, _)
-            | MlirExprKind::FunctionCall { .. }
-            | MlirExprKind::Index(_, _)
-            | MlirExprKind::Member(_, _)
-            | MlirExprKind::Deref(_)
-            | MlirExprKind::Literal(_)
-            | MlirExprKind::Variable(_)
-            | MlirExprKind::PostIncrement(_)
-            | MlirExprKind::PostDecrement(_)
-            | MlirExprKind::AddressOf(_) => self,
-
-            MlirExprKind::Add(_, _)
-            | MlirExprKind::Sub(_, _)
-            | MlirExprKind::Mul(_, _)
-            | MlirExprKind::Div(_, _)
-            | MlirExprKind::Mod(_, _) => self.arithmetic_fold(),
-
-            MlirExprKind::Equal(_, _)
-            | MlirExprKind::NotEqual(_, _)
-            | MlirExprKind::GreaterThan(_, _)
-            | MlirExprKind::GreaterThanEqual(_, _)
-            | MlirExprKind::LessThan(_, _)
-            | MlirExprKind::LessThanEqual(_, _) => self.equivalence_fold(),
-
-            MlirExprKind::BitwiseAnd(_, _)
-            | MlirExprKind::BitwiseOr(_, _)
-            | MlirExprKind::BitwiseXor(_, _)
-            | MlirExprKind::LeftShift(_, _)
-            | MlirExprKind::RightShift(_, _) => self.bitwise_fold(),
-
-            MlirExprKind::LogicalAnd(_, _) | MlirExprKind::LogicalOr(_, _) => self.logical_fold(),
-
-            MlirExprKind::Negate(_) => self.fold_negate(),
-            MlirExprKind::LogicalNot(_) => self.fold_logical_not(),
-            MlirExprKind::BitwiseNot(_) => self.fold_bitwise_not(),
-
-            MlirExprKind::Cast(_, _) => self.fold_cast(),
-        }
+        // debug_assert_numeric_type_validity!(self);
+        self
+        // match &*self.kind {
+        //     MlirExprKind::Assign(_, _)
+        //     | MlirExprKind::FunctionCall { .. }
+        //     | MlirExprKind::Index(_, _)
+        //     | MlirExprKind::Member(_, _)
+        //     | MlirExprKind::Deref(_)
+        //     | MlirExprKind::Literal(_)
+        //     | MlirExprKind::Variable(_)
+        //     | MlirExprKind::PostIncrement(_)
+        //     | MlirExprKind::PostDecrement(_)
+        //     | MlirExprKind::AddressOf(_) => self,
+        //
+        //     MlirExprKind::Add(_, _)
+        //     | MlirExprKind::Sub(_, _)
+        //     | MlirExprKind::Mul(_, _)
+        //     | MlirExprKind::Div(_, _)
+        //     | MlirExprKind::Mod(_, _) => self.arithmetic_fold(),
+        //
+        //     MlirExprKind::Equal(_, _)
+        //     | MlirExprKind::NotEqual(_, _)
+        //     | MlirExprKind::GreaterThan(_, _)
+        //     | MlirExprKind::GreaterThanEqual(_, _)
+        //     | MlirExprKind::LessThan(_, _)
+        //     | MlirExprKind::LessThanEqual(_, _) => self.equivalence_fold(),
+        //
+        //     MlirExprKind::BitwiseAnd(_, _)
+        //     | MlirExprKind::BitwiseOr(_, _)
+        //     | MlirExprKind::BitwiseXor(_, _)
+        //     | MlirExprKind::LeftShift(_, _)
+        //     | MlirExprKind::RightShift(_, _) => self.bitwise_fold(),
+        //
+        //     MlirExprKind::LogicalAnd(_, _) | MlirExprKind::LogicalOr(_, _) => self.logical_fold(),
+        //
+        //     MlirExprKind::Negate(_) => self.fold_negate(),
+        //     MlirExprKind::LogicalNot(_) => self.fold_logical_not(),
+        //     MlirExprKind::BitwiseNot(_) => self.fold_bitwise_not(),
+        //
+        //     MlirExprKind::Cast(_, _) => self.fold_cast(),
+        // }
     }
 
     fn arithmetic_fold(self) -> Self {
@@ -390,7 +421,12 @@ impl MlirExpr {
     }
 
     fn fold_cast(self) -> Self {
-        let MlirExpr { span, ty, kind, .. } = self;
+        let MlirExpr {
+            span,
+            ty,
+            kind,
+            is_lval,
+        } = self;
         let (cast_type, unit) = match *kind {
             MlirExprKind::Cast(cast_type, casted) => (cast_type, casted.fold()),
             kind => panic!(
@@ -398,61 +434,138 @@ impl MlirExpr {
                 kind
             ),
         };
-        if unit.is_const() {
-            match cast_type {
-                CastType::ArrayToPointer => {
-                    todo!()
-                }
-                CastType::PointerToPointer => {
-                    todo!()
-                }
-                CastType::PointerToLong => {
-                    todo!()
-                }
-                CastType::LongToPointer => {
-                    todo!()
-                }
+        let kind = if unit.is_const() && cast_type.can_fold() {
+            debug_assert_numeric_type_validity!(unit);
+            let _const = unit.get_const();
+            let literal = match cast_type {
                 CastType::SignedToUnsigned => {
-                    todo!()
+                    match _const {
+                        MlirLiteral::Char(x) => MlirLiteral::UChar(x as u8),
+                        MlirLiteral::Int(x) => MlirLiteral::UInt(x as u32),
+                        MlirLiteral::Long(x) => MlirLiteral::ULong(x as u64),
+                        literal => {
+                            panic!("Cannot perform signed to unsigned conversion on literal type '{:?}'", literal)
+                        }
+                    }
                 }
                 CastType::UnsignedToSigned => {
-                    todo!()
+                    match _const {
+                        MlirLiteral::UChar(x) => MlirLiteral::Char(x as i8),
+                        MlirLiteral::UInt(x) => MlirLiteral::Int(x as i32),
+                        MlirLiteral::ULong(x) => MlirLiteral::Long(x as i64),
+                        literal => {
+                            panic!("Cannot perform unsigned to signed conversion on literal type '{:?}'", literal)
+                        }
+                    }
                 }
-                CastType::CharToInt => {
-                    todo!()
-                }
-                CastType::IntToFloat => {
-                    todo!()
-                }
-                CastType::IntToLong => {
-                    todo!()
-                }
-                CastType::FloatToDouble => {
-                    todo!()
-                }
-                CastType::LongToDouble => {
-                    todo!()
-                }
-                CastType::DoubleToLong => {
-                    todo!()
-                }
-                CastType::LongToInt => {
-                    todo!()
-                }
-                CastType::IntToChar => {
-                    todo!()
-                }
-                CastType::DoubleToFloat => {
-                    todo!()
-                }
-                CastType::FloatToInt => {
-                    todo!()
-                }
-            }
+                CastType::CharToInt => match _const {
+                    MlirLiteral::Char(x) => MlirLiteral::Int(x as i32),
+                    MlirLiteral::UChar(x) => MlirLiteral::UInt(x as u32),
+                    literal => {
+                        panic!(
+                            "Cannot perform char to int conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::IntToFloat => match _const {
+                    MlirLiteral::Int(x) => MlirLiteral::Float(x as f32),
+                    MlirLiteral::UInt(x) => MlirLiteral::Float(x as f32),
+                    literal => {
+                        panic!(
+                            "Cannot perform char to int conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::IntToLong => match _const {
+                    MlirLiteral::Int(x) => MlirLiteral::Long(x as i64),
+                    MlirLiteral::UInt(x) => MlirLiteral::ULong(x as u64),
+                    literal => {
+                        panic!(
+                            "Cannot perform int to long conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::FloatToDouble => match _const {
+                    MlirLiteral::Float(x) => MlirLiteral::Double(x as f64),
+                    literal => {
+                        panic!(
+                            "Cannot perform float to double conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::LongToDouble => match _const {
+                    MlirLiteral::Long(x) => MlirLiteral::Double(x as f64),
+                    MlirLiteral::ULong(x) => MlirLiteral::Double(x as f64),
+                    literal => {
+                        panic!(
+                            "Cannot perform long to double conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::LongToDouble => match _const {
+                    MlirLiteral::Double(x) => MlirLiteral::Long(x as i64),
+                    literal => {
+                        panic!(
+                            "Cannot perform double to long conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::LongToInt => match _const {
+                    MlirLiteral::Long(x) => MlirLiteral::Int(x as i32),
+                    MlirLiteral::ULong(x) => MlirLiteral::UInt(x as u32),
+                    literal => {
+                        panic!(
+                            "Cannot perform long to int conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::IntToChar => match _const {
+                    MlirLiteral::Int(x) => MlirLiteral::Char(x as i8),
+                    MlirLiteral::UInt(x) => MlirLiteral::UChar(x as u8),
+                    literal => {
+                        panic!(
+                            "Cannot perform int to char conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::DoubleToFloat => match _const {
+                    MlirLiteral::Double(x) => MlirLiteral::Float(x as f32),
+                    literal => {
+                        panic!(
+                            "Cannot perform double to float conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                CastType::FloatToInt => match _const {
+                    MlirLiteral::Float(x) => MlirLiteral::Int(x as i32),
+                    literal => {
+                        panic!(
+                            "Cannot perform float to int conversion on literal type '{:?}'",
+                            literal
+                        )
+                    }
+                },
+                _ => unreachable!(),
+            };
+            MlirExprKind::Literal(literal)
         } else {
-            todo!()
+            MlirExprKind::Cast(cast_type, unit)
+        };
+        MlirExpr {
+            kind: Box::new(kind),
+            is_lval,
+            span,
+            ty,
         }
-        todo!()
     }
 
     fn is_const(&self) -> bool {
