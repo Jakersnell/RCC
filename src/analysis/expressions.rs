@@ -1,5 +1,5 @@
+use crate::analysis::Analyzer;
 use crate::analysis::casting::numeric_cast;
-use crate::analysis::GlobalValidator;
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
@@ -7,11 +7,11 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
 };
 use crate::data::tokens::Literal;
+use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
 
-impl GlobalValidator {
+impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
         match expr {
             Expression::Literal(literal) => self.validate_literal(literal, literal.location),

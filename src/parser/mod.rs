@@ -1,17 +1,19 @@
-use crate::data::ast::*;
-use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
-use arcstr::ArcStr;
-use macros::*;
-use rand::RngCore;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use arcstr::ArcStr;
+use rand::RngCore;
+
+use macros::*;
+
+use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
+use crate::data::ast::*;
 use crate::data::tokens::{Keyword, Literal};
 use crate::data::tokens::{Symbol, Token};
-use crate::lexer::{LexResult, Lexer};
+use crate::lexer::{Lexer, LexResult};
+use crate::util::{Locatable, LocatableToken, Span};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, LocatableToken, Span};
 
 pub(super) mod declarations;
 pub(super) mod expressions;
@@ -26,6 +28,7 @@ pub(super) static EXPECTED_TYPE: &str = "int, long, char, float, double";
 
 pub type ParseResult<T> = Result<T, ()>;
 
+/// Core implementations only here, more is implemented in the supporting files in this directory
 pub struct Parser<L>
 where
     L: Iterator<Item = LexResult>,

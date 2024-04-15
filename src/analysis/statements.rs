@@ -1,4 +1,4 @@
-use crate::analysis::GlobalValidator;
+use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
 use crate::data::mlir::{MlirBlock, MlirStmt, MlirType};
 use crate::data::mlir::MlirTypeDecl::Basic;
@@ -6,7 +6,7 @@ use crate::data::mlir::MlirTypeKind::Void;
 use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 
-impl GlobalValidator {
+impl Analyzer {
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
         self.push_scope();
         let mut statements = Vec::new();

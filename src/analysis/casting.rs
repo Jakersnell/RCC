@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::analysis::GlobalValidator;
+use crate::analysis::Analyzer;
 use crate::data::ast::AbstractSyntaxTree;
 use crate::data::mlir::*;
 use crate::util::error::CompilerError;
@@ -19,7 +19,7 @@ macro_rules! cast_basic {
     }};
 }
 
-impl GlobalValidator {
+impl Analyzer {
     pub(super) fn explicit_cast(
         &mut self,
         expr: MlirExpr,
@@ -326,7 +326,7 @@ impl MlirType {
 
 #[cfg(test)]
 fn test_implicit_cast(cast_from: MlirExpr, cast_to: MlirType, is_ok: bool) -> MlirExpr {
-    let mut analyzer = GlobalValidator::new(AbstractSyntaxTree::default());
+    let mut analyzer = Analyzer::new(AbstractSyntaxTree::default());
     let cast = analyzer.implicit_cast(cast_from, cast_to, Span::default());
     assert_eq!(analyzer.reporter.borrow().errors.is_empty(), is_ok);
     cast

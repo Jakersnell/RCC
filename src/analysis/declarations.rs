@@ -1,13 +1,10 @@
-use crate::analysis::symbols::SymbolResolver;
-use crate::analysis::{control_flow, GlobalValidator, SharedReporter};
+use crate::analysis::{Analyzer, control_flow};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::{Locatable, Span};
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::util::error::{CompilerError, CompilerWarning};
 
-impl GlobalValidator {
+impl Analyzer {
     pub(super) fn validate_struct_definition(
         &mut self,
         _struct: &Locatable<StructDeclaration>,

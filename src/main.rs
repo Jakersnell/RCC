@@ -1,15 +1,8 @@
 #![allow(unused)]
 
-use crate::analysis::GlobalValidator;
-use crate::data::ast::AbstractSyntaxTree;
-use crate::data::mlir::MlirTypeKind;
+use crate::analysis::Analyzer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
-use crate::util::error::{CompilerError, CompilerWarning};
-use std::cell::RefCell;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::Arc;
 
 mod analysis;
 mod data;
@@ -31,25 +24,20 @@ fn main() {
         std::fs::read_to_string("_c_test_files/should_fail/control_flow_analysis.c").unwrap();
     let lexer = Lexer::new(source.into());
     let parser = Parser::new(lexer);
-    let analyzer = GlobalValidator::new(parser.parse_all().unwrap());
+    let analyzer = Analyzer::new(parser.parse_all().unwrap());
     let result = analyzer.validate();
 }
 
 /// Contains integration tests for the components and their cohesion
 #[cfg(test)]
 mod tests {
-
-    use crate::analysis::SharedReporter;
-    use crate::data::ast::{AbstractSyntaxTree, Expression, InitDeclaration};
-    use crate::parser::ParseResult;
-    use crate::util::error::{CompilerError, CompilerWarning};
-    use crate::util::{CompilerResult, Locatable};
-    use crate::{analysis, lexer, parser};
-    use std::cell::RefCell;
-    use std::env::var;
     use std::panic::catch_unwind;
     use std::path::PathBuf;
-    use std::rc::Rc;
+
+    use crate::{analysis, lexer, parser};
+    use crate::analysis::SharedReporter;
+    use crate::data::ast::{Expression, InitDeclaration};
+    use crate::util::error::CompilerError;
 
     pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
@@ -71,7 +59,7 @@ mod tests {
         let lexer = lexer::Lexer::new(source.into());
         let parser = parser::Parser::new(lexer);
         let result = parser.parse_all().map_err(FailReason::Parser)?;
-        let global_validator = analysis::GlobalValidator::new(result);
+        let global_validator = analysis::Analyzer::new(result);
         global_validator
             .validate()
             .map(|_| ())

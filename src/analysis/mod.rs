@@ -1,3 +1,15 @@
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+
+use crate::analysis::symbols::SymbolResolver;
+use crate::data::ast::*;
+use crate::data::mlir::*;
+use crate::util::{Locatable, Span};
+use crate::util::error::{CompilerError, CompilerWarning, Reporter};
+use crate::util::str_intern::InternedStr;
+
 mod binary_expressions;
 mod casting;
 mod constant_folding;
@@ -7,17 +19,6 @@ mod expressions;
 mod folding;
 mod statements;
 mod symbols;
-
-use crate::analysis::symbols::SymbolResolver;
-use crate::data::ast::*;
-use crate::data::mlir::*;
-use crate::util::error::{CompilerError, CompilerWarning, Reporter};
-use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
-use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 static mut LABEL_COUNT: usize = 0;
 
@@ -45,7 +46,7 @@ impl Deref for SharedReporter {
     }
 }
 
-pub struct GlobalValidator {
+pub struct Analyzer {
     ast: Option<AbstractSyntaxTree>,
     scope: Box<RefCell<SymbolResolver>>,
     reporter: SharedReporter,
@@ -53,7 +54,7 @@ pub struct GlobalValidator {
     loop_label_stack: VecDeque<InternedStr>,
 }
 
-impl GlobalValidator {
+impl Analyzer {
     pub fn new(ast: AbstractSyntaxTree) -> Self {
         Self {
             ast: Some(ast),
@@ -372,7 +373,7 @@ fn test_validate_type_returns_error_for_invalid_type_orientations() {
         vec![Void],
     ];
     for types in type_tests {
-        let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
+        let mut validator = Analyzer::new(AbstractSyntaxTree::default());
         let types = make_dec_specifier!(types, false);
         let result = validator.validate_type(&types, Span::default(), false, false);
         if result.is_ok() {
@@ -411,7 +412,7 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
         (vec![Void], MlirTypeKind::Void, MlirTypeDecl::Pointer),
     ];
     for (types, expected, decl) in type_tests {
-        let mut validator = GlobalValidator::new(AbstractSyntaxTree::default());
+        let mut validator = Analyzer::new(AbstractSyntaxTree::default());
         let dec_spec = make_dec_specifier!(types, decl == MlirTypeDecl::Pointer);
         let expected = MlirType {
             decl,

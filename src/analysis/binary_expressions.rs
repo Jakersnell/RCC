@@ -1,11 +1,10 @@
-use crate::analysis::casting::*;
 use crate::analysis::*;
 use crate::data::ast::{AbstractSyntaxTree, AssignOp, BinaryOp};
 use crate::data::mlir::*;
 use crate::util::error::CompilerError;
 use crate::util::Span;
 
-impl GlobalValidator {
+impl Analyzer {
     pub(super) fn validate_binary_expression(
         &mut self,
         op: &BinaryOp,
@@ -272,7 +271,7 @@ fn test_validate_binary_bitwise_expression_is_ok_for_valid_expressions() {
         let left = make_expr!(left);
         let right = make_expr!(right);
         let span = Span::default();
-        let result = GlobalValidator::new(AbstractSyntaxTree::default())
+        let result = Analyzer::new(AbstractSyntaxTree::default())
             .validate_binary_bitwise_expression(&BinaryOp::BitwiseAnd, left, right, span);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().ty.kind, MlirTypeKind::Long(true),);
