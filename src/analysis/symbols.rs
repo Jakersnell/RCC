@@ -1,3 +1,7 @@
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
 use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
     MlirVariable,
@@ -5,20 +9,8 @@ use crate::data::mlir::{
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 use crate::util::{str_intern, Locatable, Span};
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 pub type SymbolResult = Result<(), CompilerError>;
-#[derive(Debug, Clone)]
-pub struct BuiltinFunctionSymbol {
-    ty: &'static str,
-    location: &'static str,
-    ident: &'static str,
-    params: Vec<MlirType>,
-    varargs: bool,
-    return_ty: MlirType,
-}
 thread_local! {
     static BUILTINS: [(&'static str, FunctionSymbol); 3] = [
         (

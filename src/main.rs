@@ -5,6 +5,7 @@ use crate::lexer::Lexer;
 use crate::parser::Parser;
 
 mod analysis;
+mod codegen;
 mod data;
 mod lexer;
 mod parser;
