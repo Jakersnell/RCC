@@ -6,89 +6,17 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
     MlirVariable,
 };
+use crate::data::symbols::*;
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
-use crate::util::{str_intern, Locatable, Span};
 
 pub type SymbolResult = Result<(), CompilerError>;
-thread_local! {
-    static BUILTINS: [(&'static str, FunctionSymbol); 3] = [
-        (
-            "printf",
-            FunctionSymbol {
-                location: Some("stdio.h"),
-                params: vec![MlirType {
-                    kind: MlirTypeKind::Char(true),
-                    decl: MlirTypeDecl::Pointer,
-                }],
-                varargs: true,
-                return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
-                },
-            }
-        ),
-        (
-            "malloc",
-            FunctionSymbol {
-                location: Some("stdlib.h"),
-                  params: vec![MlirType {
-                    kind: MlirTypeKind::Int(true),
-                    decl: MlirTypeDecl::Basic,
-                }],
-                varargs: false,
-                return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
-                },
-            }
-        ),
-        (
-            "free",
-            FunctionSymbol {
-                location: Some("stdlib.h"),
-                params: vec![MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Pointer,
-                }],
-                varargs: false,
-                return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
-                },
-            }
-        ),
-    ];
-}
-
 #[derive(Debug, Clone)]
-pub(super) enum SymbolKind {
+pub(crate) enum SymbolKind {
     Function(FunctionSymbol),
     Struct(StructSymbol),
     Variable(VariableSymbol),
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct StructSymbol {
-    pub(super) size: u64,
-    pub(super) as_type: MlirType,
-    pub(super) body: HashMap<InternedStr, VariableSymbol>,
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct FunctionSymbol {
-    pub(super) location: Option<&'static str>,
-    pub(super) return_ty: MlirType,
-    pub(super) varargs: bool,
-    pub(super) params: Vec<MlirType>,
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct VariableSymbol {
-    pub(super) ty: MlirType,
-    pub(super) is_const: bool,
-    pub(super) is_initialized: bool,
-    pub(super) array_size: Option<u64>,
 }
 
 #[derive(Default, Debug)]
@@ -115,14 +43,12 @@ impl SymbolResolver {
 
     fn init_builtins(&mut self) {
         debug_assert!(self.parent.is_none());
-        BUILTINS.with(|builtins| {
-            for builtin in builtins.iter() {
-                self.symbols.insert(
-                    str_intern::intern(builtin.0),
-                    SymbolKind::Function(builtin.1.clone()), // ignore access check on builtins
-                );
-            }
-        });
+        for builtin in BUILTINS.iter() {
+            self.symbols.insert(
+                str_intern::intern(builtin.0),
+                SymbolKind::Function(builtin.1.clone()), // ignore access check on builtins
+            );
+        }
     }
     pub fn new(parent: Option<Box<RefCell<SymbolResolver>>>) -> Self {
         Self {
@@ -141,6 +67,7 @@ impl SymbolResolver {
         span: Span,
     ) -> SymbolResult {
         let symbol = SymbolKind::Function(FunctionSymbol {
+            ident: ident.clone(),
             location: None,
             return_ty,
             varargs: false,

@@ -18,4 +18,4 @@ rand = "0.8.5"
 serde = "1.0.197"
 ron = "0.8.1"
 log = "0.4.20"
-inkwell = "0.4.0"
+inkwell = { version = "0.4.0", features = ["llvm17-0"] }
