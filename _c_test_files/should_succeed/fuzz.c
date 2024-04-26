@@ -49,6 +49,7 @@ int main() {
     for (int i = 0; i < 10; i++) {
         pt->a++;
     }
+// todo: support initialization without declaration
 //    int i;
 //    for (i = 0; i < 10; i++) {
 //        pt->a++;
