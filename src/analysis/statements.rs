@@ -157,17 +157,23 @@ impl Analyzer {
         value: &Option<Locatable<Expression>>,
         span: Span,
     ) -> Result<Option<MlirStmt>, ()> {
-        let value = if let Some(value) = value {
-            Some(self.validate_expression(value)?)
-        } else {
-            None
-        };
         static NONE_TYPE: MlirType = MlirType {
             kind: Void,
             decl: Basic,
         };
-        let function_ty = self.return_ty.as_ref().unwrap_or(&NONE_TYPE);
-        let value_ty = value.as_ref().map(|expr| &expr.ty).unwrap_or(&NONE_TYPE);
+        let function_ty = self.return_ty.as_ref().unwrap_or(&NONE_TYPE).clone();
+        let value = if let Some(value) = value {
+            let value_mlir = self.validate_expression(&value)?;
+            let casted_value_mlir = self.implicit_cast(value_mlir, function_ty.clone(), span);
+            Some(casted_value_mlir)
+        } else {
+            None
+        };
+        let value_ty = value
+            .as_ref()
+            .map(|expr| &expr.ty)
+            .unwrap_or(&NONE_TYPE)
+            .clone();
         if function_ty != value_ty {
             self.report_error(CompilerError::InvalidReturnType(
                 function_ty.to_string(),
@@ -178,9 +184,6 @@ impl Analyzer {
         Ok(Some(MlirStmt::Return(value)))
     }
 
-    /*
-    Breaks a for loop into a block containing a potential initializer and a while loop
-     */
     fn validate_for_loop(
         &mut self,
         initializer: &Option<Locatable<VariableDeclaration>>,

@@ -28,7 +28,7 @@ impl Analyzer {
             Expression::Cast(dec, expr) => self.route_cast_expression(dec, expr),
             _ => unreachable!(),
         }
-        .map(|expr| expr.fold())
+            .map(|expr| expr.fold())
     }
 
     fn validate_variable_call(
@@ -74,10 +74,10 @@ impl Analyzer {
                 self.sizeof(&expr.ty, ty_or_expr.location)
             }
         };
-        let ty = MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic);
+        let ty = MlirType::new(MlirTypeKind::Int(true), MlirTypeDecl::Basic);
         Ok(MlirExpr {
             span: ty_or_expr.location,
-            kind: Box::new(MlirExprKind::Literal(MlirLiteral::Long(size as i64))),
+            kind: Box::new(MlirExprKind::Literal(MlirLiteral::UInt(size as u32))),
             ty,
             is_lval: false,
         })
@@ -284,7 +284,9 @@ impl Analyzer {
         let cast_to_ty = self.validate_type(&dec.value.specifier, dec.location, false, false)?;
         let casting_ty_string = cast_to_ty.to_string();
         let expr_ty_string = expr.ty.to_string();
-        Ok(self.explicit_cast(expr, cast_to_ty.clone(), dec.location.merge(expr_location)))
+        let casted_expr =
+            self.explicit_cast(expr, cast_to_ty.clone(), dec.location.merge(expr_location));
+        Ok(casted_expr)
     }
 
     pub(super) fn validate_literal(
@@ -301,19 +303,19 @@ impl Analyzer {
                 if *value <= i64::MAX as isize {
                     (
                         MlirLiteral::Long(*value as i64),
-                        MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
+                        MlirType::new(MlirTypeKind::Long(false), MlirTypeDecl::Basic),
                     )
                 } else if *value <= u64::MAX as isize {
                     (
                         MlirLiteral::ULong(*value as u64),
-                        MlirType::new(MlirTypeKind::Int(true), MlirTypeDecl::Basic),
+                        MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
                     )
                 } else {
                     let err = CompilerError::NumberTooLarge(span);
                     self.report_error(err);
                     (
                         MlirLiteral::Long(0),
-                        MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
+                        MlirType::new(MlirTypeKind::Long(false), MlirTypeDecl::Basic),
                     )
                 }
             }
@@ -329,7 +331,7 @@ impl Analyzer {
             }
             Literal::Char { value } => (
                 MlirLiteral::UChar(*value as u8),
-                MlirType::new(MlirTypeKind::Char(false), MlirTypeDecl::Basic),
+                MlirType::new(MlirTypeKind::Char(true), MlirTypeDecl::Basic),
             ),
             Literal::String { value } => {
                 let value = value.as_str().bytes().collect();

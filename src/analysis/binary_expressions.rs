@@ -47,7 +47,7 @@ impl Analyzer {
         right: MlirExpr,
         span: Span,
     ) -> Result<MlirExpr, ()> {
-        let ty = left.ty.clone();
+        let mut ty = left.ty.clone();
         let kind = if left.ty.is_pointer() && right.ty.is_pointer() {
             // pointers can add and subtract from each other, resulting in a long.
             self.report_error(CompilerError::CustomError(
@@ -57,32 +57,14 @@ impl Analyzer {
             return Ok(left);
         } else if left.ty.is_pointer() && right.ty.is_numeric() {
             // only addition/subtraction
-            let left = self.implicit_cast(
-                left,
-                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-                Span::default(),
-            );
-            let right = self.implicit_cast(
-                right,
-                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-                span,
-            );
             match op {
                 BinaryOp::Add => MlirExprKind::Add(left, right),
                 BinaryOp::Sub => MlirExprKind::Sub(left, right),
                 _ => panic!("Fatal compiler error: Invalid binary op past initial check."),
             }
         } else if left.ty.is_numeric() && right.ty.is_numeric() {
-            let left = self.implicit_cast(
-                left,
-                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-                span,
-            );
-            let right = self.implicit_cast(
-                right,
-                MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-                span,
-            );
+            let (left, right) = self.binary_numeric_cast(left, right);
+            let ty = left.ty.clone();
             match op {
                 BinaryOp::Add => MlirExprKind::Add(left, right),
                 BinaryOp::Sub => MlirExprKind::Sub(left, right),
@@ -171,17 +153,7 @@ impl Analyzer {
             return Ok(left);
         }
 
-        let left = self.implicit_cast(
-            left,
-            MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-            span,
-        );
-
-        let right = self.implicit_cast(
-            right,
-            MlirType::new(MlirTypeKind::Long(true), MlirTypeDecl::Basic),
-            span,
-        );
+        let (left, right) = self.binary_numeric_cast(left, right);
 
         let kind = match op {
             BinaryOp::Equal => MlirExprKind::Equal(left, right),
