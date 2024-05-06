@@ -20,9 +20,10 @@ static DISPLAY_AST: bool = false;
 static OUTPUT_GRAPH: bool = false;
 static DISPLAY_MLIR: bool = false;
 static PRETTY_PRINT_AST: bool = false;
+
 fn main() {
     let source =
-        std::fs::read_to_string("_c_test_files/should_fail/control_flow_analysis.c").unwrap();
+        std::fs::read_to_string("_c_test_files/should_succeed/sizeof.c").unwrap();
     let lexer = Lexer::new(source.into());
     let parser = Parser::new(lexer);
     let analyzer = Analyzer::new(parser.parse_all().unwrap());
