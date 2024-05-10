@@ -70,7 +70,7 @@ binary executable that can be run by the computer.
 ### Testing
 
 The compiler makes use of Rust testing with the annotation ```#[cfg(test)]``` for conditional test compilation. As per
-rust conventions the tests are within the file of the items they are testing. There are an array of unit and integration
+Rust conventions the tests are within the file of the items they are testing. There are an array of unit and integration
 tests throughout the compiler to verify integrity of the system. The only code ever pushed to this repository is code
 that passes all of these tests. In ```src/_c_test_files``` you will see integration tests that correspond to which type
 of test they are based on the directory they are within.
