@@ -1,20 +1,8 @@
+use std::fmt::{Display, Formatter};
+
 use crate::data::ast::*;
 use crate::data::tokens::Literal;
-use std::fmt::{write, Display, Formatter};
-
-// good util for pretty printing the ast
-pub fn indent_string(string: String, start_line: usize, indentation: usize) -> String {
-    let mut output = String::new();
-    for (num, line) in string.lines().enumerate() {
-        if (start_line <= num) {
-            output.push_str(&format!("{}{}\n", " ".repeat(indentation), line));
-        } else {
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
-    output
-}
+use crate::util::display_utils;
 
 impl Expression {
     pub(crate) fn pretty_print(&self, padding: String, last: bool, is_root: bool) -> String {
@@ -39,7 +27,7 @@ impl Expression {
             }
             Expression::Parenthesized(expr) => {
                 let expr = expr.pretty_print(padding.clone(), true, true);
-                let expr = indent_string(expr, 0, 4);
+                let expr = display_utils::indent_string(expr, 0, 4);
                 format!("(\n{}{})\n", expr, padding)
             }
             Expression::Binary(op, left, right) => {
@@ -59,7 +47,7 @@ impl Expression {
                 let mut output = format!("<fn-call> {}{}\n", **ident, "(");
                 for (i, arg) in args.iter().enumerate() {
                     let arg = &arg.pretty_print(padding.clone(), i == args.len() - 1, false);
-                    let arg = indent_string(arg.to_string(), 0, 4);
+                    let arg = display_utils::indent_string(arg.to_string(), 0, 4);
                     output += &arg;
                 }
                 output += &format!("{})", padding);
@@ -76,7 +64,7 @@ impl Expression {
             Expression::Sizeof(type_or_expr) => {
                 format!(
                     "sizeof (\n{})",
-                    indent_string(format!("{}", type_or_expr), 0, 4)
+                    display_utils::indent_string(format!("{}", type_or_expr), 0, 4)
                 )
             }
             Expression::Index(left, right) => {
@@ -86,7 +74,7 @@ impl Expression {
             }
             Expression::Cast(ty, right) => {
                 let right = right.pretty_print(padding.clone(), true, true);
-                let right = indent_string(right, 0, 4);
+                let right = display_utils::indent_string(right, 0, 4);
                 format!("<cast> {} (\n{}\n)", ty, right)
             }
             Expression::ArrayInitializer(initializer) => {
@@ -113,13 +101,14 @@ impl Display for Expression {
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use crate::data::ast::Statement::*;
+        use crate::util::display_utils;
         write!(f, "<stmt> ");
         match self {
             Expression(expr) => {
                 write!(
                     f,
                     "<expr> (\n{});",
-                    indent_string(format!("{}", expr), 0, 4)
+                    display_utils::indent_string(format!("{}", expr), 0, 4)
                 )
             }
             Declaration(decl) => write!(f, "<var-dec> {};", decl),
@@ -127,7 +116,7 @@ impl Display for Statement {
                 Some(expr) => write!(
                     f,
                     "return <expr> (\n{});",
-                    indent_string(format!("{}", expr), 0, 4)
+                    display_utils::indent_string(format!("{}", expr), 0, 4)
                 ),
                 None => write!(f, "return;"),
             },
@@ -135,8 +124,8 @@ impl Display for Statement {
                 write!(
                     f,
                     "if <cond> (\n{}\n) <then> {{\n{}\n}}",
-                    indent_string(format!("{}", cond), 0, 4),
-                    indent_string(format!("{}", then), 0, 4),
+                    display_utils::indent_string(format!("{}", cond), 0, 4),
+                    display_utils::indent_string(format!("{}", then), 0, 4),
                 )?;
                 if let Some(els) = els {
                     write!(f, " else {}", els)?;
@@ -146,28 +135,28 @@ impl Display for Statement {
             While(cond, body) => write!(
                 f,
                 "while <cond> (\n{}) <body> {{\n{}}}",
-                indent_string(format!("{}", cond), 0, 4),
-                indent_string(format!("{}", body), 0, 4)
+                display_utils::indent_string(format!("{}", cond), 0, 4),
+                display_utils::indent_string(format!("{}", body), 0, 4)
             ),
             For(init, cond, post, body) => write!(
                 f,
                 "for <init> (\n{}), <cond> (\n{}), <post> (\n{}) <body> {{\n{}\n}}",
                 if let Some(init) = init {
-                    indent_string(format!("{}", init), 0, 4)
+                    display_utils::indent_string(format!("{}", init), 0, 4)
                 } else {
                     "None".to_string()
                 },
                 if let Some(cond) = cond {
-                    indent_string(format!("{}", cond), 0, 4)
+                    display_utils::indent_string(format!("{}", cond), 0, 4)
                 } else {
                     "None".to_string()
                 },
                 if let Some(post) = post {
-                    indent_string(format!("{}", post), 0, 4)
+                    display_utils::indent_string(format!("{}", post), 0, 4)
                 } else {
                     "None".to_string()
                 },
-                indent_string(format!("{}", body), 0, 4)
+                display_utils::indent_string(format!("{}", body), 0, 4)
             ),
             Block(block) => write!(f, "<block> {}", block),
             Break => write!(f, "break;"),
@@ -181,7 +170,11 @@ impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{{")?;
         for statement in &self.0 {
-            write!(f, "{}", indent_string(format!("{}", statement), 0, 4))?;
+            write!(
+                f,
+                "{}",
+                display_utils::indent_string(format!("{}", statement), 0, 4)
+            )?;
         }
         writeln!(f, "}}")
     }
@@ -212,7 +205,7 @@ impl Display for VariableDeclaration {
             write!(
                 f,
                 " = <init-expr> (\n{})",
-                indent_string(format!("{}", expr), 0, 4)
+                display_utils::indent_string(format!("{}", expr), 0, 4)
             );
         }
         Ok(())
