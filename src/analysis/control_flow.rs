@@ -92,6 +92,7 @@ impl<'a> BasicBlock<'a> {
 }
 
 impl<'a> Eq for BasicBlock<'a> {}
+
 impl<'a> Display for BasicBlock<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", self.id);
@@ -363,20 +364,28 @@ pub struct ControlFlowGraph<'a> {
     blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
     edges: Vec<Rc<BasicBlockEdge<'a>>>,
 }
+
 static mut GRAPH_COUNT: usize = 0;
+
+fn count_labels(block: &MlirBlock, block_count: usize) -> bool {
+    let label_count = block
+        .iter()
+        .filter(|stmt| matches!(stmt, MlirStmt::Label(_)))
+        .count();
+    label_count + 3 == block_count
+}
+
 impl<'a> ControlFlowGraph<'a> {
-    pub fn new(mlir: &'a MlirBlock) -> Self {
+    pub fn new(mlir: &'a MlirBlock, name: &str) -> Self {
         let block_factory = BasicBlockFactory::new(mlir);
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
         let graph = graph_factory.build(blocks);
+        let labels_eq_blocks = count_labels(mlir, graph.blocks.len());
         if !cfg!(test) && OUTPUT_GRAPH {
             let cfg_to_string = graph.to_string();
-            let mut file = File::create(format!("graph_{}.dot", unsafe {
-                GRAPH_COUNT += 1;
-                GRAPH_COUNT
-            }))
-            .unwrap();
+            let mut file = File::create(format!("graph_{name}.dot"))
+                .unwrap();
             let mut writer = BufWriter::new(file);
             writer.write_all(cfg_to_string.as_bytes());
         }

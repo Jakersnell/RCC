@@ -26,8 +26,8 @@ pub struct Locatable<T> {
 impl<T> Locatable<T> {
     #[inline]
     pub fn map<F, U>(self, mapper: F) -> Locatable<U>
-    where
-        F: Fn(T) -> U,
+        where
+            F: Fn(T) -> U,
     {
         Locatable::new(self.location, mapper(self.value))
     }
@@ -52,8 +52,8 @@ impl<T> Deref for Locatable<T> {
 }
 
 impl<T> Display for Locatable<T>
-where
-    T: Display,
+    where
+        T: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{}", self.value)

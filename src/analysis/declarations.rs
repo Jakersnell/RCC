@@ -1,8 +1,8 @@
-use crate::analysis::{control_flow, Analyzer};
+use crate::analysis::{Analyzer, control_flow};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::{Locatable, Span};
+use crate::util::error::{CompilerError, CompilerWarning};
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(
@@ -121,7 +121,7 @@ impl Analyzer {
     }
 
     fn validate_function_return(&mut self, function: &MlirFunction, span: Span) {
-        let cfg = control_flow::ControlFlowGraph::new(&function.body);
+        let cfg = control_flow::ControlFlowGraph::new(&function.body, &format!("<fn {}; {}>", function.ident.value, function.span));
         if !cfg.all_paths_return() {
             self.report_error(CompilerError::FunctionMissingReturn(
                 function.ident.to_string(),
