@@ -19,7 +19,6 @@ macro_rules! cast_basic {
     }};
 }
 
-
 impl Analyzer {
     pub(super) fn explicit_cast(
         &mut self,
@@ -212,7 +211,11 @@ impl Analyzer {
         }
     }
 
-    pub(super) fn binary_numeric_cast(&mut self, left: MlirExpr, right: MlirExpr) -> (MlirExpr, MlirExpr) {
+    pub(super) fn binary_numeric_cast(
+        &mut self,
+        left: MlirExpr,
+        right: MlirExpr,
+    ) -> (MlirExpr, MlirExpr) {
         debug_assert!(left.ty.is_basic());
         debug_assert!(left.ty.is_numeric());
         debug_assert!(right.ty.is_basic());
@@ -260,7 +263,10 @@ pub(super) fn numeric_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr
 }
 
 fn promote_or_demote_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr {
-    let (left_pv, right_pv) = (expr.ty.kind.get_promotion_value(), to.kind.get_promotion_value());
+    let (left_pv, right_pv) = (
+        expr.ty.kind.get_promotion_value(),
+        to.kind.get_promotion_value(),
+    );
     match left_pv.cmp(&right_pv) {
         // char -> int -> long -> double
         Ordering::Less => {
@@ -293,18 +299,33 @@ fn promote_or_demote_cast(expr: MlirExpr, to: MlirType, span: Span) -> MlirExpr 
     }
 }
 
-pub(in crate::analysis) fn get_implicit_cast_together_type(left: &MlirTypeKind, right: &MlirTypeKind) -> MlirTypeKind {
+pub(in crate::analysis) fn get_implicit_cast_together_type(
+    left: &MlirTypeKind,
+    right: &MlirTypeKind,
+) -> MlirTypeKind {
     match (left, right) {
         (left, right) if left == right => left.clone(),
-        (MlirTypeKind::Long(unsigned_left), MlirTypeKind::Long(unsigned_right)) if unsigned_left != unsigned_right => MlirTypeKind::Long(true),
-        (MlirTypeKind::Int(unsigned_left), MlirTypeKind::Int(unsigned_right)) if unsigned_left != unsigned_right => MlirTypeKind::Int(true),
-        (MlirTypeKind::Char(unsigned_left), MlirTypeKind::Char(unsigned_right)) if unsigned_left != unsigned_right => MlirTypeKind::Char(true),
+        (MlirTypeKind::Long(unsigned_left), MlirTypeKind::Long(unsigned_right))
+            if unsigned_left != unsigned_right =>
+        {
+            MlirTypeKind::Long(true)
+        }
+        (MlirTypeKind::Int(unsigned_left), MlirTypeKind::Int(unsigned_right))
+            if unsigned_left != unsigned_right =>
+        {
+            MlirTypeKind::Int(true)
+        }
+        (MlirTypeKind::Char(unsigned_left), MlirTypeKind::Char(unsigned_right))
+            if unsigned_left != unsigned_right =>
+        {
+            MlirTypeKind::Char(true)
+        }
         _ => {
             let promotion_ordering = left.get_promotion_value().cmp(&right.get_promotion_value());
             match promotion_ordering {
                 Ordering::Less => right.clone(),
                 Ordering::Greater => left.clone(),
-                Ordering::Equal => unreachable!()
+                Ordering::Equal => unreachable!(),
             }
         }
     }

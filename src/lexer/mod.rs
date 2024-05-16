@@ -1,24 +1,26 @@
+use std::io::Read;
+
+use arcstr::ArcStr;
+
+use crate::data::tokens::Token;
+use crate::util::*;
+use crate::util::{Locatable, Span};
+use crate::util::error::CompilerError;
+
 mod literals;
 mod symbols;
 mod trivial;
 
-use crate::data::tokens::Token;
-use crate::util::error::CompilerError;
-use crate::util::*;
-use crate::util::{Locatable, Span};
-use arcstr::ArcStr;
-use std::io::Read;
-
 pub type LexResult = Result<Locatable<Token>, Vec<CompilerError>>;
 
 pub struct Lexer {
-    source: ArcStr,
-    errors: Vec<CompilerError>,
-    position: usize,
-    line: usize,
-    col: usize,
-    current: Option<char>,
-    next: Option<char>,
+    pub(in crate::lexer) source: ArcStr,
+    pub(in crate::lexer) errors: Vec<CompilerError>,
+    pub(in crate::lexer) position: usize,
+    pub(in crate::lexer) line: usize,
+    pub(in crate::lexer) col: usize,
+    pub(in crate::lexer) current: Option<char>,
+    pub(in crate::lexer) next: Option<char>,
 }
 impl From<(ArcStr)> for Lexer {
     fn from(value: (ArcStr)) -> Self {
@@ -137,8 +139,9 @@ impl Iterator for Lexer {
 
 #[cfg(test)]
 mod tests {
-    use super::Lexer;
     use crate::data::tokens::{Literal, Symbol, Token};
+
+    use super::Lexer;
 
     #[test]
     fn test_current_is_first_char() {

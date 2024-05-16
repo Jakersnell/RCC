@@ -22,12 +22,12 @@ static DISPLAY_MLIR: bool = false;
 static PRETTY_PRINT_AST: bool = false;
 
 fn main() {
-    let source =
-        std::fs::read_to_string("_c_test_files/should_succeed/sizeof.c").unwrap();
+    let source = std::fs::read_to_string("_c_test_files/should_succeed/sizeof.c").unwrap();
     let lexer = Lexer::new(source.into());
     let parser = Parser::new(lexer);
     let analyzer = Analyzer::new(parser.parse_all().unwrap());
-    let result = analyzer.validate();
+    let mlir = analyzer.validate().unwrap();
+    println!("{:#?}", mlir);
 }
 
 /// Contains integration tests for the components and their cohesion
@@ -40,6 +40,7 @@ mod tests {
     use crate::analysis::SharedReporter;
     use crate::data::ast::{Expression, InitDeclaration};
     use crate::util::error::CompilerError;
+
 
     pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();

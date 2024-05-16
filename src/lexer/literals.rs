@@ -1,5 +1,6 @@
-use super::*;
 use crate::data::tokens::Literal;
+
+use super::*;
 
 impl Lexer {
     pub(super) fn eat_number(&mut self) -> Option<Token> {
@@ -61,7 +62,7 @@ impl Lexer {
                     _ => break,
                 },
                 State::Hex => match current {
-                /// Include a-z to catch erroneous hex numbers
+                // Include a-z to catch erroneous hex numbers
                 '0'..='9'
                 | 'a'..='e' // skip f, l & u because they are suffixes
                 | 'h'..='k' // ex: 0xff3ul for unsigned long

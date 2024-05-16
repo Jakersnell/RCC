@@ -1,14 +1,5 @@
 use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral};
 
-// }
-
-// pub enum MlirLiteral {
-//     Int(i64),
-//     UInt(u64),
-//     Float(f64),
-//     String(Vec<u8>),
-//     Char(u8),
-
 macro_rules! binary_fold {
     ($a:expr, $op:tt, $b:expr) => {{
         use MlirLiteral::*;
