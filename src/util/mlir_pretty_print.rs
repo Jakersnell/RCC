@@ -11,9 +11,6 @@ impl Display for MlirStmt {
             MlirStmt::VariableDeclaration(var) => write!(f, "{};", var),
             MlirStmt::Label(ident) => write!(f, "label {};", ident),
             MlirStmt::Goto(ident) => write!(f, "goto {};", ident),
-            MlirStmt::GotoTrue(condition, ident) => {
-                write!(f, " goto-true {} {};", condition, ident)
-            }
             MlirStmt::GotoFalse(condition, ident) => {
                 write!(f, "goto-false {} {};", condition, ident)
             }

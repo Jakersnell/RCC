@@ -1,10 +1,10 @@
 use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
+use crate::data::mlir::{MlirBlock, MlirStmt, MlirType};
 use crate::data::mlir::MlirTypeDecl::Basic;
 use crate::data::mlir::MlirTypeKind::Void;
-use crate::data::mlir::{MlirBlock, MlirStmt, MlirType};
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
-use crate::util::{str_intern, Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
@@ -93,6 +93,7 @@ impl Analyzer {
         } else {
             end_label.clone()
         };
+
         let condition = self.validate_expression(condition)?;
         let conditional_goto = MlirStmt::GotoFalse(condition, jump_to);
         block.push(conditional_goto);

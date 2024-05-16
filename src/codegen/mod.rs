@@ -113,7 +113,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirStmt::VariableDeclaration(var) => todo!(),
             MlirStmt::Label(_) => todo!(),
             MlirStmt::Goto(_) => todo!(),
-            MlirStmt::GotoTrue(_, _) => todo!(),
             MlirStmt::GotoFalse(_, _) => todo!(),
             MlirStmt::Return(expression) => self.compile_return_statement(expression),
             MlirStmt::Block(_) => unreachable!(

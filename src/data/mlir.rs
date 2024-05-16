@@ -380,7 +380,6 @@ pub enum MlirStmt {
     VariableDeclaration(MlirVariable),
     Label(InternedStr),
     Goto(InternedStr),
-    GotoTrue(MlirExpr, InternedStr),
     GotoFalse(MlirExpr, InternedStr),
     Return(Option<MlirExpr>),
 }
@@ -393,7 +392,6 @@ impl MlirStmt {
             MlirStmt::VariableDeclaration(_) => "declaration",
             MlirStmt::Label(_) => "label",
             MlirStmt::Goto(_) => "goto",
-            MlirStmt::GotoTrue(_, _) => "goto true",
             MlirStmt::GotoFalse(_, _) => "goto false",
             MlirStmt::Return(_) => "return",
         }

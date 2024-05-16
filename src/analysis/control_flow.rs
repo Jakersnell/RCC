@@ -1,18 +1,20 @@
-use crate::data::mlir::{
-    MidLevelIR, MlirBlock, MlirExpr, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
-    VOID_TYPE,
-};
-use crate::util::str_intern::InternedStr;
-use crate::OUTPUT_GRAPH;
-use derive_new::new;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{write, Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, write};
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufWriter, Write};
 use std::ops::{DerefMut, Index};
 use std::rc::Rc;
+
+use derive_new::new;
+
+use crate::data::mlir::{
+    MidLevelIR, MlirBlock, MlirExpr, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
+    VOID_TYPE,
+};
+use crate::OUTPUT_GRAPH;
+use crate::util::str_intern::InternedStr;
 
 /*
 Some resources on control flow analysis:
@@ -175,10 +177,7 @@ impl<'a> BasicBlockFactory<'a> {
     pub fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
         for stmt in self.mlir.0.iter() {
             match &stmt {
-                MlirStmt::Return(_)
-                | MlirStmt::Goto(_)
-                | MlirStmt::GotoFalse(_, _)
-                | MlirStmt::GotoTrue(_, _) => {
+                MlirStmt::Return(_) | MlirStmt::Goto(_) | MlirStmt::GotoFalse(_, _) => {
                     self.statements.push(stmt);
                     self.transition_block();
                 }
@@ -267,9 +266,8 @@ impl<'a> GraphFactory<'a> {
                             .expect("Corresponding label not found.");
                         self.connect(current.clone(), to_block.clone(), None);
                     }
-                    MlirStmt::GotoFalse(condition, label)
-                    | MlirStmt::GotoTrue(condition, label) => {
-                        let jump_if_true = !matches!(stmt, MlirStmt::GotoTrue(_, _));
+                    MlirStmt::GotoFalse(condition, label) => {
+                        let jump_if_true = false;
                         let to_block = self
                             .block_from_label
                             .get(label)
