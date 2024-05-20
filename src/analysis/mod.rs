@@ -24,6 +24,7 @@ static mut LABEL_COUNT: usize = 0;
 pub(in crate::analysis) fn peek_current_label() -> usize {
     unsafe { LABEL_COUNT }
 }
+
 pub(in crate::analysis) fn peek_next_label() -> usize {
     peek_current_label() + 1
 }
@@ -112,7 +113,9 @@ impl Analyzer {
                 }
             }
         }
+
         let idents = self.scope.borrow().get_unused_idents();
+
         for ident in idents {
             if let Some(variable) = globals.get(&ident.0) {
                 self.report_warning(CompilerWarning::UnusedVariable(variable.location));
@@ -127,17 +130,21 @@ impl Analyzer {
                 );
             }
         }
+
         fn deref_map<K: Eq + std::hash::Hash, T>(map: HashMap<K, Locatable<T>>) -> HashMap<K, T> {
             map.into_iter()
                 .map(|(ident, item)| (ident, item.value))
                 .collect()
         }
+
         let functions = deref_map(functions);
         let structs = deref_map(structs);
         let globals = deref_map(globals);
+
         if self.reporter.borrow().status().is_ok() && !functions.contains_key("main") {
             self.report_error(CompilerError::MissingMain);
         }
+
         if self.reporter.borrow().status().is_err() {
             Err(self.reporter)
         } else {
