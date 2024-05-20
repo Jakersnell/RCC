@@ -359,21 +359,12 @@ impl<'a> GraphFactory<'a> {
 
 #[derive(Debug)]
 pub struct ControlFlowGraph<'a> {
-    start: Rc<RefCell<BasicBlock<'a>>>,
-    end: Rc<RefCell<BasicBlock<'a>>>,
-    blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
-    edges: Vec<Rc<BasicBlockEdge<'a>>>,
+    pub start: Rc<RefCell<BasicBlock<'a>>>,
+    pub end: Rc<RefCell<BasicBlock<'a>>>,
+    pub blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
+    pub edges: Vec<Rc<BasicBlockEdge<'a>>>,
 }
 
-static mut GRAPH_COUNT: usize = 0;
-
-fn count_labels(block: &MlirBlock, block_count: usize) -> bool {
-    let label_count = block
-        .iter()
-        .filter(|stmt| matches!(stmt, MlirStmt::Label(_)))
-        .count();
-    label_count + 3 == block_count
-}
 
 impl<'a> ControlFlowGraph<'a> {
     pub fn new(mlir: &'a MlirBlock, name: &str) -> Self {
@@ -381,7 +372,6 @@ impl<'a> ControlFlowGraph<'a> {
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
         let graph = graph_factory.build(blocks);
-        let labels_eq_blocks = count_labels(mlir, graph.blocks.len());
         if !cfg!(test) && OUTPUT_GRAPH {
             let cfg_to_string = graph.to_string();
             let mut file = File::create(format!("graph_{name}.dot"))
