@@ -101,14 +101,20 @@ impl Analyzer {
         }
 
         let body = self.validate_block(&func.body);
+
         self.pop_scope();
+
         let mut body = Self::flatten_blocks(body?);
+
         if *self.return_ty.as_ref().unwrap() == VOID_TYPE {
             let return_void = MlirStmt::Return(None);
             body.0.push(return_void);
         }
+
         let body = func.body.location.into_locatable(body);
+
         self.return_ty = None;
+
         let func = MlirFunction {
             span: func_span,
             ty,
@@ -116,7 +122,9 @@ impl Analyzer {
             parameters,
             body,
         };
+
         self.validate_function_return(&func, func_span);
+
         Ok(func)
     }
 
