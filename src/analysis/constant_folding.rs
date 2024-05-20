@@ -571,7 +571,13 @@ impl MlirExpr {
     }
 
     fn is_const(&self) -> bool {
-        matches!(&*self.kind, MlirExprKind::Literal(_))
+        match &*self.kind {
+            MlirExprKind::Literal(literal) => match literal {
+                MlirLiteral::String(_) => false,
+                _ => true
+            },
+            _ => false
+        }
     }
 
     fn get_const(self) -> MlirLiteral {
