@@ -6,8 +6,8 @@ use std::ops::Deref;
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
-use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
+use crate::util::str_intern::InternedStr;
 
 macro_rules! basic_ty {
     ($kind:expr) => {
@@ -23,6 +23,7 @@ pub const VOID_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Void,
     decl: MlirTypeDecl::Basic,
 };
+
 #[derive(Debug, Default, PartialEq)]
 pub struct MidLevelIR {
     pub functions: HashMap<InternedStr, MlirFunction>,
@@ -168,31 +169,6 @@ impl MlirTypeKind {
     pub fn is_numeric(&self) -> bool {
         use MlirTypeKind::*;
         matches!(&self, Char(_) | Int(_) | Long(_) | Float | Double)
-    }
-}
-
-impl Display for MlirTypeKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        macro_rules! write_signed {
-            ($name:literal, $unsigned:expr) => {
-                write!(
-                    f,
-                    "{} {}",
-                    if $unsigned { "unsigned" } else { "signed" },
-                    $name
-                )
-            };
-        }
-        use MlirTypeKind::*;
-        match self {
-            Void => write!(f, "void"),
-            Char(unsigned) => write_signed!("char", *unsigned),
-            Int(unsigned) => write_signed!("int", *unsigned),
-            Long(unsigned) => write_signed!("long", *unsigned),
-            Float => write!(f, "float"),
-            Double => write!(f, "double"),
-            Struct(ident) => write!(f, "struct {}", ident),
-        }
     }
 }
 
@@ -365,7 +341,9 @@ impl MlirExprKind {
 
 #[derive(Debug, PartialEq, Hash, PartialOrd)]
 pub struct MlirBlock(pub Vec<MlirStmt>);
+
 impl std::cmp::Eq for MlirBlock {}
+
 impl Deref for MlirBlock {
     type Target = Vec<MlirStmt>;
     fn deref(&self) -> &Self::Target {
@@ -395,6 +373,6 @@ impl MlirStmt {
             MlirStmt::GotoFalse(_, _) => "goto false",
             MlirStmt::Return(_) => "return",
         }
-        .to_string()
+            .to_string()
     }
 }
