@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Formatter;
 
 use derive_new::new;
 use inkwell::builder::Builder;
@@ -123,6 +124,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let expression = expression_opt
             .as_ref()
             .map(|expression| self.compile_expression(expression));
+        // '.as_ref()' wasn't satisfying the lifetime requirements, so I did it explicitly.
         let trait_ref_expression: Option<&dyn BasicValue<'ctx>> =
             if let Some(expression) = expression.as_ref() {
                 Some(expression)
@@ -255,11 +257,23 @@ fn new_block<'mlir>(blocks: &mut Vec<MlirBasicBlock<'mlir>>, stmts: &mut Vec<&'m
     let label_is_none = label.is_none();
     let _label = label.take();
     let basic_block = MlirBasicBlock::new(_label, std::mem::take(stmts));
-    blocks.push(basic_block);
+    if basic_block.label.is_some() || !basic_block.stmts.is_empty() {
+        blocks.push(basic_block);
+    }
 }
 
 #[derive(Debug, new)]
 pub struct MlirBasicBlock<'mlir> {
     pub label: Option<InternedStr>,
     pub stmts: Vec<&'mlir MlirStmt>,
+}
+
+impl std::fmt::Display for MlirBasicBlock<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "\n--- {:?} ---", self.label);
+        for stmt in self.stmts.iter() {
+            writeln!(f, "{}", stmt)?;
+        }
+        writeln!(f, "---")
+    }
 }

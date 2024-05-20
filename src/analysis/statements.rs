@@ -164,8 +164,8 @@ impl Analyzer {
         };
         let function_ty = self.return_ty.as_ref().unwrap_or(&NONE_TYPE).clone();
         let value = if let Some(value) = value {
-            let value_mlir = self.validate_expression(&value)?;
-            let casted_value_mlir = self.implicit_cast(value_mlir, function_ty.clone(), span);
+            let value_mlir = self.validate_expression(value)?;
+            let casted_value_mlir = self.implicit_cast(value_mlir, function_ty.clone(), span).fold();
             Some(casted_value_mlir)
         } else {
             None

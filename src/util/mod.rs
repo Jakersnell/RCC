@@ -9,9 +9,9 @@ use error::CompilerError;
 use crate::data::tokens::Token as LexToken;
 
 pub mod ast_pretty_print;
-mod display_utils;
+pub mod display_utils;
 pub mod error;
-mod mlir_pretty_print;
+pub mod mlir_display;
 pub mod str_intern;
 
 pub type LocatableToken = Locatable<LexToken>;

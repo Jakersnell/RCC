@@ -22,15 +22,22 @@ static DISPLAY_MLIR: bool = false;
 static PRETTY_PRINT_AST: bool = false;
 
 fn main() {
-    let source = std::fs::read_to_string("_c_test_files/should_succeed/sizeof.c").unwrap();
+    let source = std::fs::read_to_string("_c_test_files/should_succeed/basic_blocks.c").unwrap();
     let lexer = Lexer::new(source.into());
     let parser = Parser::new(lexer);
     let analyzer = Analyzer::new(parser.parse_all().unwrap());
     let mlir = analyzer.validate().unwrap();
-    println!("{:#?}", mlir);
+    for (func_name, func) in mlir.functions.iter() {
+        println!("\n-- function '{}' --", func_name);
+        let basic_blocks = crate::codegen::pre_construct_blocks(&func.body);
+        for block in basic_blocks {
+            println!("{}", crate::util::display_utils::indent_string(format!("{}", block), 0, 4));
+        }
+        println!("--");
+    }
 }
 
-/// Contains integration tests for the components and their cohesion
+/// Integration tests
 #[cfg(test)]
 mod tests {
     use std::panic::catch_unwind;
@@ -40,7 +47,6 @@ mod tests {
     use crate::analysis::SharedReporter;
     use crate::data::ast::{Expression, InitDeclaration};
     use crate::util::error::CompilerError;
-
 
     pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();

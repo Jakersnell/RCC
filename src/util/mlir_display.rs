@@ -17,7 +17,7 @@ impl Display for MlirStmt {
             MlirStmt::Return(value) => {
                 write!(f, "return")?;
                 if let Some(value) = value.as_ref() {
-                    write!(f, "{}", value)?;
+                    write!(f, " {}", value)?;
                 }
                 write!(f, ";")
             }
