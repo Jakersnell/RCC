@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 
+use derive_new::new;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
 
-use crate::data::mlir::{
-    MidLevelIR, MlirExpr, MlirExprKind, MlirFunction, MlirStmt, MlirType, MlirTypeDecl,
-    MlirTypeKind, VOID_TYPE,
-};
+use crate::data::mlir::{MidLevelIR, MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind, VOID_TYPE};
 use crate::data::symbols::BUILTINS;
 use crate::util::str_intern;
 use crate::util::str_intern::InternedStr;
@@ -217,4 +215,51 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .collect::<Vec<_>>();
         self.context.struct_type(&member_types, false)
     }
+}
+
+pub fn pre_construct_blocks(function_block: &MlirBlock) -> Vec<MlirBasicBlock<'_>> {
+    let mut blocks = Vec::new();
+    let mut stmts = Vec::new();
+    let mut label = None;
+
+    macro_rules! new_block {
+        () => { new_block(&mut blocks, &mut stmts, &mut label) }
+    };
+
+    for stmt in function_block.iter() {
+        match stmt {
+            MlirStmt::Label(ident) => {
+                new_block!();
+                label = Some(ident.clone());
+            }
+
+            MlirStmt::Goto(_) |
+            MlirStmt::GotoFalse(_, _) |
+            MlirStmt::Return(_) => {
+                stmts.push(stmt);
+                new_block!();
+            }
+
+            _ => {
+                stmts.push(stmt);
+            }
+
+            MlirStmt::Block(_) => panic!("blocks mut be flattened at this stage in the MLIR"),
+        }
+    }
+
+    blocks
+}
+
+fn new_block<'mlir>(blocks: &mut Vec<MlirBasicBlock<'mlir>>, stmts: &mut Vec<&'mlir MlirStmt>, label: &mut Option<InternedStr>) {
+    let label_is_none = label.is_none();
+    let _label = label.take();
+    let basic_block = MlirBasicBlock::new(_label, std::mem::take(stmts));
+    blocks.push(basic_block);
+}
+
+#[derive(Debug, new)]
+pub struct MlirBasicBlock<'mlir> {
+    pub label: Option<InternedStr>,
+    pub stmts: Vec<&'mlir MlirStmt>,
 }
