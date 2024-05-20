@@ -45,7 +45,6 @@ impl Display for MlirFunction {
         for param in &self.parameters {
             write!(f, " {},", &param.value)?;
         }
-
         writeln!(f, ") {{")?;
         writeln!(f, "{}", self.body);
         write!(f, "}}")
@@ -180,6 +179,7 @@ impl Display for MlirVariable {
         Ok(())
     }
 }
+
 impl Display for MlirStruct {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "struct {} <{} bytes> {{", self.ident.value, self.size)?;
@@ -214,5 +214,30 @@ impl Display for MidLevelIR {
         }
 
         write!(f, "}}")
+    }
+}
+
+impl Display for MlirTypeKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        macro_rules! write_signed {
+            ($name:literal, $unsigned:expr) => {
+                write!(
+                    f,
+                    "{} {}",
+                    if $unsigned { "unsigned" } else { "signed" },
+                    $name
+                )
+            };
+        }
+        use crate::data::mlir::MlirTypeKind::*;
+        match self {
+            Void => write!(f, "void"),
+            Char(unsigned) => write_signed!("char", *unsigned),
+            Int(unsigned) => write_signed!("int", *unsigned),
+            Long(unsigned) => write_signed!("long", *unsigned),
+            Float => write!(f, "float"),
+            Double => write!(f, "double"),
+            Struct(ident) => write!(f, "struct {}", ident),
+        }
     }
 }
