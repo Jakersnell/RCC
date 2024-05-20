@@ -1,5 +1,5 @@
-use crate::analysis::casting::numeric_cast;
 use crate::analysis::Analyzer;
+use crate::analysis::casting::numeric_cast;
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
@@ -7,9 +7,9 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
 };
 use crate::data::tokens::Literal;
+use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
@@ -28,7 +28,7 @@ impl Analyzer {
             Expression::Cast(dec, expr) => self.route_cast_expression(dec, expr),
             _ => unreachable!(),
         }
-        .map(|expr| expr.fold())
+            .map(|expr| expr.fold())
     }
 
     fn validate_variable_call(
@@ -337,7 +337,7 @@ impl Analyzer {
                 let value = value.as_str().bytes().collect();
                 (
                     MlirLiteral::String(value),
-                    MlirType::new(MlirTypeKind::Char(false), MlirTypeDecl::Pointer),
+                    MlirType::new(MlirTypeKind::Char(true), MlirTypeDecl::Pointer),
                 )
             }
         };
