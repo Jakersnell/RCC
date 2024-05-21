@@ -11,8 +11,8 @@ impl Display for MlirStmt {
             MlirStmt::VariableDeclaration(var) => write!(f, "{};", var),
             MlirStmt::Label(ident) => write!(f, "label {};", ident),
             MlirStmt::Goto(ident) => write!(f, "goto {};", ident),
-            MlirStmt::GotoFalse(condition, ident) => {
-                write!(f, "goto-false {} {};", condition, ident)
+            MlirStmt::CondGoto(condition, then, _else) => {
+                write!(f, "cond-goto | cond: {}; then: {}; else:{};", condition, then, _else)
             }
             MlirStmt::Return(value) => {
                 write!(f, "return")?;

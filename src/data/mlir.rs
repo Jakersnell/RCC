@@ -6,6 +6,7 @@ use std::ops::Deref;
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
+use crate::data::mlir::MlirTypeDecl::Basic;
 use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
 
@@ -358,7 +359,7 @@ pub enum MlirStmt {
     VariableDeclaration(MlirVariable),
     Label(InternedStr),
     Goto(InternedStr),
-    GotoFalse(MlirExpr, InternedStr),
+    CondGoto(MlirExpr, InternedStr, InternedStr),
     Return(Option<MlirExpr>),
 }
 
@@ -370,7 +371,7 @@ impl MlirStmt {
             MlirStmt::VariableDeclaration(_) => "declaration",
             MlirStmt::Label(_) => "label",
             MlirStmt::Goto(_) => "goto",
-            MlirStmt::GotoFalse(_, _) => "goto false",
+            MlirStmt::CondGoto(_, _, _) => "goto false",
             MlirStmt::Return(_) => "return",
         }
             .to_string()

@@ -165,7 +165,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                     block_has_jumped = true;
                     self.compile_goto(label);
                 }
-                MlirStmt::CondGoto(condition, label) => {
+                MlirStmt::CondGoto(condition, then, _else) => {
                     block_has_jumped = true;
                     todo!()
                 }
@@ -318,7 +318,7 @@ pub fn pre_construct_blocks(function_block: &MlirBlock) -> Vec<MlirBasicBlock<'_
             }
 
             MlirStmt::Goto(_) |
-            MlirStmt::CondGoto(_, _) |
+            MlirStmt::CondGoto(_, _, _) |
             MlirStmt::Return(_) => {
                 stmts.push(stmt);
                 new_block!();

@@ -178,7 +178,7 @@ impl<'a> BasicBlockFactory<'a> {
     pub fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
         for stmt in self.mlir.0.iter() {
             match &stmt {
-                MlirStmt::Return(_) | MlirStmt::Goto(_) | MlirStmt::GotoFalse(_, _) => {
+                MlirStmt::Return(_) | MlirStmt::Goto(_) | MlirStmt::CondGoto(_, _, _) => {
                     self.statements.push(stmt);
                     self.transition_block();
                 }
@@ -267,22 +267,21 @@ impl<'a> GraphFactory<'a> {
                             .expect("Corresponding label not found.");
                         self.connect(current.clone(), to_block.clone(), None);
                     }
-                    MlirStmt::GotoFalse(condition, label) => {
-                        let jump_if_true = false;
-                        let to_block = self
+                    MlirStmt::CondGoto(condition, then, _else) => {
+                        let then_block = self.block_from_label.get(then).expect("Corresponding label not found.").clone();
+                        let else_block = self
                             .block_from_label
-                            .get(label)
-                            .expect("Corresponding label not found.");
-                        let else_block = &next;
+                            .get(_else)
+                            .expect("Corresponding label not found.").clone();
                         self.connect(
                             current.clone(),
-                            to_block.clone(),
-                            Some((condition, jump_if_true)),
+                            then_block.clone(),
+                            Some((condition, true)),
                         );
                         self.connect(
                             current.clone(),
                             else_block.clone(),
-                            Some((condition, !jump_if_true)),
+                            Some((condition, false)),
                         );
                     }
                     MlirStmt::Return(_) => {
