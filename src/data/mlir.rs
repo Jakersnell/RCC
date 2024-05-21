@@ -6,7 +6,6 @@ use std::ops::Deref;
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
-use crate::data::mlir::MlirTypeDecl::Basic;
 use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
 
@@ -19,6 +18,11 @@ macro_rules! basic_ty {
     };
 }
 pub(crate) use basic_ty;
+
+pub const SIGNED_INT_TYPE: MlirType = MlirType {
+    kind: MlirTypeKind::Int(false),
+    decl: MlirTypeDecl::Basic,
+};
 
 pub const VOID_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Void,

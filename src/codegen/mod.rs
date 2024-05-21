@@ -191,7 +191,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.builder().build_unconditional_branch(goto_block);
     }
 
-    fn compile_goto_false(&mut self, condition: &MlirExpr, label: &InternedStr) {
+    fn compile_cond_goto(&mut self, condition: &MlirExpr, label: &InternedStr) {
         let condition = match self.compile_expression(condition) {
             BasicValueEnum::IntValue(int_value) => int_value,
             _ => panic!("Cannot build conditional comparison to zero for condition '{:?}'", condition)
@@ -360,3 +360,5 @@ impl std::fmt::Display for MlirBasicBlock<'_> {
         writeln!(f, "---")
     }
 }
+
+

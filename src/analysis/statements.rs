@@ -1,10 +1,17 @@
 use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
-use crate::data::mlir::{MlirBlock, MlirStmt, VOID_TYPE};
+use crate::data::mlir::{MlirBlock, MlirExpr, MlirStmt, SIGNED_INT_TYPE, VOID_TYPE};
 use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 
 impl Analyzer {
+    #[inline(always)]
+    fn validate_conditional(&mut self, expression: &Expression) -> Result<MlirExpr, ()> {
+        let cond = self.validate_expression(expression)?;
+        let cond_span = cond.span;
+        Ok(self.implicit_cast(cond, SIGNED_INT_TYPE, cond_span))
+    }
+
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
         self.push_scope();
         let mut statements = Vec::new();
@@ -87,7 +94,7 @@ impl Analyzer {
         let end_label = str_intern::intern(format!("{}_end", start_label));
         let mut block = Vec::new();
 
-        let condition = self.validate_expression(condition)?;
+        let condition = self.validate_conditional(condition)?;
         let conditional_goto = MlirStmt::CondGoto(condition, then_label.clone(), else_label.clone());
         block.push(conditional_goto);
 
@@ -128,7 +135,7 @@ impl Analyzer {
         let label = MlirStmt::Label(label_string.clone());
         block.push(label);
 
-        let condition = self.validate_expression(condition)?;
+        let condition = self.validate_conditional(condition)?;
         let branch = MlirStmt::CondGoto(condition, label_string_then.clone(), label_string_end.clone());
         block.push(branch);
 
@@ -203,7 +210,7 @@ impl Analyzer {
         block.push(MlirStmt::Label(loop_start_label.clone()));
 
         if let Some(condition) = condition {
-            let condition = self.validate_expression(condition)?;
+            let condition = self.validate_conditional(condition)?;
             let condition = MlirStmt::CondGoto(condition, loop_body_label.clone(), loop_end_label.clone());
             block.push(condition);
         }
