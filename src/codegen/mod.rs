@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use std::fmt::Formatter;
 
 use derive_new::new;
+use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntMathValue, PointerValue};
+use inkwell::values::IntValue;
 
 use crate::data::mlir::{MidLevelIR, MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind, VOID_TYPE};
 use crate::data::symbols::BUILTINS;
@@ -20,10 +22,10 @@ use crate::util::str_intern::InternedStr;
 //     let compiler = Compiler::new(mlir, &context, &builder, &module);
 // }
 
-struct Compiler<'a, 'mlir, 'ctx> {
+pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) mlir: &'mlir MidLevelIR,
     pub(in crate::codegen) context: &'ctx Context,
-    pub(in crate::codegen) builder: &'a Builder<'ctx>,
+    pub(in crate::codegen) builder: Option<Builder<'ctx>>,
     pub(in crate::codegen) module: &'a Module<'ctx>,
     pub(in crate::codegen) functions: HashMap<InternedStr, FunctionValue<'ctx>>,
     pub(in crate::codegen) variables: HashMap<InternedStr, PointerValue<'ctx>>,
@@ -31,6 +33,24 @@ struct Compiler<'a, 'mlir, 'ctx> {
 }
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
+    #[inline(always)]
+    fn get_next_block(&self) -> Option<BasicBlock<'ctx>> {
+        self.builder().get_insert_block()?.get_next_basic_block()
+    }
+
+    #[inline(always)]
+    fn builder(&self) -> &Builder<'ctx> {
+        self.builder.as_ref().unwrap()
+    }
+
+    #[inline(always)]
+    fn get_block_by_name(&self, name: &str) -> Option<BasicBlock<'ctx>> {
+        self.fn_value().get_basic_block_iter().find(|block| block.get_name().to_str().unwrap() == name)
+    }
+
+    #[inline(always)]
+    fn last_block(&self) -> BasicBlock<'ctx> { self.fn_value().get_last_basic_block().unwrap() }
+
     #[inline(always)]
     fn fn_value(&self) -> FunctionValue<'ctx> {
         self.fn_value_opt.unwrap()
@@ -90,7 +110,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let context_function = self.compile_function_signature(function);
         let entry = self.context.append_basic_block(context_function, "entry");
 
-        self.builder.position_at_end(entry);
+        self.builder().position_at_end(entry);
         self.fn_value_opt = Some(context_function);
         self.variables.reserve(function.parameters.len());
 
@@ -98,27 +118,89 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             let arg_name = function.parameters[i].ident.clone();
             let allocation = self.create_entry_block_allocation(arg.get_type(), &arg_name);
 
-            self.builder.build_store(allocation, arg).unwrap();
+            self.builder().build_store(allocation, arg).unwrap();
 
             self.variables.insert(arg_name, allocation);
         }
 
+
         todo!("build body and compile statements");
     }
 
-    fn compile_statement(&mut self, statement: &MlirStmt) {
-        match statement {
-            MlirStmt::Expression(expression) => todo!(),
-            MlirStmt::VariableDeclaration(var) => todo!(),
-            MlirStmt::Label(_) => todo!(),
-            MlirStmt::Goto(_) => todo!(),
-            MlirStmt::GotoFalse(_, _) => todo!(),
-            MlirStmt::Return(expression) => self.compile_return_statement(expression),
-            MlirStmt::Block(_) => unreachable!(
-                "All blocks must be flattened. No blocks should exist in the MLIR at this stage"
-            ),
+    fn process_function_body(&mut self, mlir_block: &MlirBlock) {
+        let mlir_basic_blocks = pre_construct_blocks(mlir_block);
+        let function = self.fn_value();
+
+        for (block_number, block) in mlir_basic_blocks.iter().enumerate() {
+            let name = if let Some(label) = &block.label { label.to_string() } else { format!("basic_block_{}", block_number) };
+            self.context.append_basic_block(function, &name);
+        }
+
+        if cfg!(debug_assertions) {
+            let block_count = function.get_basic_block_iter().count();
+            assert_eq!(mlir_basic_blocks.len() + 1, block_count); // + 1 to account for entry block
+        }
+
+        let mut llvm_block_iter = function.get_basic_block_iter().peekable();
+        llvm_block_iter.next(); // skip entry block
+
+        let mut mlir_block_iter = mlir_basic_blocks.iter().peekable();
+
+        while let (Some(mlir_bb), Some(llvm_bb)) = (mlir_block_iter.next(), llvm_block_iter.next()) {
+            let next_llvm_bb = llvm_block_iter.peek().copied();
+            self.builder().position_at_end(llvm_bb);
+            self.compile_mlir_basic_block(mlir_bb);
         }
     }
+
+    fn compile_mlir_basic_block(&mut self, mlir_bb: &MlirBasicBlock) {
+        for stmt in &mlir_bb.stmts {
+            let mut block_has_jumped = false;
+            match stmt {
+                MlirStmt::Expression(expression) => {
+                    self.compile_expression(expression);
+                }
+                MlirStmt::VariableDeclaration(var) => todo!(),
+                MlirStmt::Goto(label) => {
+                    block_has_jumped = true;
+                    self.compile_goto(label);
+                }
+                MlirStmt::CondGoto(condition, label) => {
+                    block_has_jumped = true;
+                    todo!()
+                }
+                MlirStmt::Return(expression) => {
+                    block_has_jumped = true;
+                    self.compile_return_statement(expression);
+                }
+
+                MlirStmt::Block(_) |
+                MlirStmt::Label(_) => unreachable!(),
+            }
+            if !block_has_jumped {
+                let next_block_opt = self.builder().get_insert_block().unwrap().get_next_basic_block();
+                if let Some(next_block) = next_block_opt {
+                    self.builder().build_unconditional_branch(next_block);
+                }
+            }
+        }
+    }
+
+    fn compile_goto(&self, label: &InternedStr) {
+        let goto_block = self.get_block_by_name(label).unwrap();
+        self.builder().build_unconditional_branch(goto_block);
+    }
+
+    fn compile_goto_false(&mut self, condition: &MlirExpr, label: &InternedStr) {
+        let condition = match self.compile_expression(condition) {
+            BasicValueEnum::IntValue(int_value) => int_value,
+            _ => panic!("Cannot build conditional comparison to zero for condition '{:?}'", condition)
+        };
+        let goto_block = self.get_block_by_name(label).unwrap();
+        let next_block = self.get_next_block().unwrap();
+        self.builder().build_conditional_branch(condition, goto_block, next_block);
+    }
+
 
     fn compile_return_statement(&mut self, expression_opt: &Option<MlirExpr>) {
         let expression = expression_opt
@@ -131,7 +213,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             } else {
                 None
             };
-        let _return = self.builder.build_return(trait_ref_expression).unwrap();
+        let _return = self.builder().build_return(trait_ref_expression).unwrap();
     }
 
     fn compile_expression(&mut self, expression: &MlirExpr) -> BasicValueEnum<'ctx> {
@@ -236,13 +318,14 @@ pub fn pre_construct_blocks(function_block: &MlirBlock) -> Vec<MlirBasicBlock<'_
             }
 
             MlirStmt::Goto(_) |
-            MlirStmt::GotoFalse(_, _) |
+            MlirStmt::CondGoto(_, _) |
             MlirStmt::Return(_) => {
                 stmts.push(stmt);
                 new_block!();
             }
 
-            _ => {
+            MlirStmt::Expression(_) |
+            MlirStmt::VariableDeclaration(_) => {
                 stmts.push(stmt);
             }
 
