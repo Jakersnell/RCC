@@ -1,8 +1,8 @@
 use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
 use crate::data::mlir::{MlirBlock, MlirExpr, MlirStmt, SIGNED_INT_TYPE, VOID_TYPE};
-use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
+use crate::util::{str_intern, Locatable, Span};
 
 impl Analyzer {
     #[inline(always)]
@@ -77,8 +77,8 @@ impl Analyzer {
         var_dec: &Locatable<VariableDeclaration>,
     ) -> Result<Option<MlirStmt>, ()> {
         let span = var_dec.location;
-        let var_dec = self.validate_variable_declaration(var_dec)?;
-        self.add_variable_to_scope(&var_dec, span)?;
+        let mut var_dec = self.validate_variable_declaration(var_dec)?;
+        self.add_variable_to_scope(&mut var_dec, span)?;
         Ok(Some(MlirStmt::VariableDeclaration(var_dec)))
     }
 
@@ -95,7 +95,8 @@ impl Analyzer {
         let mut block = Vec::new();
 
         let condition = self.validate_conditional(condition)?;
-        let conditional_goto = MlirStmt::CondGoto(condition, then_label.clone(), else_label.clone());
+        let conditional_goto =
+            MlirStmt::CondGoto(condition, then_label.clone(), else_label.clone());
         block.push(conditional_goto);
 
         block.push(MlirStmt::Label(then_label));
@@ -136,7 +137,11 @@ impl Analyzer {
         block.push(label);
 
         let condition = self.validate_conditional(condition)?;
-        let branch = MlirStmt::CondGoto(condition, label_string_then.clone(), label_string_end.clone());
+        let branch = MlirStmt::CondGoto(
+            condition,
+            label_string_then.clone(),
+            label_string_end.clone(),
+        );
         block.push(branch);
 
         let body_label = MlirStmt::Label(label_string_then);
@@ -166,7 +171,9 @@ impl Analyzer {
         let function_ty = self.return_ty.as_ref().unwrap_or(&VOID_TYPE).clone();
         let value = if let Some(value) = value {
             let value_mlir = self.validate_expression(value)?;
-            let casted_value_mlir = self.implicit_cast(value_mlir, function_ty.clone(), span).fold();
+            let casted_value_mlir = self
+                .implicit_cast(value_mlir, function_ty.clone(), span)
+                .fold();
             Some(casted_value_mlir)
         } else {
             None
@@ -200,8 +207,8 @@ impl Analyzer {
         let mut block = Vec::new();
 
         if let Some(initializer) = initializer {
-            let var_dec = self.validate_variable_declaration(initializer)?;
-            self.add_variable_to_scope(&var_dec, initializer.location);
+            let mut var_dec = self.validate_variable_declaration(initializer)?;
+            self.add_variable_to_scope(&mut var_dec, initializer.location);
             let var_stmt = MlirStmt::VariableDeclaration(var_dec);
             block.push(var_stmt);
         }
@@ -211,7 +218,8 @@ impl Analyzer {
 
         if let Some(condition) = condition {
             let condition = self.validate_conditional(condition)?;
-            let condition = MlirStmt::CondGoto(condition, loop_body_label.clone(), loop_end_label.clone());
+            let condition =
+                MlirStmt::CondGoto(condition, loop_body_label.clone(), loop_end_label.clone());
             block.push(condition);
         }
 
