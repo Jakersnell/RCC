@@ -1,8 +1,8 @@
-use crate::analysis::{Analyzer, control_flow};
+use crate::analysis::{control_flow, Analyzer};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
+use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(
@@ -96,7 +96,7 @@ impl Analyzer {
             .add_function(&ident, ty.clone(), param_types, func_span);
 
         self.push_scope();
-        for parameter in &parameters {
+        for mut parameter in &mut parameters {
             self.add_variable_to_scope(parameter, func_span);
         }
 
@@ -129,7 +129,10 @@ impl Analyzer {
     }
 
     fn validate_function_return(&mut self, function: &MlirFunction, span: Span) {
-        let cfg = control_flow::ControlFlowGraph::new(&function.body, &format!("<fn {}; {}>", function.ident.value, function.span));
+        let cfg = control_flow::ControlFlowGraph::new(
+            &function.body,
+            &format!("<fn {}; {}>", function.ident.value, function.span),
+        );
         if !cfg.all_paths_return() {
             self.report_error(CompilerError::FunctionMissingReturn(
                 function.ident.to_string(),
@@ -256,6 +259,7 @@ impl Analyzer {
         let ty = span.into_locatable(self.validate_type(&dec.specifier, span, false, false)?);
 
         Ok(MlirVariable {
+            uid: 0,
             span,
             ty,
             ident,

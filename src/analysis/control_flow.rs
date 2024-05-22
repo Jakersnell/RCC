@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter, write};
+use std::fmt::{write, Debug, Display, Formatter};
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufWriter, Write};
@@ -13,8 +13,8 @@ use crate::data::mlir::{
     MidLevelIR, MlirBlock, MlirExpr, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
     VOID_TYPE,
 };
-use crate::OUTPUT_GRAPH;
 use crate::util::str_intern::InternedStr;
+use crate::OUTPUT_GRAPH;
 
 /*
 Some resources on control flow analysis:
@@ -268,16 +268,17 @@ impl<'a> GraphFactory<'a> {
                         self.connect(current.clone(), to_block.clone(), None);
                     }
                     MlirStmt::CondGoto(condition, then, _else) => {
-                        let then_block = self.block_from_label.get(then).expect("Corresponding label not found.").clone();
+                        let then_block = self
+                            .block_from_label
+                            .get(then)
+                            .expect("Corresponding label not found.")
+                            .clone();
                         let else_block = self
                             .block_from_label
                             .get(_else)
-                            .expect("Corresponding label not found.").clone();
-                        self.connect(
-                            current.clone(),
-                            then_block.clone(),
-                            Some((condition, true)),
-                        );
+                            .expect("Corresponding label not found.")
+                            .clone();
+                        self.connect(current.clone(), then_block.clone(), Some((condition, true)));
                         self.connect(
                             current.clone(),
                             else_block.clone(),
@@ -364,7 +365,6 @@ pub struct ControlFlowGraph<'a> {
     pub edges: Vec<Rc<BasicBlockEdge<'a>>>,
 }
 
-
 impl<'a> ControlFlowGraph<'a> {
     pub fn new(mlir: &'a MlirBlock, name: &str) -> Self {
         let block_factory = BasicBlockFactory::new(mlir);
@@ -373,8 +373,7 @@ impl<'a> ControlFlowGraph<'a> {
         let graph = graph_factory.build(blocks);
         if !cfg!(test) && OUTPUT_GRAPH {
             let cfg_to_string = graph.to_string();
-            let mut file = File::create(format!("graph_{name}.dot"))
-                .unwrap();
+            let mut file = File::create(format!("graph_{name}.dot")).unwrap();
             let mut writer = BufWriter::new(file);
             writer.write_all(cfg_to_string.as_bytes());
         }
