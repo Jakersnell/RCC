@@ -12,7 +12,11 @@ impl Display for MlirStmt {
             MlirStmt::Label(ident) => write!(f, "label {};", ident),
             MlirStmt::Goto(ident) => write!(f, "goto {};", ident),
             MlirStmt::CondGoto(condition, then, _else) => {
-                write!(f, "cond-goto | cond: {}; then: {}; else:{};", condition, then, _else)
+                write!(
+                    f,
+                    "cond-goto | cond: {}; then: {}; else:{};",
+                    condition, then, _else
+                )
             }
             MlirStmt::Return(value) => {
                 write!(f, "return")?;

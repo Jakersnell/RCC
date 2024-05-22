@@ -24,6 +24,7 @@ pub(crate) struct FunctionSymbol {
 
 #[derive(Clone, Debug)]
 pub(crate) struct VariableSymbol {
+    pub(crate) uid: usize,
     pub(crate) ty: MlirType,
     pub(crate) is_const: bool,
     pub(crate) is_initialized: bool,

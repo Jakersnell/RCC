@@ -54,6 +54,7 @@ pub struct MlirFunction {
 
 #[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirVariable {
+    pub uid: usize,
     pub span: Span,
     pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,
@@ -250,7 +251,7 @@ impl MlirExpr {
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
     Literal(MlirLiteral),
-    Variable(InternedStr),
+    Variable(usize),
 
     // unary
     PostIncrement(MlirExpr),
@@ -378,6 +379,6 @@ impl MlirStmt {
             MlirStmt::CondGoto(_, _, _) => "goto false",
             MlirStmt::Return(_) => "return",
         }
-            .to_string()
+        .to_string()
     }
 }

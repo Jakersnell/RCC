@@ -8,10 +8,20 @@ use crate::data::mlir::{
 };
 use crate::data::symbols::*;
 use crate::util::error::CompilerError;
-use crate::util::str_intern::InternedStr;
+use crate::util::str_intern::{get, InternedStr};
 use crate::util::{str_intern, Locatable, Span};
 
+static mut VARIABLE_COUNT: usize = 0;
+
+pub fn update_global_variable_count() -> usize {
+    unsafe {
+        VARIABLE_COUNT += 1;
+        VARIABLE_COUNT
+    }
+}
+
 pub type SymbolResult = Result<(), CompilerError>;
+
 #[derive(Debug, Clone)]
 pub(crate) enum SymbolKind {
     Function(FunctionSymbol),
@@ -76,23 +86,26 @@ impl SymbolResolver {
         self.add_symbol(ident, symbol, span)
     }
 
-    #[inline]
     pub fn add_variable(
         &mut self,
-        ident: &InternedStr,
-        ty: &MlirType,
-        is_const: bool,
-        is_initialized: bool,
-        array_size: Option<u64>,
+        var: &mut MlirVariable,
         span: Span,
-    ) -> SymbolResult {
+    ) -> Result<usize, CompilerError> {
+        let uid = update_global_variable_count();
+        var.uid = uid;
+        let array_size = match &var.ty.decl {
+            MlirTypeDecl::Array(size) => Some(*size),
+            _ => None,
+        };
         let symbol = SymbolKind::Variable(VariableSymbol {
-            ty: ty.clone(),
-            is_const,
-            is_initialized,
+            uid,
+            ty: var.ty.clone(),
+            is_const: var.is_const,
+            is_initialized: var.initializer.is_some(),
             array_size,
         });
-        self.add_symbol(ident, symbol, span)
+        self.add_symbol(&var.ident, symbol, span)?;
+        Ok(uid)
     }
 
     #[inline]
@@ -149,13 +162,13 @@ impl SymbolResolver {
         }
     }
 
-    pub fn get_variable_type(
+    pub fn get_variable_type_and_id(
         &mut self,
         ident: &InternedStr,
         span: Span,
-    ) -> Result<MlirType, CompilerError> {
+    ) -> Result<(MlirType, usize), CompilerError> {
         match self.retrieve(ident, span)? {
-            SymbolKind::Variable(var) => Ok(var.ty.clone()),
+            SymbolKind::Variable(var) => Ok((var.ty.clone(), var.uid)),
             _ => Err(CompilerError::NotAVariable(span)),
         }
     }
@@ -193,7 +206,9 @@ impl SymbolResolver {
             } else {
                 None
             };
+            let uid = update_global_variable_count();
             let var = VariableSymbol {
+                uid,
                 ty: field.ty.clone(),
                 is_const: field.is_const,
                 is_initialized: field.initializer.is_some(),
@@ -292,3 +307,6 @@ fn test_parent_scope_is_accessed_in_retrieve() {
     let result = resolver.retrieve(&ident, Span::default());
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_variable_call_uid_is_same_as_variable_uid() {}
