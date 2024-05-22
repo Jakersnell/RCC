@@ -88,8 +88,8 @@ impl Analyzer {
                     push_locatable!(
                         globals,
                         |item| {
-                            let var = self.validate_variable_declaration(item);
-                            if let Ok(var) = var.as_ref() {
+                            let mut var = self.validate_variable_declaration(item);
+                            if let Ok(var) = var.as_mut() {
                                 self.add_variable_to_scope(var, item.location);
                             }
                             var
@@ -165,19 +165,12 @@ impl Analyzer {
         self.reporter.0.borrow_mut().report_warning(warning);
     }
 
-    fn add_variable_to_scope(&mut self, var: &MlirVariable, span: Span) -> Result<(), ()> {
+    fn add_variable_to_scope(&mut self, var: &mut MlirVariable, span: Span) -> Result<(), ()> {
         let array_size = match &var.ty.decl {
             MlirTypeDecl::Array(size) => Some(*size),
             _ => None,
         };
-        let result = self.scope.borrow_mut().add_variable(
-            &var.ident,
-            &var.ty,
-            var.is_const,
-            var.initializer.is_some(),
-            array_size,
-            span,
-        );
+        let result = self.scope.borrow_mut().add_variable(var, span);
         if let Err(err) = result {
             self.report_error(err);
         }
@@ -213,7 +206,7 @@ impl Analyzer {
                 assert!(self
                     .scope
                     .borrow_mut()
-                    .get_variable_type(&item, span)
+                    .get_variable_type_and_id(&item, span)
                     .is_ok());
             }
             self.report_warning(CompilerWarning::UnusedVariable(span));
@@ -426,5 +419,20 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
         };
         let result = validator.validate_type(&dec_spec, Span::default(), false, false);
         assert_eq!(result, Ok(expected));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{analysis, lexer, parser};
+    use crate::analysis::SharedReporter;
+    use crate::data::mlir::MidLevelIR;
+
+    pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MidLevelIR, SharedReporter> {
+        let source = std::fs::read_to_string(path).expect("Could not read file.");
+        let lexer = lexer::Lexer::new(source.into());
+        let parser = parser::Parser::new(lexer);
+        let result = parser.parse_all().expect("Error in Parser.");
+        analysis::Analyzer::new(result).validate()
     }
 }
