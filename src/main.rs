@@ -31,7 +31,10 @@ fn main() {
         println!("\n-- function '{}' --", func_name);
         let basic_blocks = crate::codegen::pre_construct_blocks(&func.body);
         for block in basic_blocks {
-            println!("{}", crate::util::display_utils::indent_string(format!("{}", block), 0, 4));
+            println!(
+                "{}",
+                crate::util::display_utils::indent_string(format!("{}", block), 0, 4)
+            );
         }
         println!("--");
     }
