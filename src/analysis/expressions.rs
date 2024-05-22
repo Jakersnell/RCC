@@ -4,7 +4,8 @@ use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
 use crate::data::mlir::{
-    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
+    MlirBlock, MlirExpr, MlirExprKind, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
+    MlirVariable, MlirVarInit,
 };
 use crate::data::tokens::Literal;
 use crate::util::{Locatable, Span};
@@ -15,33 +16,33 @@ impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
         match expr {
             Expression::Literal(literal) => self.validate_literal(literal, literal.location),
-            Expression::Variable(variable) => self.validate_variable_call(variable),
+            Expression::Variable(variable) => self.validate_variable_access(variable),
             Expression::Sizeof(ty_or_expr) => self.validate_sizeof(ty_or_expr),
             Expression::Parenthesized(expr) => self.validate_expression(expr),
             Expression::PostFix(op, expr) => self.validate_post_inc_or_dec(op, expr, expr.location),
-            Expression::Unary(op, expr) => self.route_unary(op, expr),
-            Expression::Binary(op, left, right) => self.route_binary(op, left, right),
-            Expression::FunctionCall(ident, args) => self.route_function_call(ident, args),
-            Expression::Index(left, index) => self.route_index(left, index),
-            Expression::Member(body, member) => self.route_member(body, member),
-            Expression::PointerMember(body, member) => self.route_pointer_member(body, member),
-            Expression::Cast(dec, expr) => self.route_cast_expression(dec, expr),
+            Expression::Unary(op, expr) => self.validate_unary(op, expr),
+            Expression::Binary(op, left, right) => self.validate_binary(op, left, right),
+            Expression::FunctionCall(ident, args) => self.validate_function_call(ident, args),
+            Expression::Index(left, index) => self.validate_index(left, index),
+            Expression::Member(body, member) => self.validate_member(body, member),
+            Expression::PointerMember(body, member) => self.validate_pointer_member(body, member),
+            Expression::Cast(dec, expr) => self.validate_cast_expression(dec, expr),
             _ => unreachable!(),
         }
-            .map(|expr| expr.fold())
+        .map(|expr| expr.fold())
     }
 
-    fn validate_variable_call(
+    fn validate_variable_access(
         &mut self,
         variable: &Locatable<InternedStr>,
     ) -> Result<MlirExpr, ()> {
         let result = self
             .scope
             .borrow_mut()
-            .get_variable_type(&variable.value, variable.location)
-            .map(|ty| MlirExpr {
+            .get_variable_type_and_id(&variable.value, variable.location)
+            .map(|(ty, id)| MlirExpr {
                 span: variable.location,
-                kind: Box::new(MlirExprKind::Variable(variable.value.clone())),
+                kind: Box::new(MlirExprKind::Variable(id)),
                 ty,
                 is_lval: true,
             });
@@ -138,7 +139,7 @@ impl Analyzer {
         })
     }
 
-    fn route_unary(
+    fn validate_unary(
         &mut self,
         op: &UnaryOp,
         expr: &Locatable<Box<Expression>>,
@@ -148,7 +149,7 @@ impl Analyzer {
         self.validate_unary_expression(op, expr, span)
     }
 
-    fn route_binary(
+    fn validate_binary(
         &mut self,
         op: &BinaryOp,
         left: &Locatable<Box<Expression>>,
@@ -160,7 +161,7 @@ impl Analyzer {
         self.validate_binary_expression(op, left, right, span)
     }
 
-    fn route_function_call(
+    fn validate_function_call(
         &mut self,
         ident: &Locatable<InternedStr>,
         args: &Vec<Locatable<Expression>>,
@@ -244,7 +245,7 @@ impl Analyzer {
         Ok(())
     }
 
-    fn route_index(
+    fn validate_index(
         &mut self,
         left: &Locatable<Box<Expression>>,
         index: &Locatable<Box<Expression>>,
@@ -254,7 +255,7 @@ impl Analyzer {
         self.validate_index_access(left, index, left_span, index_span)
     }
 
-    fn route_member(
+    fn validate_member(
         &mut self,
         body: &Locatable<Box<Expression>>,
         member: &Locatable<InternedStr>,
@@ -264,7 +265,7 @@ impl Analyzer {
         self.validate_member_access(body, member, body_span, member_span)
     }
 
-    fn route_pointer_member(
+    fn validate_pointer_member(
         &mut self,
         body: &Locatable<Box<Expression>>,
         member: &Locatable<InternedStr>,
@@ -274,7 +275,7 @@ impl Analyzer {
         self.validate_pointer_member_access(body, member, body_span, member_span)
     }
 
-    fn route_cast_expression(
+    fn validate_cast_expression(
         &mut self,
         dec: &Locatable<Declaration>,
         expr: &Locatable<Box<Expression>>,
@@ -334,7 +335,8 @@ impl Analyzer {
                 MlirType::new(MlirTypeKind::Char(true), MlirTypeDecl::Basic),
             ),
             Literal::String { value } => {
-                let value = value.as_str().bytes().collect();
+                let mut value = value.as_str().bytes().collect::<Vec<_>>();
+                value.push('\0' as u8);
                 (
                     MlirLiteral::String(value),
                     MlirType::new(MlirTypeKind::Char(true), MlirTypeDecl::Pointer),
@@ -587,5 +589,108 @@ impl Analyzer {
         };
 
         self.validate_assign_op(&op, expr, literal_one, span)
+    }
+}
+
+#[test]
+fn test_variable_id_tracking_does_not_create_rogue_ids() {
+    use std::collections::HashSet;
+    let mlir_result =
+        super::tests::run_analysis_test("_c_test_files/unit_tests/variable_id_tracking.c")
+            .expect("Errors occurred in Analysis processing.");
+
+    let mut set = HashSet::new();
+    for var in mlir_result.globals.values() {
+        set.insert(var.uid);
+    }
+
+    fn walk_mlir_stmts(id_set: &mut HashSet<usize>, block: &MlirBlock) {
+        for stmt in block.iter() {
+            match stmt {
+                MlirStmt::Block(inner_block) => {
+                    walk_mlir_stmts(id_set, inner_block);
+                }
+
+                MlirStmt::Expression(expr) | MlirStmt::CondGoto(expr, _, _) => {
+                    walk_mlir_expr_for_variable_access(id_set, expr);
+                }
+
+                MlirStmt::VariableDeclaration(var) => {
+                    process_variable_for_id_tracking_test(id_set, var);
+                }
+
+                _ => {}
+            }
+        }
+    }
+
+    fn process_variable_for_id_tracking_test(id_set: &mut HashSet<usize>, var: &MlirVariable) {
+        id_set.insert(var.uid);
+        let init = var.initializer.as_ref();
+        if let Some(init) = init {
+            match &init.value {
+                MlirVarInit::Expr(expr) => {
+                    walk_mlir_expr_for_variable_access(id_set, expr);
+                }
+                MlirVarInit::Array(array) => {
+                    for expr in array {
+                        walk_mlir_expr_for_variable_access(id_set, expr);
+                    }
+                }
+            }
+        }
+    }
+
+    fn walk_mlir_expr_for_variable_access(id_set: &HashSet<usize>, expr: &MlirExpr) {
+        match &*expr.kind {
+            MlirExprKind::Variable(uid) => {
+                if !id_set.contains(uid) {
+                    panic!("{uid} does not exist in ID_SET");
+                }
+            }
+
+            MlirExprKind::Member(expr, ..) | MlirExprKind::Cast(_, expr) => {}
+            MlirExprKind::PostIncrement(expr)
+            | MlirExprKind::AddressOf(expr)
+            | MlirExprKind::PostDecrement(expr)
+            | MlirExprKind::Negate(expr)
+            | MlirExprKind::LogicalNot(expr)
+            | MlirExprKind::BitwiseNot(expr)
+            | MlirExprKind::Deref(expr) => {
+                walk_mlir_expr_for_variable_access(id_set, expr);
+            }
+
+            MlirExprKind::Index(left, right)
+            | MlirExprKind::Add(left, right)
+            | MlirExprKind::Sub(left, right)
+            | MlirExprKind::Mul(left, right)
+            | MlirExprKind::Div(left, right)
+            | MlirExprKind::Mod(left, right)
+            | MlirExprKind::Equal(left, right)
+            | MlirExprKind::NotEqual(left, right)
+            | MlirExprKind::GreaterThan(left, right)
+            | MlirExprKind::GreaterThanEqual(left, right)
+            | MlirExprKind::LessThan(left, right)
+            | MlirExprKind::LessThanEqual(left, right)
+            | MlirExprKind::LogicalAnd(left, right)
+            | MlirExprKind::LogicalOr(left, right)
+            | MlirExprKind::BitwiseAnd(left, right)
+            | MlirExprKind::BitwiseOr(left, right)
+            | MlirExprKind::BitwiseXor(left, right)
+            | MlirExprKind::LeftShift(left, right)
+            | MlirExprKind::RightShift(left, right)
+            | MlirExprKind::Assign(left, right) => {
+                walk_mlir_expr_for_variable_access(id_set, left);
+                walk_mlir_expr_for_variable_access(id_set, right);
+            }
+
+            MlirExprKind::FunctionCall { args, .. } => {
+                for expr in args.iter() {
+                    walk_mlir_expr_for_variable_access(id_set, expr);
+                }
+            }
+
+            MlirExprKind::Literal(_) => {}
+        }
     }
 }
