@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use derive_new::new;
 
@@ -26,8 +26,8 @@ pub struct Locatable<T> {
 impl<T> Locatable<T> {
     #[inline]
     pub fn map<F, U>(self, mapper: F) -> Locatable<U>
-        where
-            F: Fn(T) -> U,
+    where
+        F: Fn(T) -> U,
     {
         Locatable::new(self.location, mapper(self.value))
     }
@@ -51,9 +51,15 @@ impl<T> Deref for Locatable<T> {
     }
 }
 
+impl<T> DerefMut for Locatable<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
 impl<T> Display for Locatable<T>
-    where
-        T: Display,
+where
+    T: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{}", self.value)
