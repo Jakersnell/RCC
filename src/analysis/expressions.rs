@@ -124,13 +124,19 @@ impl Analyzer {
         let expr = self.validate_expression(expr)?;
 
         if self.not_incremental(&expr, span) {
+            self.report_error(CompilerError::CannotIncrementType(
+                expr.ty.to_string(),
+                span,
+            ));
             return Ok(expr);
         }
+
         let ty = expr.ty.clone();
         let kind = Box::new(match op {
             PostfixOp::Increment => MlirExprKind::PostIncrement(expr),
             PostfixOp::Decrement => MlirExprKind::PostDecrement(expr),
         });
+
         Ok(MlirExpr {
             span,
             is_lval: false,
