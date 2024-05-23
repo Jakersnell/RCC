@@ -48,39 +48,46 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
-    fn add_pointer_type(&mut self, ptr: PointerValue<'ctx>, ty: BasicTypeEnum<'ctx>) {
+    pub(in crate::codegen) fn add_pointer_type(
+        &mut self,
+        ptr: PointerValue<'ctx>,
+        ty: BasicTypeEnum<'ctx>,
+    ) {
         self.ptr_types.insert(ptr, ty);
     }
 
     #[inline(always)]
-    fn get_pointer_type(&self, ptr: &PointerValue<'ctx>) -> BasicTypeEnum<'ctx> {
+    pub(in crate::codegen) fn get_pointer_type(
+        &self,
+        ptr: &PointerValue<'ctx>,
+    ) -> BasicTypeEnum<'ctx> {
         *self.ptr_types.get(ptr).unwrap()
     }
 
     #[inline(always)]
-    fn get_next_block(&self) -> Option<BasicBlock<'ctx>> {
+    pub(in crate::codegen) fn get_next_block(&self) -> Option<BasicBlock<'ctx>> {
         self.builder().get_insert_block()?.get_next_basic_block()
     }
 
     #[inline(always)]
-    fn builder(&self) -> &Builder<'ctx> {
+    pub(in crate::codegen) fn builder(&self) -> &Builder<'ctx> {
         self.builder.as_ref().unwrap()
     }
 
     #[inline(always)]
-    fn get_block_by_name(&self, name: &str) -> Option<BasicBlock<'ctx>> {
+    pub(in crate::codegen) fn get_block_by_name(&self, name: &str) -> Option<BasicBlock<'ctx>> {
         self.fn_value()
             .get_basic_block_iter()
             .find(|block| block.get_name().to_str().unwrap() == name)
     }
 
     #[inline(always)]
-    fn last_block(&self) -> BasicBlock<'ctx> {
+    pub(in crate::codegen) fn last_block(&self) -> BasicBlock<'ctx> {
         self.fn_value().get_last_basic_block().unwrap()
     }
 
     #[inline(always)]
-    fn fn_value(&self) -> FunctionValue<'ctx> {
+    pub(in crate::codegen) fn fn_value(&self) -> FunctionValue<'ctx> {
         self.fn_value_opt.unwrap()
     }
 
@@ -273,7 +280,10 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let _return = self.builder().build_return(trait_ref_expression).unwrap();
     }
 
-    fn compile_expression(&mut self, expression: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub(in crate::codegen) fn compile_expression(
+        &mut self,
+        expression: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
         match &*expression.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
             MlirExprKind::Variable(id) => self.compile_variable_access(*id),
@@ -517,14 +527,17 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.deref_pointer_value(expr)
     }
 
-    fn deref_pointer_value(&mut self, ptr: PointerValue<'ctx>) -> BasicValueEnum<'ctx> {
+    pub(in crate::codegen) fn deref_pointer_value(
+        &mut self,
+        ptr: PointerValue<'ctx>,
+    ) -> BasicValueEnum<'ctx> {
         let ptr_type = self.get_pointer_type(&ptr);
         self.builder()
             .build_load(ptr_type, ptr, "ptr_deref_val")
             .unwrap()
     }
 
-    fn create_entry_block_allocation(
+    pub(in crate::codegen) fn create_entry_block_allocation(
         &self,
         ty: BasicTypeEnum<'ctx>,
         name: &str,
@@ -538,7 +551,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         builder.build_alloca(ty, name).unwrap()
     }
 
-    fn convert_type(&self, ty: &MlirType) -> BasicTypeEnum<'ctx> {
+    pub(in crate::codegen) fn convert_type(&self, ty: &MlirType) -> BasicTypeEnum<'ctx> {
         let any_type_enum = self.get_type_kind_as_llvm_any_type(&ty.kind);
         match &ty.decl {
             MlirTypeDecl::Array(size) => any_type_enum.into_array_type().into(),
