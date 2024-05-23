@@ -4,11 +4,10 @@ use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral};
 
+mod binary_expressions;
+
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub(in crate::codegen) fn compile_expression(
-        &mut self,
-        expression: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
+    pub(super) fn compile_expression(&mut self, expression: &MlirExpr) -> BasicValueEnum<'ctx> {
         match &*expression.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
             MlirExprKind::Variable(id) => self.compile_variable_access(*id),
@@ -16,8 +15,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::PostDecrement(expr) => self.compile_post_decrement(expr),
             MlirExprKind::Negate(expr) => self.compile_negate(expr),
             MlirExprKind::LogicalNot(expr) => self.compile_logical_not(expr),
-            MlirExprKind::BitwiseNot(_) => todo!(),
+            MlirExprKind::BitwiseNot(expr) => self.compile_bitwise_not(expr),
             MlirExprKind::Deref(expr) => self.compile_deref(expr),
+            MlirExprKind::Assign(left, right) => todo!(), // left can be Deref, Var, or Member
             MlirExprKind::AddressOf(_) => todo!(),
             MlirExprKind::Add(_, _) => todo!(),
             MlirExprKind::Sub(_, _) => todo!(),
@@ -37,7 +37,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::BitwiseXor(_, _) => todo!(),
             MlirExprKind::LeftShift(_, _) => todo!(),
             MlirExprKind::RightShift(_, _) => todo!(),
-            MlirExprKind::Assign(_, _) => todo!(),
             MlirExprKind::FunctionCall { .. } => todo!(),
             MlirExprKind::Index(_, _) => todo!(),
             MlirExprKind::Member(_, _) => todo!(),
@@ -241,6 +240,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         BasicValueEnum::from(int_val)
     }
 
+    fn compile_bitwise_not(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        let int_val = match self.compile_expression(expr) {
+            BasicValueEnum::IntValue(int_val) => int_val,
+            _ => panic!(),
+        };
+
+        BasicValueEnum::from(self.builder().build_not(int_val, "bitwise_not").unwrap())
+    }
+
     fn compile_deref(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         let expr = match self.compile_expression(expr) {
             BasicValueEnum::PointerValue(ptr) => ptr,
@@ -250,5 +258,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             ),
         };
         self.deref_pointer_value(expr)
+    }
+
+    fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        // address of should only be taken on a lval which when compiled returns a pointer
+        let expr = self.compile_expression(expr);
+        if matches!(expr, BasicValueEnum::PointerValue(_)) {
+            expr
+        } else {
+            panic!()
+        }
     }
 }

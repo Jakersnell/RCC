@@ -538,6 +538,11 @@ impl Analyzer {
                     self.report_error(err);
                     return Ok(expr);
                 }
+                if !expr.is_lval {
+                    let err = CompilerError::CannotAddressNonLVal(span);
+                    self.report_error(err);
+                    return Ok(expr);
+                }
                 let ty_kind = expr.ty.kind.clone();
                 Ok(MlirExpr {
                     span,
