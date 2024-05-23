@@ -153,7 +153,11 @@ impl Analyzer {
             return Ok(left);
         }
 
-        let (left, right) = self.binary_numeric_cast(left, right);
+        let (left, right) = if left.is_numeric() && right.is_numeric() {
+            self.binary_numeric_cast(left, right)
+        } else {
+            (left, right)
+        };
 
         let kind = match op {
             BinaryOp::Equal => MlirExprKind::Equal(left, right),
