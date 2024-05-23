@@ -24,7 +24,6 @@ use crate::data::symbols::BUILTINS;
 use crate::util::str_intern;
 use crate::util::str_intern::InternedStr;
 
-mod binary_expressions;
 mod expressions;
 mod statements;
 
