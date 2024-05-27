@@ -65,7 +65,7 @@ impl Analyzer {
         }
     }
 
-    pub fn validate(mut self) -> Result<MidLevelIR, SharedReporter> {
+    pub fn validate(mut self) -> Result<MlirModule, SharedReporter> {
         let mut globals = HashMap::new();
         let mut functions = HashMap::new();
         let mut structs = HashMap::new();
@@ -148,7 +148,7 @@ impl Analyzer {
         if self.reporter.borrow().status().is_err() {
             Err(self.reporter)
         } else {
-            Ok(MidLevelIR {
+            Ok(MlirModule {
                 functions,
                 structs,
                 globals,
@@ -426,9 +426,9 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
 mod tests {
     use crate::{analysis, lexer, parser};
     use crate::analysis::SharedReporter;
-    use crate::data::mlir::MidLevelIR;
+    use crate::data::mlir::MlirModule;
 
-    pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MidLevelIR, SharedReporter> {
+    pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MlirModule, SharedReporter> {
         let source = std::fs::read_to_string(path).expect("Could not read file.");
         let lexer = lexer::Lexer::new(source.into());
         let parser = parser::Parser::new(lexer);

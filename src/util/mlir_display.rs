@@ -187,14 +187,14 @@ impl Display for MlirVariable {
 impl Display for MlirStruct {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "struct {} <{} bytes> {{", self.ident.value, self.size)?;
-        for field in &self.fields {
+        for field in &self.members {
             writeln!(f, "{};", field.value)?;
         }
         write!(f, "}}")
     }
 }
 
-impl Display for MidLevelIR {
+impl Display for MlirModule {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         macro_rules! indent_write {
             ($item:expr) => {

@@ -15,15 +15,17 @@ use inkwell::values::{
 };
 use inkwell::values::IntValue;
 use log::debug;
+use serde::ser::SerializeTuple;
 
 use crate::data::mlir::{
-    MidLevelIR, MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirStmt, MlirType,
-    MlirTypeDecl, MlirTypeKind, MlirVariable, VOID_TYPE,
+    MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirModule, MlirStmt, MlirStruct,
+    MlirType, MlirTypeDecl, MlirTypeKind, MlirVariable, VOID_TYPE,
 };
 use crate::data::symbols::BUILTINS;
 use crate::util::str_intern;
 use crate::util::str_intern::InternedStr;
 
+mod declarations;
 mod expressions;
 mod statements;
 
@@ -35,7 +37,7 @@ mod statements;
 // }
 
 pub struct Compiler<'a, 'mlir, 'ctx> {
-    pub(in crate::codegen) mlir: &'mlir MidLevelIR,
+    pub(in crate::codegen) mlir: &'mlir MlirModule,
     pub(in crate::codegen) context: &'ctx Context,
     pub(in crate::codegen) builder: Option<Builder<'ctx>>,
     pub(in crate::codegen) module: &'a Module<'ctx>,
@@ -43,9 +45,20 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) variables: HashMap<usize, PointerValue<'ctx>>,
     pub(in crate::codegen) fn_value_opt: Option<FunctionValue<'ctx>>,
     pub(in crate::codegen) ptr_types: HashMap<PointerValue<'ctx>, BasicTypeEnum<'ctx>>,
+    pub(in crate::codegen) struct_types: HashMap<InternedStr, StructType<'ctx>>,
 }
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
+    #[inline(always)]
+    pub(in crate::codegen) fn insert_pointer(&mut self, uid: usize, ptr: PointerValue<'ctx>) {
+        self.variables.insert(uid, ptr);
+    }
+
+    #[inline(always)]
+    pub(in crate::codegen) fn get_pointer(&self, uid: &usize) -> PointerValue<'ctx> {
+        *self.variables.get(uid).unwrap()
+    }
+
     #[inline(always)]
     pub(in crate::codegen) fn add_pointer_type(
         &mut self,
@@ -88,6 +101,25 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
     pub(in crate::codegen) fn fn_value(&self) -> FunctionValue<'ctx> {
         self.fn_value_opt.unwrap()
+    }
+
+    #[inline(always)]
+    pub(in crate::codegen) fn get_struct_member_index(
+        &self,
+        _struct_name: &InternedStr,
+        member: &InternedStr,
+    ) -> u64 {
+        *self
+            .struct_member_indices
+            .get(_struct_name)
+            .expect("Struct does not exist in map!")
+            .get(member)
+            .expect("Struct member does not exist in map!")
+    }
+
+    #[inline(always)]
+    pub(in crate::codegen) fn get_struct_type(&self, ident: &InternedStr) -> StructType<'ctx> {
+        *self.struct_types.get(ident).unwrap()
     }
 
     fn compile_builtins(&mut self) {
@@ -241,10 +273,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
-    fn get_struct_type(&self, ident: &InternedStr) -> StructType<'ctx> {
-        let _struct = self.mlir.structs.get(ident).expect("struct should exist.");
+    fn create_struct_type(&self, _struct: &'mlir MlirStruct) -> StructType<'ctx> {
         let member_types = _struct
-            .fields
+            .members
             .iter()
             .map(|field| self.convert_type(&field.ty))
             .collect::<Vec<_>>();

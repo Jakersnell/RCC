@@ -1,8 +1,8 @@
-use crate::analysis::{control_flow, Analyzer};
+use crate::analysis::{Analyzer, control_flow};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::{Locatable, Span};
+use crate::util::error::{CompilerError, CompilerWarning};
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(
@@ -40,7 +40,7 @@ impl Analyzer {
         }
         let _struct = MlirStruct {
             ident,
-            fields,
+            members: fields,
             size,
         };
         let add_struct_result = self

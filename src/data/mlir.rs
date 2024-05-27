@@ -6,6 +6,7 @@ use std::ops::Deref;
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
+use crate::data::mlir::MlirTypeDecl::Basic;
 use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
 
@@ -30,17 +31,44 @@ pub const VOID_TYPE: MlirType = MlirType {
 };
 
 #[derive(Debug, Default, PartialEq)]
-pub struct MidLevelIR {
+pub struct MlirModule {
     pub functions: HashMap<InternedStr, MlirFunction>,
     pub structs: HashMap<InternedStr, MlirStruct>,
     pub globals: HashMap<InternedStr, MlirVariable>,
 }
 
+impl MlirModule {
+    pub fn get_struct_member_offset(
+        &self,
+        struct_ident: &InternedStr,
+        member: &InternedStr,
+    ) -> u32 {
+        self.structs
+            .get(struct_ident)
+            .expect("Struct not found in module!")
+            .get_member_offset(member)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct MlirStruct {
     pub ident: Locatable<InternedStr>,
-    pub fields: Vec<Locatable<MlirVariable>>,
+    pub members: Vec<Locatable<MlirVariable>>,
     pub size: u64,
+}
+
+impl MlirStruct {
+    fn get_member_offset(&self, member: &str) -> u32 {
+        self.members
+            .iter()
+            .enumerate()
+            .find(|(_, var)| var.ident.as_ref() == member)
+            .map(|(idx, _)| idx as u32)
+            .expect(&format!(
+                "Struct member '{member}' does not exist in struct '{}'",
+                &self.ident.value
+            ))
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -81,6 +109,14 @@ impl Display for MlirType {
 }
 
 impl MlirType {
+    pub fn as_basic(&self) -> Self {
+        debug_assert!(!self.is_basic());
+        Self {
+            decl: Basic,
+            kind: self.kind.clone(),
+        }
+    }
+
     pub fn is_array(&self) -> bool {
         matches!(self.decl, MlirTypeDecl::Array(_)) && !matches!(&self.decl, MlirTypeDecl::Pointer)
     }
@@ -175,6 +211,16 @@ impl MlirTypeKind {
     pub fn is_numeric(&self) -> bool {
         use MlirTypeKind::*;
         matches!(&self, Char(_) | Int(_) | Long(_) | Float | Double)
+    }
+
+    pub fn get_struct_ident(&self) -> &InternedStr {
+        match self {
+            MlirTypeKind::Struct(ident) => ident,
+            _ => panic!(
+                "'{:?} cannot be unwrapped as MlirTypeKind::Struct(ident).'",
+                self
+            ),
+        }
     }
 }
 

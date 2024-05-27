@@ -7,9 +7,9 @@ use crate::data::mlir::{
     MlirVariable,
 };
 use crate::data::symbols::*;
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::{get, InternedStr};
-use crate::util::{str_intern, Locatable, Span};
 
 static mut VARIABLE_COUNT: usize = 0;
 
@@ -200,7 +200,7 @@ impl SymbolResolver {
             assert_eq!(ident, *ty_ident);
         }
         let mut body = HashMap::default();
-        for field in &_struct.fields {
+        for field in &_struct.members {
             let array_size = if let MlirTypeDecl::Array(size) = &field.ty.decl {
                 Some(*size)
             } else {
