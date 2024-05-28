@@ -69,6 +69,19 @@ macro_rules! build_arithmetic_binop {
     };
 }
 
+macro_rules! build_logical_binop {
+    ($compiler:ident, $left:ident, $left:ident, $build_method:ident) => {{
+        let (logical_left, logical_right) = $compiler.compile_binary_logical_expr($left, $right);
+
+        let value = $compiler
+            .builder()
+            .$build_method(logical_left, logical_right, stringify!($build_method))
+            .unwrap();
+
+        BasicValueEnum::from(value)
+    }};
+}
+
 macro_rules! build_bitwise_binop {
     ($compiler:ident, $left:ident, $right:ident, $build_method:ident) => {{
         let left = $compiler.compile_expression($left).into_int_value();
@@ -374,14 +387,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         left: &MlirExpr,
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
-        let (logical_left, logical_right) = self.compile_binary_logical_expr(left, right);
-
-        let value = self
-            .builder()
-            .build_and(logical_left, logical_right, "logical_and")
-            .unwrap();
-
-        BasicValueEnum::from(value)
+        build_logical_binop!(self, left, right, build_and)
     }
 
     pub(super) fn compile_logical_or(
@@ -389,14 +395,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         left: &MlirExpr,
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
-        let (logical_left, logical_right) = self.compile_binary_logical_expr(left, right);
-
-        let value = self
-            .builder()
-            .build_or(logical_left, logical_right, "logical_or")
-            .unwrap();
-
-        BasicValueEnum::from(value)
+        build_logical_binop!(self, left, right, build_or)
     }
 
     pub(super) fn compile_bitwise_and(
@@ -413,5 +412,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
         build_bitwise_binop!(self, left, right, build_or)
+    }
+
+    pub(super) fn compile_bitwise_xor(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_bitwise_binop!(self, left, right, build_xor)
     }
 }
