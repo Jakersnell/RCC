@@ -1,5 +1,5 @@
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
+use inkwell::values::{BasicValueEnum, PointerValue};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind};
@@ -109,36 +109,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let expr = self.compile_expression(expr);
         debug_assert!(matches!(expr, BasicValueEnum::PointerValue(_)));
         expr
-    }
-
-    fn compile_binary_arithmetic_op<IntCase, FloatCase>(
-        &mut self,
-        left: &MlirExpr,
-        right: &MlirExpr,
-        int_case: IntCase,
-        float_case: FloatCase,
-    ) -> BasicValueEnum<'ctx>
-    where
-        IntCase:
-            Fn(&mut Compiler<'a, 'mlir, 'ctx>, IntValue<'ctx>, IntValue<'ctx>) -> IntValue<'ctx>,
-        FloatCase: Fn(
-            &mut Compiler<'a, 'mlir, 'ctx>,
-            FloatValue<'ctx>,
-            FloatValue<'ctx>,
-        ) -> FloatValue<'ctx>,
-    {
-        match self.compile_binary_expr(left, right) {
-            (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
-                BasicValueEnum::from(int_case(self, left, right))
-            }
-            (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
-                BasicValueEnum::from(float_case(self, left, right))
-            }
-            unexpected => panic!(
-                "Expected (int, int) or (float, float) but found '{:?}'",
-                unexpected
-            ),
-        }
     }
 
     pub(super) fn compile_addition(
