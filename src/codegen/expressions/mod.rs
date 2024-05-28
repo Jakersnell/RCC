@@ -44,9 +44,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 self.compile_less_than_equal(left, right, unsigned_int!())
             }
             MlirExprKind::LogicalAnd(left, right) => self.compile_logical_and(left, right),
-            MlirExprKind::LogicalOr(left, right) => todo!(),
-            MlirExprKind::BitwiseAnd(left, right) => todo!(),
-            MlirExprKind::BitwiseOr(left, right) => todo!(),
+            MlirExprKind::LogicalOr(left, right) => self.compile_logical_or(left, right),
+            MlirExprKind::BitwiseAnd(left, right) => self.compile_bitwise_and(left, right),
+            MlirExprKind::BitwiseOr(left, right) => self.compile_bitwise_or(left, right),
             MlirExprKind::BitwiseXor(left, right) => todo!(),
             MlirExprKind::LeftShift(left, right) => todo!(),
             MlirExprKind::RightShift(left, right) => todo!(),

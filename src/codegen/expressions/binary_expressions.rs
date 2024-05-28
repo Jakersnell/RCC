@@ -69,6 +69,20 @@ macro_rules! build_arithmetic_binop {
     };
 }
 
+macro_rules! build_bitwise_binop {
+    ($compiler:ident, $left:ident, $right:ident, $build_method:ident) => {{
+        let left = $compiler.compile_expression($left).into_int_value();
+        let right = $compiler.compile_expression($right).into_int_value();
+
+        let value = $compiler
+            .builder()
+            .$build_method(left, right, stringify!($build_method))
+            .unwrap();
+
+        BasicValueEnum::from(value)
+    }};
+}
+
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
     fn compile_binary_expr(
@@ -383,5 +397,21 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap();
 
         BasicValueEnum::from(value)
+    }
+
+    pub(super) fn compile_bitwise_and(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_bitwise_binop!(self, left, right, build_and)
+    }
+
+    pub(super) fn compile_bitwise_or(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_bitwise_binop!(self, left, right, build_or)
     }
 }
