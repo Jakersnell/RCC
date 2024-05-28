@@ -7,9 +7,9 @@ use crate::data::mlir::{
     MlirVariable,
 };
 use crate::data::symbols::*;
-use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::{get, InternedStr};
+use crate::util::{str_intern, Locatable, Span};
 
 static mut VARIABLE_COUNT: usize = 0;
 

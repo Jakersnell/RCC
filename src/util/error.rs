@@ -1,8 +1,8 @@
 use thiserror::Error;
 
 use crate::data::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
-use crate::util::Span;
 use crate::util::str_intern::InternedStr;
+use crate::util::Span;
 
 #[derive(Debug)]
 pub struct Reporter {

@@ -46,10 +46,10 @@ mod tests {
     use std::panic::catch_unwind;
     use std::path::PathBuf;
 
-    use crate::{analysis, lexer, parser};
     use crate::analysis::SharedReporter;
     use crate::data::ast::{Expression, InitDeclaration};
     use crate::util::error::CompilerError;
+    use crate::{analysis, lexer, parser};
 
     pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();

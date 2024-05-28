@@ -3,9 +3,9 @@ use std::io::Read;
 use arcstr::ArcStr;
 
 use crate::data::tokens::Token;
+use crate::util::error::CompilerError;
 use crate::util::*;
 use crate::util::{Locatable, Span};
-use crate::util::error::CompilerError;
 
 mod literals;
 mod symbols;

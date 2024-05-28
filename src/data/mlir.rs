@@ -7,8 +7,8 @@ use derive_new::new;
 
 use crate::data::ast::BinaryOp;
 use crate::data::mlir::MlirTypeDecl::Basic;
-use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, Span};
 
 macro_rules! basic_ty {
     ($kind:expr) => {
@@ -135,6 +135,7 @@ impl MlirType {
         use MlirTypeKind::*;
         matches!(&self.kind, Char(_) | Int(_) | Long(_)) && !self.is_pointer()
     }
+
     pub fn try_implicit_cast(&self, to: &MlirType) -> Option<MlirType> {
         if self == to {
             return None;

@@ -1,8 +1,8 @@
-use crate::analysis::{Analyzer, control_flow};
+use crate::analysis::{control_flow, Analyzer};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
+use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(

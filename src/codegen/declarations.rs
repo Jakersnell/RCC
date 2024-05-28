@@ -2,7 +2,7 @@ use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, PointerValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirVariable, MlirVarInit};
+use crate::data::mlir::{MlirExpr, MlirVarInit, MlirVariable};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub(super) fn compile_variable_declaration(&mut self, var: &MlirVariable) {

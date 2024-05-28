@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter, write};
+use std::fmt::{write, Debug, Display, Formatter};
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufWriter, Write};
@@ -13,8 +13,8 @@ use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirFunction, MlirModule, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
     VOID_TYPE,
 };
-use crate::OUTPUT_GRAPH;
 use crate::util::str_intern::InternedStr;
+use crate::OUTPUT_GRAPH;
 
 /*
 Some resources on control flow analysis:
