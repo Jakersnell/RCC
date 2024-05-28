@@ -1,6 +1,6 @@
 use inkwell::{FloatPredicate, IntPredicate};
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, PointerValue};
+use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind};
@@ -333,11 +333,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         )
     }
 
-    pub(super) fn compile_logical_and(
+    fn compile_binary_logical_expr(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
+    ) -> (IntValue<'ctx>, IntValue<'ctx>) {
         let left = self.compile_expression(left).into_int_value();
         let right = self.compile_expression(right).into_int_value();
         let zero = self.context.i8_type().const_int(0, false);
@@ -351,6 +351,16 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .builder()
             .build_int_compare(IntPredicate::NE, right, zero, "logical_cmp_right")
             .unwrap();
+
+        (logical_left, logical_right)
+    }
+
+    pub(super) fn compile_logical_and(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        let (logical_left, logical_right) = self.compile_binary_logical_expr(left, right);
 
         let value = self
             .builder()
