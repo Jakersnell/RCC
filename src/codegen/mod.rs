@@ -35,19 +35,7 @@ mod statements;
 //     let module = context.create_module(name);
 //     let compiler = Compiler::new(mlir, &context, &builder, &module);
 // }
-pub(in crate::codegen) struct Value<'mlir, 'ctx> {
-    pub value: BasicValueEnum<'ctx>,
-    pub ir_ty: BasicTypeEnum<'ctx>,
-    pub mlir_ty: &'mlir MlirType,
-}
 
-impl<'mlir, 'ctx> std::ops::Deref for Value<'mlir, 'ctx> {
-    type Target = BasicValueEnum<'ctx>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
 pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) mlir: &'mlir MlirModule,
     pub(in crate::codegen) context: &'ctx Context,
@@ -56,7 +44,6 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) functions: HashMap<InternedStr, FunctionValue<'ctx>>,
     pub(in crate::codegen) variables: HashMap<usize, PointerValue<'ctx>>,
     pub(in crate::codegen) fn_value_opt: Option<FunctionValue<'ctx>>,
-    pub(in crate::codegen) ptr_types: HashMap<PointerValue<'ctx>, BasicTypeEnum<'ctx>>,
     pub(in crate::codegen) struct_types: HashMap<InternedStr, StructType<'ctx>>,
 }
 
@@ -69,23 +56,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
     pub(in crate::codegen) fn get_pointer(&self, uid: &usize) -> PointerValue<'ctx> {
         *self.variables.get(uid).unwrap()
-    }
-
-    #[inline(always)]
-    pub(in crate::codegen) fn add_pointer_type(
-        &mut self,
-        ptr: PointerValue<'ctx>,
-        ty: BasicTypeEnum<'ctx>,
-    ) {
-        self.ptr_types.insert(ptr, ty);
-    }
-
-    #[inline(always)]
-    pub(in crate::codegen) fn get_pointer_type(
-        &self,
-        ptr: &PointerValue<'ctx>,
-    ) -> BasicTypeEnum<'ctx> {
-        *self.ptr_types.get(ptr).unwrap()
     }
 
     #[inline(always)]
@@ -187,7 +157,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
             self.builder().build_store(allocation, llvm_param).unwrap();
 
-            self.variables.insert(mlir_param.uid, allocation);
+            self.insert_pointer(mlir_param.uid, allocation)
         }
 
         todo!("build body and compile statements");
@@ -222,16 +192,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             self.builder().position_at_end(llvm_bb);
             self.compile_mlir_basic_block(mlir_bb);
         }
-    }
-
-    pub(in crate::codegen) fn deref_pointer_value(
-        &mut self,
-        ptr: PointerValue<'ctx>,
-    ) -> BasicValueEnum<'ctx> {
-        let ptr_type = self.get_pointer_type(&ptr);
-        self.builder()
-            .build_load(ptr_type, ptr, "ptr_deref_val")
-            .unwrap()
     }
 
     pub(in crate::codegen) fn create_entry_block_allocation(

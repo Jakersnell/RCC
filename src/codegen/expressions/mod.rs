@@ -2,8 +2,9 @@ use inkwell::{FloatPredicate, IntPredicate};
 use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral};
+use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral, MlirType};
 
+mod assignment;
 mod binary_expressions;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -15,7 +16,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
         match &*expr.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
-            MlirExprKind::Variable(id) => self.compile_variable_access(*id),
+            MlirExprKind::Variable(id) => self.compile_variable_access(&expr.ty, *id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
             MlirExprKind::PostDecrement(expr) => self.compile_post_decrement(expr),
             MlirExprKind::Negate(expr) => self.compile_negate(expr),
@@ -100,13 +101,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
-    fn compile_variable_access(&mut self, id: usize) -> BasicValueEnum<'ctx> {
-        BasicValueEnum::from(
-            *self
-                .variables
-                .get(&id)
-                .expect("Invalid variable accesses must be handled in Analysis."),
-        )
+    fn compile_variable_access(&mut self, ty: &MlirType, id: usize) -> BasicValueEnum<'ctx> {
+        let pointee_ty = self.convert_type(ty);
+        let ptr = *self
+            .variables
+            .get(&id)
+            .expect("Invalid variable accesses must be handled in Analysis.");
+        self.builder()
+            .build_load(pointee_ty, ptr, "access_variable")
+            .unwrap()
     }
 
     fn compile_post_increment(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
@@ -119,17 +122,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn compile_post_inc_or_dec(&mut self, expr: &MlirExpr, inc: bool) -> BasicValueEnum<'ctx> {
         debug_assert!(expr.is_lval);
-        let expr = self.compile_expression(expr);
+        let ptr = self.compile_expression(expr).into_pointer_value();
 
-        let ptr = match expr {
-            BasicValueEnum::PointerValue(ptr) => ptr,
-            _ => panic!("Expected BasicValueEnum::PointerValue, found '{:?}'", expr),
-        };
-
-        let ptr_type = self.get_pointer_type(&ptr);
+        let ir_ty = self.convert_type(&expr.ty);
         let ptr_value = self
             .builder()
-            .build_load(ptr_type, ptr, "post_inc_load_value")
+            .build_load(ir_ty, ptr, "post_inc_load_value")
             .unwrap();
 
         match ptr_value {
@@ -267,14 +265,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     fn compile_deref(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        let expr = match self.compile_expression(expr) {
-            BasicValueEnum::PointerValue(ptr) => ptr,
-            unexpected => panic!(
-                "Expected PointerValue, but found '{:?}'",
-                unexpected.get_type()
-            ),
-        };
-        self.deref_pointer_value(expr)
+        let ptr = self.compile_expression(expr).into_pointer_value();
+        let ptr_type = self.convert_type(&expr.ty.as_basic());
+        self.builder()
+            .build_load(ptr_type, ptr, "ptr_deref_val")
+            .unwrap()
     }
 
     fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
