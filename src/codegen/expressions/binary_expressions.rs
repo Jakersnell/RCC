@@ -369,4 +369,19 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         BasicValueEnum::from(value)
     }
+
+    pub(super) fn compile_logical_or(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        let (logical_left, logical_right) = self.compile_binary_logical_expr(left, right);
+
+        let value = self
+            .builder()
+            .build_or(logical_left, logical_right, "logical_or")
+            .unwrap();
+
+        BasicValueEnum::from(value)
+    }
 }
