@@ -1,16 +1,16 @@
-use crate::analysis::Analyzer;
 use crate::analysis::casting::numeric_cast;
+use crate::analysis::Analyzer;
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
 use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirExprKind, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
-    MlirVariable, MlirVarInit,
+    MlirVarInit, MlirVariable,
 };
 use crate::data::tokens::Literal;
-use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
