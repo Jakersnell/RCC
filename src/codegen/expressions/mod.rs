@@ -7,8 +7,13 @@ use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral};
 mod binary_expressions;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub(super) fn compile_expression(&mut self, expression: &MlirExpr) -> BasicValueEnum<'ctx> {
-        match &*expression.kind {
+    pub(super) fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        macro_rules! unsigned_int {
+            () => {
+                expr.ty.is_unsigned_int()
+            };
+        }
+        match &*expr.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
             MlirExprKind::Variable(id) => self.compile_variable_access(*id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
@@ -18,23 +23,27 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::BitwiseNot(expr) => self.compile_bitwise_not(expr),
             MlirExprKind::Deref(expr) => self.compile_deref(expr),
             MlirExprKind::AddressOf(expr) => self.compile_addressof(expr),
-            MlirExprKind::Assign(left, right) => self.compile_assignment(left, right), // left can be Deref, Var, or Member
+            MlirExprKind::Assign(left, right) => self.compile_assignment(left, right),
             MlirExprKind::Add(left, right) => self.compile_addition(left, right),
             MlirExprKind::Sub(left, right) => self.compile_subtraction(left, right),
             MlirExprKind::Mul(left, right) => self.compile_multiplication(left, right),
-            MlirExprKind::Div(left, right) => {
-                self.compile_division(left, right, expression.ty.is_unsigned_int())
-            }
-            MlirExprKind::Mod(left, right) => {
-                self.compile_modulus(left, right, expression.ty.is_unsigned_int())
-            }
+            MlirExprKind::Div(left, right) => self.compile_division(left, right, unsigned_int!()),
+            MlirExprKind::Mod(left, right) => self.compile_modulus(left, right, unsigned_int!()),
             MlirExprKind::Equal(left, right) => self.compile_equal(left, right),
-            MlirExprKind::NotEqual(left, right) => todo!(),
-            MlirExprKind::GreaterThan(left, right) => todo!(),
-            MlirExprKind::GreaterThanEqual(left, right) => todo!(),
-            MlirExprKind::LessThan(left, right) => todo!(),
-            MlirExprKind::LessThanEqual(left, right) => todo!(),
-            MlirExprKind::LogicalAnd(left, right) => todo!(),
+            MlirExprKind::NotEqual(left, right) => self.compile_not_equal(left, right),
+            MlirExprKind::GreaterThan(left, right) => {
+                self.compile_greater_than(left, right, unsigned_int!())
+            }
+            MlirExprKind::GreaterThanEqual(left, right) => {
+                self.compile_greater_than_equal(left, right, unsigned_int!())
+            }
+            MlirExprKind::LessThan(left, right) => {
+                self.compile_less_than(left, right, unsigned_int!())
+            }
+            MlirExprKind::LessThanEqual(left, right) => {
+                self.compile_less_than_equal(left, right, unsigned_int!())
+            }
+            MlirExprKind::LogicalAnd(left, right) => self.compile_logical_and(left, right),
             MlirExprKind::LogicalOr(left, right) => todo!(),
             MlirExprKind::BitwiseAnd(left, right) => todo!(),
             MlirExprKind::BitwiseOr(left, right) => todo!(),
