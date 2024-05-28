@@ -1,11 +1,54 @@
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, PointerValue};
+use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind};
 use crate::util::str_intern::InternedStr;
 
+macro_rules! build_arithmetic_binop {
+    (
+        $compiler:ident, $left:ident, $right:ident;
+        $int_case:ident;
+        $float_case:ident;
+    ) => {
+        match $compiler.compile_binary_expr($left, $right) {
+            (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
+                BasicValueEnum::from(
+                    $compiler
+                        .builder()
+                        .$int_case(left, right, stringify!($int_case))
+                        .unwrap(),
+                )
+            }
+            (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
+                BasicValueEnum::from(
+                    $compiler
+                        .builder()
+                        .$float_case(left, right, stringify!($float_case))
+                        .unwrap(),
+                )
+            }
+            unexpected => panic!(
+                "Expected (int, int) or (float, float) but found '{:?}'",
+                unexpected
+            ),
+        }
+    };
+}
+
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
+    #[inline(always)]
+    fn compile_binary_expr(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> (BasicValueEnum<'ctx>, BasicValueEnum<'ctx>) {
+        (
+            self.compile_expression(left),
+            self.compile_expression(right),
+        )
+    }
+
     pub(super) fn compile_assignment(
         &mut self,
         left: &MlirExpr,
@@ -17,11 +60,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let assign_ptr = match &*left.kind {
             MlirExprKind::Variable(id) => self.get_pointer(id),
             MlirExprKind::Deref(expr) => self.compile_expression(expr).into_pointer_value(),
-            MlirExprKind::Member(_struct, member) => {
-                self.get_struct_member_pointer(self.convert_type(&left.ty), _struct, member)
-            }
+            MlirExprKind::Member(_struct, member) => self.get_struct_member_pointer(
+                self.convert_type(&left.ty.as_basic()),
+                _struct,
+                member,
+            ),
             MlirExprKind::Index(array, index) => {
-                self.get_array_index_pointer(self.convert_type(&left.ty), array, index)
+                self.get_array_index_pointer(self.convert_type(&left.ty.as_basic()), array, index)
             }
             _ => self.compile_expression(left).into_pointer_value(),
         };
@@ -34,7 +79,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     fn get_struct_member_pointer(
         &mut self,
         access_ty: BasicTypeEnum<'ctx>,
-        _struct: &'mlir MlirExpr,
+        _struct: &MlirExpr,
         member: &InternedStr,
     ) -> PointerValue<'ctx> {
         let struct_ident = _struct.ty.kind.get_struct_ident();
@@ -48,8 +93,8 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     fn get_array_index_pointer(
         &mut self,
         access_ty: BasicTypeEnum<'ctx>,
-        array: &'mlir MlirExpr,
-        index: &'mlir MlirExpr,
+        array: &MlirExpr,
+        index: &MlirExpr,
     ) -> PointerValue<'ctx> {
         let array_ptr = self.compile_expression(array).into_pointer_value();
         let index_value = self.compile_expression(index).into_int_value();
@@ -58,5 +103,89 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 .build_gep(access_ty, array_ptr, &[index_value], "get_array_index_ptr")
                 .unwrap()
         }
+    }
+
+    pub(super) fn compile_addressof(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        let expr = self.compile_expression(expr);
+        debug_assert!(matches!(expr, BasicValueEnum::PointerValue(_)));
+        expr
+    }
+
+    fn compile_binary_arithmetic_op<IntCase, FloatCase>(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+        int_case: IntCase,
+        float_case: FloatCase,
+    ) -> BasicValueEnum<'ctx>
+    where
+        IntCase:
+            Fn(&mut Compiler<'a, 'mlir, 'ctx>, IntValue<'ctx>, IntValue<'ctx>) -> IntValue<'ctx>,
+        FloatCase: Fn(
+            &mut Compiler<'a, 'mlir, 'ctx>,
+            FloatValue<'ctx>,
+            FloatValue<'ctx>,
+        ) -> FloatValue<'ctx>,
+    {
+        match self.compile_binary_expr(left, right) {
+            (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
+                BasicValueEnum::from(int_case(self, left, right))
+            }
+            (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
+                BasicValueEnum::from(float_case(self, left, right))
+            }
+            unexpected => panic!(
+                "Expected (int, int) or (float, float) but found '{:?}'",
+                unexpected
+            ),
+        }
+    }
+
+    pub(super) fn compile_addition(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_arithmetic_binop!(
+            self, left, right;
+            build_int_add;
+            build_float_add;
+        )
+    }
+
+    pub(super) fn compile_subtraction(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_arithmetic_binop!(
+            self, left, right;
+            build_int_sub;
+            build_float_sub;
+        )
+    }
+
+    pub(super) fn compile_multiplication(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_arithmetic_binop!(
+            self, left, right;
+            build_int_mul;
+            build_float_mul;
+        )
+    }
+
+    pub(super) fn compile_division(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_arithmetic_binop!(
+            self, left, right;
+            build_int_signed_div;
+            build_float_div;
+        )
     }
 }
