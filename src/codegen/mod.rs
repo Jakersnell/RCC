@@ -35,7 +35,19 @@ mod statements;
 //     let module = context.create_module(name);
 //     let compiler = Compiler::new(mlir, &context, &builder, &module);
 // }
+pub(in crate::codegen) struct Value<'mlir, 'ctx> {
+    pub value: BasicValueEnum<'ctx>,
+    pub ir_ty: BasicTypeEnum<'ctx>,
+    pub mlir_ty: &'mlir MlirType,
+}
 
+impl<'mlir, 'ctx> std::ops::Deref for Value<'mlir, 'ctx> {
+    type Target = BasicValueEnum<'ctx>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
 pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) mlir: &'mlir MlirModule,
     pub(in crate::codegen) context: &'ctx Context,
@@ -101,20 +113,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
     pub(in crate::codegen) fn fn_value(&self) -> FunctionValue<'ctx> {
         self.fn_value_opt.unwrap()
-    }
-
-    #[inline(always)]
-    pub(in crate::codegen) fn get_struct_member_index(
-        &self,
-        _struct_name: &InternedStr,
-        member: &InternedStr,
-    ) -> u64 {
-        *self
-            .struct_member_indices
-            .get(_struct_name)
-            .expect("Struct does not exist in map!")
-            .get(member)
-            .expect("Struct member does not exist in map!")
     }
 
     #[inline(always)]
