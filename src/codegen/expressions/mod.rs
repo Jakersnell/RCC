@@ -22,9 +22,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::Add(left, right) => self.compile_addition(left, right),
             MlirExprKind::Sub(left, right) => self.compile_subtraction(left, right),
             MlirExprKind::Mul(left, right) => self.compile_multiplication(left, right),
-            MlirExprKind::Div(left, right) => self.compile_division(left, right),
-            MlirExprKind::Mod(left, right) => todo!(),
-            MlirExprKind::Equal(left, right) => todo!(),
+            MlirExprKind::Div(left, right) => {
+                self.compile_division(left, right, expression.ty.is_unsigned_int())
+            }
+            MlirExprKind::Mod(left, right) => {
+                self.compile_modulus(left, right, expression.ty.is_unsigned_int())
+            }
+            MlirExprKind::Equal(left, right) => self.compile_equal(left, right),
             MlirExprKind::NotEqual(left, right) => todo!(),
             MlirExprKind::GreaterThan(left, right) => todo!(),
             MlirExprKind::GreaterThanEqual(left, right) => todo!(),

@@ -7,8 +7,8 @@ use derive_new::new;
 
 use crate::data::ast::BinaryOp;
 use crate::data::mlir::MlirTypeDecl::Basic;
-use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
+use crate::util::str_intern::InternedStr;
 
 macro_rules! basic_ty {
     ($kind:expr) => {
@@ -109,6 +109,14 @@ impl Display for MlirType {
 }
 
 impl MlirType {
+    pub fn is_unsigned_int(&self) -> bool {
+        debug_assert!(self.is_basic());
+        match &self.kind {
+            MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true) => true,
+            _ => false,
+        }
+    }
+
     pub fn as_basic(&self) -> Self {
         debug_assert!(!self.is_basic());
         Self {
