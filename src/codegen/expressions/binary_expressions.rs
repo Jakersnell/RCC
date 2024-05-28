@@ -14,6 +14,7 @@ enum CmpOp {
     Lte,
     Gte,
 }
+
 macro_rules! build_arithmetic_binop {
     (
         $compiler:ident, $left:ident, $right:ident;
@@ -45,6 +46,7 @@ macro_rules! build_arithmetic_binop {
                         .unwrap(),
                 )
             }
+
             (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) if $unsigned_int => {
                 BasicValueEnum::from(
                     $compiler
@@ -53,6 +55,7 @@ macro_rules! build_arithmetic_binop {
                         .unwrap(),
                 )
             }
+
             (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
                 BasicValueEnum::from(
                     $compiler
@@ -61,6 +64,7 @@ macro_rules! build_arithmetic_binop {
                         .unwrap(),
                 )
             }
+
             unexpected => panic!(
                 "Expected (int, int) or (float, float) but found '{:?}'",
                 unexpected
@@ -420,5 +424,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
         build_bitwise_binop!(self, left, right, build_xor)
+    }
+
+    pub(super) fn compile_left_shift(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        build_bitwise_binop!(self, left, right, build_left_shift)
     }
 }

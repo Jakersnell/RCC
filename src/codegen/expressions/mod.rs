@@ -48,7 +48,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::BitwiseAnd(left, right) => self.compile_bitwise_and(left, right),
             MlirExprKind::BitwiseOr(left, right) => self.compile_bitwise_or(left, right),
             MlirExprKind::BitwiseXor(left, right) => self.compile_bitwise_xor(left, right),
-            MlirExprKind::LeftShift(left, right) => todo!(),
+            MlirExprKind::LeftShift(left, right) => self.compile_left_shift(left, right),
             MlirExprKind::RightShift(left, right) => todo!(),
             MlirExprKind::Index(array, index) => todo!(),
             MlirExprKind::Member(_struct, index) => todo!(),
