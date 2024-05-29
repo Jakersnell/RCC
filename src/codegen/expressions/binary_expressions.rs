@@ -3,7 +3,7 @@ use inkwell::builder::{Builder, BuilderError};
 use inkwell::values::{BasicValueEnum, IntValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirExprKind};
+use crate::data::mlir::MlirExpr;
 
 macro_rules! build_arithmetic_binop {
     (
@@ -76,82 +76,86 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         )
     }
 
-    pub(super) fn compile_addressof(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        let MlirExpr {
-            span,
-            ty,
-            is_lval,
-            kind,
-        } = expr;
-
-        let ptr = match &**kind {
-            MlirExprKind::Variable(ident) => self.get_pointer(ident),
-            MlirExprKind::Deref(pointer) => self.compile_expression(pointer).into_pointer_value(),
-            MlirExprKind::Assign(left, right) => self
-                .compile_assignment(left, right, true)
-                .into_pointer_value(),
-            MlirExprKind::Index(array, index) => {
-                self.get_array_index_pointer(self.convert_type(&array.ty.as_basic()), array, index)
-            }
-            MlirExprKind::Member(_struct, member) => {
-                self.get_struct_member_pointer(self.convert_type(ty), _struct, member)
-            }
-            _ => panic!(),
-        };
-
-        BasicValueEnum::from(ptr)
-    }
-
-    pub(super) fn compile_addition(
+    fn compile_addition_or_subtraction(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
+        is_addition: bool,
     ) -> BasicValueEnum<'ctx> {
-        let (left, right) = self.compile_binary_expr(left, right);
-        match (left, right) {
-            (BasicValueEnum::PointerValue(left), BasicValueEnum::IntValue(right)) => {
+        match self.compile_binary_expr(left, right) {
+            (BasicValueEnum::PointerValue(left_val), BasicValueEnum::IntValue(right_val)) => {
+                let ptr_type = self.convert_type(&left.ty).into_pointer_type();
                 let i64_type = self.context.i64_type();
+
                 let ptr_to_int = self
                     .builder()
-                    .build_ptr_to_int(left, i64_type, "ptr_to_int")
+                    .build_ptr_to_int(left_val, i64_type, "ptr_to_int")
                     .unwrap();
-                let inc_ptr_as_int = self
+
+                let ptr_as_int = if is_addition {
+                    self.builder()
+                        .build_int_add(ptr_to_int, right_val, "inc_ptr_as_int")
+                } else {
+                    self.builder()
+                        .build_int_sub(ptr_to_int, right_val, "dec_ptr_as_int")
+                }
+                .unwrap();
+
+                let int_to_ptr = self
                     .builder()
-                    .build_int_add(ptr_to_int, right, "inc_ptr_as_int")
+                    .build_int_to_ptr(ptr_as_int, ptr_type, "int_to_ptr")
                     .unwrap();
-                todo!("convert_int_back_to_ptr")
+
+                BasicValueEnum::from(int_to_ptr)
             }
+
             (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
-                BasicValueEnum::from(
+                BasicValueEnum::from(if is_addition {
                     self.builder()
-                        .build_int_add(left, right, "$int_case")
-                        .unwrap(),
-                )
+                        .build_int_add(left, right, "int_add")
+                        .unwrap()
+                } else {
+                    self.builder()
+                        .build_int_sub(left, right, "int_sub")
+                        .unwrap()
+                })
             }
+
             (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
-                BasicValueEnum::from(
+                BasicValueEnum::from(if is_addition {
                     self.builder()
-                        .build_float_add(left, right, "build_float_add")
-                        .unwrap(),
-                )
+                        .build_float_add(left, right, "float_add")
+                        .unwrap()
+                } else {
+                    self.builder()
+                        .build_float_sub(left, right, "float_sub")
+                        .unwrap()
+                })
             }
+
             unexpected => panic!(
-                "Expected (int, int) or (float, float) but found '{:?}'",
+                "Expected (ptr, int), (int, int) or (float, float) but found '{:?}'",
                 unexpected
             ),
         }
     }
 
+    #[inline(always)]
+    pub(super) fn compile_addition(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        self.compile_addition_or_subtraction(left, right, true)
+    }
+
+    #[inline(always)]
     pub(super) fn compile_subtraction(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
-        build_arithmetic_binop!(
-            self, left, right;
-            build_int_sub;
-            build_float_sub;
-        )
+        self.compile_addition_or_subtraction(left, right, false)
     }
 
     pub(super) fn compile_multiplication(
@@ -202,19 +206,27 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         right: &MlirExpr,
         int_predicate: IntPredicate,
         float_predicate: FloatPredicate,
+        name: &str,
     ) -> BasicValueEnum<'ctx> {
         match self.compile_binary_expr(left, right) {
+            (BasicValueEnum::PointerValue(left), BasicValueEnum::PointerValue(right)) => {
+                BasicValueEnum::from(
+                    self.builder()
+                        .build_int_compare(int_predicate, left, right, &format!("ptr_{name}"))
+                        .unwrap(),
+                )
+            }
             (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
                 BasicValueEnum::from(
                     self.builder()
-                        .build_int_compare(int_predicate, left, right, "int_eq")
+                        .build_int_compare(int_predicate, left, right, &format!("int_{name}"))
                         .unwrap(),
                 )
             }
             (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
                 BasicValueEnum::from(
                     self.builder()
-                        .build_float_compare(float_predicate, left, right, "float_eq")
+                        .build_float_compare(float_predicate, left, right, &format!("float_{name}"))
                         .unwrap(),
                 )
             }
@@ -231,7 +243,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         left: &MlirExpr,
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
-        self.build_comparison(left, right, IntPredicate::EQ, FloatPredicate::OEQ)
+        self.build_comparison(left, right, IntPredicate::EQ, FloatPredicate::OEQ, "equal")
     }
 
     #[inline(always)]
@@ -240,7 +252,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         left: &MlirExpr,
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
-        self.build_comparison(left, right, IntPredicate::NE, FloatPredicate::ONE)
+        self.build_comparison(
+            left,
+            right,
+            IntPredicate::NE,
+            FloatPredicate::ONE,
+            "not_equal",
+        )
     }
 
     #[inline(always)]
@@ -259,6 +277,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 IntPredicate::SGT
             },
             FloatPredicate::OGT,
+            "greater_than",
         )
     }
 
@@ -278,6 +297,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 IntPredicate::SGE
             },
             FloatPredicate::OGE,
+            "greater_than_equal",
         )
     }
 
@@ -297,6 +317,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 IntPredicate::SLT
             },
             FloatPredicate::OLT,
+            "less_than",
         )
     }
 
@@ -316,29 +337,81 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 IntPredicate::SLE
             },
             FloatPredicate::OLE,
+            "less_than_equal",
         )
     }
 
-    fn compile_binary_logical_expr(
+    fn compile_logical_binop<BuildClosure>(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
-    ) -> (IntValue<'ctx>, IntValue<'ctx>) {
-        let left = self.compile_expression(left).into_int_value();
-        let right = self.compile_expression(right).into_int_value();
-        let zero = self.context.i8_type().const_int(0, false);
+        build_closure: BuildClosure,
+    ) -> BasicValueEnum<'ctx>
+    where
+        BuildClosure: Fn(
+            &Builder<'ctx>,
+            IntValue<'ctx>,
+            IntValue<'ctx>,
+        ) -> Result<IntValue<'ctx>, BuilderError>,
+    {
+        let value = match self.compile_binary_expr(left, right) {
+            (BasicValueEnum::PointerValue(left), BasicValueEnum::PointerValue(right)) => {
+                let i64_type = self.context.i64_type();
+                let left = self
+                    .builder()
+                    .build_ptr_to_int(left, i64_type, "ptr_to_int")
+                    .unwrap();
+                let right = self
+                    .builder()
+                    .build_ptr_to_int(right, i64_type, "ptr_to_int")
+                    .unwrap();
+                build_closure(self.builder(), left, right)
+            }
 
-        let logical_left = self
-            .builder()
-            .build_int_compare(IntPredicate::NE, left, zero, "logical_cmp_left")
-            .unwrap();
+            (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
+                let i64_type = self.context.i64_type();
+                let left = self
+                    .builder()
+                    .build_float_to_unsigned_int(left, i64_type, "ptr_to_int")
+                    .unwrap();
+                let right = self
+                    .builder()
+                    .build_float_to_unsigned_int(right, i64_type, "ptr_to_int")
+                    .unwrap();
+                build_closure(self.builder(), left, right)
+            }
 
-        let logical_right = self
-            .builder()
-            .build_int_compare(IntPredicate::NE, right, zero, "logical_cmp_right")
-            .unwrap();
+            (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
+                build_closure(self.builder(), left, right)
+            }
 
-        (logical_left, logical_right)
+            _ => panic!(),
+        }
+        .unwrap();
+
+        BasicValueEnum::from(value)
+    }
+
+    #[inline(always)]
+    pub(super) fn compile_logical_and(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        self.compile_logical_binop(left, right, |builder, left, right| {
+            builder.build_and(left, right, "logical_and")
+        })
+    }
+
+    #[inline(always)]
+    pub(super) fn compile_logical_or(
+        &mut self,
+        left: &MlirExpr,
+        right: &MlirExpr,
+    ) -> BasicValueEnum<'ctx> {
+        self.compile_logical_binop(left, right, |builder, left, right| {
+            builder.build_or(left, right, "logical_or")
+        })
     }
 
     fn compile_int_binop<BuildClosure>(
@@ -358,28 +431,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let right = self.compile_expression(right).into_int_value();
         let value = build_closure(self.builder(), left, right).unwrap();
         BasicValueEnum::from(value)
-    }
-
-    #[inline(always)]
-    pub(super) fn compile_logical_and(
-        &mut self,
-        left: &MlirExpr,
-        right: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
-        self.compile_int_binop(left, right, |builder, left, right| {
-            builder.build_and(left, right, "logical_and")
-        })
-    }
-
-    #[inline(always)]
-    pub(super) fn compile_logical_or(
-        &mut self,
-        left: &MlirExpr,
-        right: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
-        self.compile_int_binop(left, right, |builder, left, right| {
-            builder.build_or(left, right, "logical_or")
-        })
     }
 
     #[inline(always)]
