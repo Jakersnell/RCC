@@ -6,6 +6,24 @@ use crate::data::mlir::{MlirExpr, MlirExprKind};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
+    pub(super) fn compile_addressof(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        let ptr = match &*expr.kind {
+            MlirExprKind::Variable(ident) => self.get_pointer(ident),
+            MlirExprKind::Deref(pointer) => self.compile_expression(pointer).into_pointer_value(),
+            MlirExprKind::Assign(left, right) => self
+                .compile_assignment(left, right, true)
+                .into_pointer_value(),
+            MlirExprKind::Index(array, index) => {
+                self.get_array_index_pointer(self.convert_type(&array.ty.as_basic()), array, index)
+            }
+            MlirExprKind::Member(_struct, member) => {
+                self.get_struct_member_pointer(self.convert_type(ty), _struct, member)
+            }
+            _ => panic!(),
+        };
+        BasicValueEnum::from(ptr)
+    }
+
     pub(super) fn compile_assignment(
         &mut self,
         left: &MlirExpr,
