@@ -4,7 +4,7 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 
 use derive_new::new;
-use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
