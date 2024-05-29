@@ -49,9 +49,8 @@ impl Analyzer {
     ) -> Result<MlirExpr, ()> {
         let mut ty = left.ty.clone();
         let kind = if left.ty.is_pointer() && right.ty.is_pointer() {
-            // pointers can add and subtract from each other, resulting in a long.
             self.report_error(CompilerError::CustomError(
-                "Pointer arithmetic not supported".into(),
+                "Pointer difference not currently supported.".into(),
                 span,
             ));
             return Ok(left);
