@@ -23,7 +23,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::LogicalNot(expr) => self.compile_logical_not(expr),
             MlirExprKind::BitwiseNot(expr) => self.compile_bitwise_not(expr),
             MlirExprKind::Deref(expr) => self.compile_deref(expr),
-            MlirExprKind::AddressOf(expr) => self.compile_addressof(expr),
+            MlirExprKind::AddressOf(expr) => self.compile_address_of(expr),
             MlirExprKind::Assign(left, right) => self.compile_assignment(left, right, false),
             MlirExprKind::Add(left, right) => self.compile_addition(left, right),
             MlirExprKind::Sub(left, right) => self.compile_subtraction(left, right),
@@ -258,13 +258,5 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     fn compile_bitwise_not(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         let int_val = self.compile_expression(expr).into_int_value();
         BasicValueEnum::from(self.builder().build_not(int_val, "bitwise_not").unwrap())
-    }
-
-    fn compile_deref(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        let ptr = self.compile_expression(expr).into_pointer_value();
-        let ptr_type = self.convert_type(&expr.ty.as_basic());
-        self.builder()
-            .build_load(ptr_type, ptr, "ptr_deref_val")
-            .unwrap()
     }
 }

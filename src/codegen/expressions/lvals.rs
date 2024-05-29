@@ -6,7 +6,15 @@ use crate::data::mlir::{MlirExpr, MlirExprKind};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub(super) fn compile_addressof(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub(super) fn compile_deref(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        let ptr = self.compile_expression(expr).into_pointer_value();
+        let ptr_type = self.convert_type(&expr.ty.as_basic());
+        self.builder()
+            .build_load(ptr_type, ptr, "ptr_deref_val")
+            .unwrap()
+    }
+
+    pub(super) fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         let ptr = match &*expr.kind {
             MlirExprKind::Variable(ident) => self.get_pointer(ident),
             MlirExprKind::Deref(pointer) => self.compile_expression(pointer).into_pointer_value(),
@@ -17,7 +25,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 self.get_array_index_pointer(self.convert_type(&array.ty.as_basic()), array, index)
             }
             MlirExprKind::Member(_struct, member) => {
-                self.get_struct_member_pointer(self.convert_type(ty), _struct, member)
+                self.get_struct_member_pointer(self.convert_type(&expr.ty), _struct, member)
             }
             _ => panic!(),
         };
