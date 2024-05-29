@@ -56,6 +56,7 @@ impl Analyzer {
             return Ok(left);
         } else if left.ty.is_pointer() && right.ty.is_numeric() {
             // only addition/subtraction
+            let right = self.implicit_cast(right, UNSIGNED_LONG_TYPE, span);
             match op {
                 BinaryOp::Add => MlirExprKind::Add(left, right),
                 BinaryOp::Sub => MlirExprKind::Sub(left, right),
