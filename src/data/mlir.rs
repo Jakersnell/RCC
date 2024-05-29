@@ -20,6 +20,11 @@ macro_rules! basic_ty {
 }
 pub(crate) use basic_ty;
 
+pub const UNSIGNED_LONG_TYPE: MlirType = MlirType {
+    kind: MlirTypeKind::Long(true),
+    decl: MlirTypeDecl::Basic,
+};
+
 pub const SIGNED_INT_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Int(false),
     decl: MlirTypeDecl::Basic,
