@@ -3,7 +3,7 @@ use inkwell::builder::{Builder, BuilderError};
 use inkwell::values::{BasicValueEnum, IntValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::MlirExpr;
+use crate::data::mlir::{MlirExpr, MlirExprKind};
 
 macro_rules! build_arithmetic_binop {
     (
@@ -77,9 +77,29 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     pub(super) fn compile_addressof(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        let expr = self.compile_expression(expr);
-        debug_assert!(matches!(expr, BasicValueEnum::PointerValue(_)));
-        expr
+        let MlirExpr {
+            span,
+            ty,
+            is_lval,
+            kind,
+        } = expr;
+
+        let ptr = match &**kind {
+            MlirExprKind::Variable(ident) => self.get_pointer(ident),
+            MlirExprKind::Deref(pointer) => self.compile_expression(pointer).into_pointer_value(),
+            MlirExprKind::Assign(left, right) => self
+                .compile_assignment(left, right, true)
+                .into_pointer_value(),
+            MlirExprKind::Index(array, index) => {
+                self.get_array_index_pointer(self.convert_type(&array.ty.as_basic()), array, index)
+            }
+            MlirExprKind::Member(_struct, member) => {
+                self.get_struct_member_pointer(self.convert_type(ty), _struct, member)
+            }
+            _ => panic!(),
+        };
+
+        BasicValueEnum::from(ptr)
     }
 
     pub(super) fn compile_addition(
@@ -87,11 +107,39 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         left: &MlirExpr,
         right: &MlirExpr,
     ) -> BasicValueEnum<'ctx> {
-        build_arithmetic_binop!(
-            self, left, right;
-            build_int_add;
-            build_float_add;
-        )
+        let (left, right) = self.compile_binary_expr(left, right);
+        match (left, right) {
+            (BasicValueEnum::PointerValue(left), BasicValueEnum::IntValue(right)) => {
+                let i64_type = self.context.i64_type();
+                let ptr_to_int = self
+                    .builder()
+                    .build_ptr_to_int(left, i64_type, "ptr_to_int")
+                    .unwrap();
+                let inc_ptr_as_int = self
+                    .builder()
+                    .build_int_add(ptr_to_int, right, "inc_ptr_as_int")
+                    .unwrap();
+                todo!("convert_int_back_to_ptr")
+            }
+            (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
+                BasicValueEnum::from(
+                    self.builder()
+                        .build_int_add(left, right, "$int_case")
+                        .unwrap(),
+                )
+            }
+            (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
+                BasicValueEnum::from(
+                    self.builder()
+                        .build_float_add(left, right, "build_float_add")
+                        .unwrap(),
+                )
+            }
+            unexpected => panic!(
+                "Expected (int, int) or (float, float) but found '{:?}'",
+                unexpected
+            ),
+        }
     }
 
     pub(super) fn compile_subtraction(
