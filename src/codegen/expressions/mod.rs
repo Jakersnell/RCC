@@ -4,8 +4,8 @@ use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral, MlirType};
 
-mod assignment;
 mod binary_expressions;
+mod lvals;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub(super) fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
@@ -24,7 +24,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::BitwiseNot(expr) => self.compile_bitwise_not(expr),
             MlirExprKind::Deref(expr) => self.compile_deref(expr),
             MlirExprKind::AddressOf(expr) => self.compile_addressof(expr),
-            MlirExprKind::Assign(left, right) => self.compile_assignment(left, right),
+            MlirExprKind::Assign(left, right) => self.compile_assignment(left, right, false),
             MlirExprKind::Add(left, right) => self.compile_addition(left, right),
             MlirExprKind::Sub(left, right) => self.compile_subtraction(left, right),
             MlirExprKind::Mul(left, right) => self.compile_multiplication(left, right),
@@ -256,11 +256,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     fn compile_bitwise_not(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        let int_val = match self.compile_expression(expr) {
-            BasicValueEnum::IntValue(int_val) => int_val,
-            _ => panic!(),
-        };
-
+        let int_val = self.compile_expression(expr).into_int_value();
         BasicValueEnum::from(self.builder().build_not(int_val, "bitwise_not").unwrap())
     }
 
@@ -270,15 +266,5 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.builder()
             .build_load(ptr_type, ptr, "ptr_deref_val")
             .unwrap()
-    }
-
-    fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        // address of should only be taken on a lval which when compiled returns a pointer
-        let expr = self.compile_expression(expr);
-        if matches!(expr, BasicValueEnum::PointerValue(_)) {
-            expr
-        } else {
-            panic!()
-        }
     }
 }
