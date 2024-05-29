@@ -10,6 +10,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
+        return_ptr: bool,
     ) -> BasicValueEnum<'ctx> {
         debug_assert!(left.is_lval);
         let assign_value = self.compile_expression(right);
@@ -28,12 +29,18 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             _ => self.compile_expression(left).into_pointer_value(),
         };
 
-        self.builder().build_store(assign_ptr, assign_value);
+        self.builder()
+            .build_store(assign_ptr, assign_value)
+            .unwrap();
 
-        assign_value
+        if return_ptr {
+            BasicValueEnum::from(assign_ptr)
+        } else {
+            assign_value
+        }
     }
 
-    fn get_struct_member_pointer(
+    pub(super) fn get_struct_member_pointer(
         &mut self,
         access_ty: BasicTypeEnum<'ctx>,
         _struct: &MlirExpr,
@@ -47,7 +54,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    fn get_array_index_pointer(
+    pub(super) fn get_array_index_pointer(
         &mut self,
         access_ty: BasicTypeEnum<'ctx>,
         array: &MlirExpr,
