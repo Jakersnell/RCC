@@ -136,6 +136,17 @@ impl Display for MlirType {
 }
 
 impl MlirType {
+    pub fn get_struct_ident(&self) -> &InternedStr {
+        debug_assert!(self.is_basic());
+        match &self.kind {
+            MlirTypeKind::Struct(ident) => ident,
+            unexpected => panic!(
+                "Cannot unwrap '{:?}' as an MlirTypeKind::Struct(ident).",
+                unexpected
+            ),
+        }
+    }
+
     pub fn is_unsigned_int(&self) -> bool {
         debug_assert!(self.is_basic());
         match &self.kind {

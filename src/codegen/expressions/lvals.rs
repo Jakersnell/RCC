@@ -1,8 +1,8 @@
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, PointerValue};
+use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirExprKind};
+use crate::data::mlir::{MlirExpr, MlirExprKind, MlirType};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -93,5 +93,149 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 .build_gep(access_ty, array_ptr, &[index_value], "get_array_index_ptr")
                 .unwrap()
         }
+    }
+
+    pub(super) fn compile_array_access(
+        &mut self,
+        array: &MlirExpr,
+        index: &MlirExpr,
+        element_type: &MlirType,
+    ) -> BasicValueEnum<'ctx> {
+        let element_type = self.convert_type(element_type);
+        let array_index_ptr = self.get_array_index_pointer(element_type, array, index);
+        self.builder()
+            .build_load(element_type, array_index_ptr, "load_element_from_array")
+            .unwrap()
+    }
+
+    pub(super) fn compile_member_access(
+        &mut self,
+        _struct: &MlirExpr,
+        member: &InternedStr,
+        member_type: &MlirType,
+    ) -> BasicValueEnum<'ctx> {
+        let member_type = self.convert_type(member_type);
+        let member_ptr = self.get_struct_member_pointer(member_type, _struct, member);
+        self.builder()
+            .build_load(member_type, member_ptr, "load_member_ptr")
+            .unwrap()
+    }
+
+    pub(super) fn compile_variable_access(
+        &mut self,
+        ty: &MlirType,
+        id: usize,
+    ) -> BasicValueEnum<'ctx> {
+        let pointee_ty = self.convert_type(ty);
+        let ptr = *self
+            .variables
+            .get(&id)
+            .expect("Invalid variable accesses must be handled in Analysis.");
+        self.builder()
+            .build_load(pointee_ty, ptr, "access_variable")
+            .unwrap()
+    }
+
+    pub(super) fn compile_post_increment(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        self.compile_post_inc_or_dec(expr, true)
+    }
+
+    pub(super) fn compile_post_decrement(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+        self.compile_post_inc_or_dec(expr, false)
+    }
+
+    fn compile_post_inc_or_dec(&mut self, expr: &MlirExpr, inc: bool) -> BasicValueEnum<'ctx> {
+        debug_assert!(expr.is_lval);
+        let ptr = self.compile_expression(expr).into_pointer_value();
+
+        let ir_ty = self.convert_type(&expr.ty);
+        let ptr_value = self
+            .builder()
+            .build_load(ir_ty, ptr, "post_inc_load_value")
+            .unwrap();
+
+        match ptr_value {
+            BasicValueEnum::IntValue(int) => self.compile_post_inc_or_dec_for_int(ptr, int, inc),
+            BasicValueEnum::FloatValue(float) => {
+                self.compile_post_inc_or_dec_for_float(ptr, float, inc)
+            }
+            BasicValueEnum::PointerValue(inner_ptr) => {
+                self.compile_post_inc_or_dec_for_ptr(ptr, inner_ptr, inc)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn compile_post_inc_or_dec_for_int(
+        &self,
+        ptr: PointerValue<'ctx>,
+        int: IntValue<'ctx>,
+        inc: bool,
+    ) -> BasicValueEnum<'ctx> {
+        let one = self.context.i8_type().const_int(1, false);
+
+        let new_value = if inc {
+            self.builder().build_int_add(int, one, "int_post_inc_add")
+        } else {
+            self.builder().build_int_sub(int, one, "int_post_inc_sub")
+        }
+        .unwrap();
+
+        self.builder().build_store(ptr, new_value).unwrap();
+
+        BasicValueEnum::from(int)
+    }
+
+    fn compile_post_inc_or_dec_for_float(
+        &self,
+        ptr: PointerValue<'ctx>,
+        float: FloatValue<'ctx>,
+        inc: bool,
+    ) -> BasicValueEnum<'ctx> {
+        let one = self.context.f32_type().const_float(1.0);
+
+        let new_value = if inc {
+            self.builder()
+                .build_float_add(float, one, "float_post_inc_add")
+        } else {
+            self.builder()
+                .build_float_sub(float, one, "float_post_inc_sub")
+        }
+        .unwrap();
+
+        self.builder().build_store(ptr, new_value).unwrap();
+
+        BasicValueEnum::from(float)
+    }
+
+    fn compile_post_inc_or_dec_for_ptr(
+        &self,
+        ptr: PointerValue<'ctx>,
+        inner_ptr: PointerValue<'ctx>,
+        inc: bool,
+    ) -> BasicValueEnum<'ctx> {
+        let ptr_to_int = self
+            .builder()
+            .build_ptr_to_int(inner_ptr, self.context.i64_type(), "ptr_to_int")
+            .unwrap();
+
+        let one = self.context.i8_type().const_int(1, false);
+        let new_int_value = if inc {
+            self.builder()
+                .build_int_add(ptr_to_int, one, "ptr_post_inc_add")
+        } else {
+            self.builder()
+                .build_int_sub(ptr_to_int, one, "ptr_post_inc_sub")
+        }
+        .unwrap();
+
+        let int_to_ptr = self
+            .builder()
+            .build_int_to_ptr(new_int_value, inner_ptr.get_type(), "int_to_ptr")
+            .unwrap();
+
+        self.builder().build_store(ptr, int_to_ptr).unwrap();
+
+        BasicValueEnum::from(inner_ptr)
     }
 }

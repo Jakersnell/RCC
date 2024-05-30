@@ -1,8 +1,9 @@
 use inkwell::{FloatPredicate, IntPredicate};
-use inkwell::values::{BasicValueEnum, FloatValue, IntValue, PointerValue};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirExprKind, MlirLiteral, MlirType};
+use crate::data::mlir::{CastType, MlirExpr, MlirExprKind, MlirLiteral, MlirType};
+use crate::util::str_intern::InternedStr;
 
 mod binary_expressions;
 mod lvals;
@@ -14,9 +15,14 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 expr.ty.is_unsigned_int()
             };
         }
+        macro_rules! expr_ty {
+            () => {
+                &expr.ty
+            };
+        }
         match &*expr.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
-            MlirExprKind::Variable(id) => self.compile_variable_access(&expr.ty, *id),
+            MlirExprKind::Variable(id) => self.compile_variable_access(expr_ty!(), *id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
             MlirExprKind::PostDecrement(expr) => self.compile_post_decrement(expr),
             MlirExprKind::Negate(expr) => self.compile_negate(expr),
@@ -51,14 +57,146 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::BitwiseXor(left, right) => self.compile_bitwise_xor(left, right),
             MlirExprKind::LeftShift(left, right) => self.compile_left_shift(left, right),
             MlirExprKind::RightShift(left, right) => self.compile_right_shift(left, right),
-            MlirExprKind::Index(array, index) => todo!(),
-            MlirExprKind::Member(_struct, index) => todo!(),
-            MlirExprKind::Cast(cast_type, expr) => todo!(),
+            MlirExprKind::Index(array, index) => {
+                self.compile_array_access(array, index, expr_ty!())
+            }
+            MlirExprKind::Member(_struct, member) => {
+                self.compile_member_access(_struct, member, expr_ty!())
+            }
+            MlirExprKind::Cast(cast_type, expr) => self.compile_cast(cast_type, expr, expr_ty!()),
             MlirExprKind::FunctionCall {
                 location,
                 ident,
                 args,
-            } => todo!(),
+            } => self.compile_function_call(location, ident, args),
+        }
+    }
+
+    fn compile_function_call(
+        &mut self,
+        location: &Option<&str>,
+        ident: &InternedStr,
+        args: &[MlirExpr],
+    ) -> BasicValueEnum<'ctx> {
+        let function = *self
+            .functions
+            .get(ident)
+            .expect("Function does not exist in memory.");
+        let compiled_args: Vec<BasicMetadataValueEnum> = args
+            .iter()
+            .map(|arg| self.compile_expression(arg).into())
+            .collect();
+        let call_site_value = self
+            .builder()
+            .build_call(function, &compiled_args, "function_call")
+            .unwrap();
+        // hack to preserve returning VOID without having to return Some(BasicValueEnum<'ctx> at every method
+        let const_i8 = BasicValueEnum::from(self.context.i8_type().const_int(0, false));
+        call_site_value.try_as_basic_value().left_or(const_i8)
+    }
+
+    fn compile_cast(
+        &mut self,
+        cast_type: &CastType,
+        expr: &MlirExpr,
+        mlir_type: &MlirType,
+    ) -> BasicValueEnum<'ctx> {
+        let unsigned_int = expr.ty.is_unsigned_int() || mlir_type.is_unsigned_int();
+        let expr = self.compile_expression(expr);
+
+        if matches!(
+            cast_type,
+            CastType::SignedToUnsigned
+                | CastType::UnsignedToSigned
+                | CastType::PointerToPointer
+                | CastType::ArrayToPointer
+        ) {
+            // compiler usage casts, no corresponding runtime cast
+            return expr;
+        }
+
+        match cast_type {
+            CastType::SignedToUnsigned
+            | CastType::UnsignedToSigned
+            | CastType::PointerToPointer
+            | CastType::ArrayToPointer => return expr,
+
+            CastType::PointerToLong => {
+                let i64_type = self.context.i64_type();
+                let ptr = expr.into_pointer_value();
+                let value = self
+                    .builder()
+                    .build_ptr_to_int(ptr, i64_type, "ptr_to_int")
+                    .unwrap();
+                BasicValueEnum::from(value)
+            }
+
+            CastType::LongToPointer => {
+                let ptr_type = self.convert_type(mlir_type).into_pointer_type();
+                let long = expr.into_int_value();
+                let value = self
+                    .builder()
+                    .build_int_to_ptr(long, ptr_type, "int_to_ptr")
+                    .unwrap();
+                BasicValueEnum::from(value)
+            }
+
+            CastType::IntToLong
+            | CastType::LongToInt
+            | CastType::IntToChar
+            | CastType::CharToInt => {
+                let int = expr.into_int_value();
+                let int_type = self.convert_type(mlir_type).into_int_type();
+                let value = self
+                    .builder()
+                    .build_int_cast(int, int_type, "int_to_int")
+                    .unwrap();
+                BasicValueEnum::from(value)
+            }
+
+            CastType::IntToFloat | CastType::LongToDouble => {
+                let int = expr.into_int_value();
+                let float_type = self.convert_type(mlir_type).into_float_type();
+                let value = if unsigned_int {
+                    self.builder().build_unsigned_int_to_float(
+                        int,
+                        float_type,
+                        "unsigned_int_to_float",
+                    )
+                } else {
+                    self.builder()
+                        .build_signed_int_to_float(int, float_type, "signed_int_to_float")
+                }
+                .unwrap();
+                BasicValueEnum::from(value)
+            }
+
+            CastType::DoubleToLong | CastType::FloatToInt => {
+                let float = expr.into_float_value();
+                let int_type = self.convert_type(mlir_type).into_int_type();
+                let value = if unsigned_int {
+                    self.builder().build_float_to_unsigned_int(
+                        float,
+                        int_type,
+                        "float_to_unsigned_int",
+                    )
+                } else {
+                    self.builder()
+                        .build_float_to_signed_int(float, int_type, "float_to_signed_int")
+                }
+                .unwrap();
+                BasicValueEnum::from(value)
+            }
+
+            CastType::FloatToDouble | CastType::DoubleToFloat => {
+                let float = expr.into_float_value();
+                let float_type = self.convert_type(mlir_type).into_float_type();
+                let value = self
+                    .builder()
+                    .build_float_cast(float, float_type, "float_to_float")
+                    .unwrap();
+                BasicValueEnum::from(value)
+            }
         }
     }
 
@@ -99,120 +237,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 self.context.i8_type().const_array(&bytes).into()
             }
         }
-    }
-
-    fn compile_variable_access(&mut self, ty: &MlirType, id: usize) -> BasicValueEnum<'ctx> {
-        let pointee_ty = self.convert_type(ty);
-        let ptr = *self
-            .variables
-            .get(&id)
-            .expect("Invalid variable accesses must be handled in Analysis.");
-        self.builder()
-            .build_load(pointee_ty, ptr, "access_variable")
-            .unwrap()
-    }
-
-    fn compile_post_increment(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        self.compile_post_inc_or_dec(expr, true)
-    }
-
-    fn compile_post_decrement(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        self.compile_post_inc_or_dec(expr, false)
-    }
-
-    fn compile_post_inc_or_dec(&mut self, expr: &MlirExpr, inc: bool) -> BasicValueEnum<'ctx> {
-        debug_assert!(expr.is_lval);
-        let ptr = self.compile_expression(expr).into_pointer_value();
-
-        let ir_ty = self.convert_type(&expr.ty);
-        let ptr_value = self
-            .builder()
-            .build_load(ir_ty, ptr, "post_inc_load_value")
-            .unwrap();
-
-        match ptr_value {
-            BasicValueEnum::IntValue(int) => self.compile_post_inc_or_dec_for_int(ptr, int, inc),
-            BasicValueEnum::FloatValue(float) => {
-                self.compile_post_inc_or_dec_for_float(ptr, float, inc)
-            }
-            BasicValueEnum::PointerValue(inner_ptr) => {
-                self.compile_post_inc_or_dec_for_ptr(ptr, inner_ptr, inc)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn compile_post_inc_or_dec_for_int(
-        &self,
-        ptr: PointerValue<'ctx>,
-        int: IntValue<'ctx>,
-        inc: bool,
-    ) -> BasicValueEnum<'ctx> {
-        let one = self.context.i8_type().const_int(1, false);
-
-        let new_value = if inc {
-            self.builder().build_int_add(int, one, "int_post_inc_add")
-        } else {
-            self.builder().build_int_sub(int, one, "int_post_inc_sub")
-        }
-        .unwrap();
-
-        self.builder().build_store(ptr, new_value).unwrap();
-
-        BasicValueEnum::from(int)
-    }
-
-    fn compile_post_inc_or_dec_for_float(
-        &self,
-        ptr: PointerValue<'ctx>,
-        float: FloatValue<'ctx>,
-        inc: bool,
-    ) -> BasicValueEnum<'ctx> {
-        let one = self.context.f32_type().const_float(1.0);
-
-        let new_value = if inc {
-            self.builder()
-                .build_float_add(float, one, "float_post_inc_add")
-        } else {
-            self.builder()
-                .build_float_sub(float, one, "float_post_inc_sub")
-        }
-        .unwrap();
-
-        self.builder().build_store(ptr, new_value).unwrap();
-
-        BasicValueEnum::from(float)
-    }
-
-    fn compile_post_inc_or_dec_for_ptr(
-        &self,
-        ptr: PointerValue<'ctx>,
-        inner_ptr: PointerValue<'ctx>,
-        inc: bool,
-    ) -> BasicValueEnum<'ctx> {
-        let ptr_to_int = self
-            .builder()
-            .build_ptr_to_int(inner_ptr, self.context.i64_type(), "ptr_to_int")
-            .unwrap();
-
-        let one = self.context.i8_type().const_int(1, false);
-        let new_int_value = if inc {
-            self.builder()
-                .build_int_add(ptr_to_int, one, "ptr_post_inc_add")
-        } else {
-            self.builder()
-                .build_int_sub(ptr_to_int, one, "ptr_post_inc_sub")
-        }
-        .unwrap();
-
-        let int_to_ptr = self
-            .builder()
-            .build_int_to_ptr(new_int_value, inner_ptr.get_type(), "int_to_ptr")
-            .unwrap();
-
-        self.builder().build_store(ptr, int_to_ptr).unwrap();
-
-        BasicValueEnum::from(inner_ptr)
     }
 
     fn compile_negate(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
