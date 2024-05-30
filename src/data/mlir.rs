@@ -53,6 +53,17 @@ impl MlirModule {
             .expect("Struct not found in module!")
             .get_member_offset(member)
     }
+
+    pub fn get_struct_member_type(
+        &self,
+        struct_ident: &InternedStr,
+        member: &InternedStr,
+    ) -> &MlirType {
+        self.structs
+            .get(struct_ident)
+            .unwrap()
+            .get_member_type(member)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -69,6 +80,17 @@ impl MlirStruct {
             .enumerate()
             .find(|(_, var)| var.ident.as_ref() == member)
             .map(|(idx, _)| idx as u32)
+            .expect(&format!(
+                "Struct member '{member}' does not exist in struct '{}'",
+                &self.ident.value
+            ))
+    }
+
+    fn get_member_type(&self, member: &str) -> &MlirType {
+        self.members
+            .iter()
+            .find(|var| var.ident.as_ref() == member)
+            .map(|var| &var.ty)
             .expect(&format!(
                 "Struct member '{member}' does not exist in struct '{}'",
                 &self.ident.value
