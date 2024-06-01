@@ -225,13 +225,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         llvm_block_iter.next(); // skip entry block
 
         let mut mlir_block_iter = mlir_basic_blocks.iter().peekable();
-
+        self.block_has_jumped = false;
         while let (Some(mlir_bb), Some(llvm_bb)) = (mlir_block_iter.next(), llvm_block_iter.next())
         {
             if !self.block_has_jumped {
                 self.builder().build_unconditional_branch(llvm_bb);
             }
-            let next_llvm_bb = llvm_block_iter.peek().copied();
             self.builder().position_at_end(llvm_bb);
             self.block_has_jumped = false;
             self.compile_mlir_basic_block(mlir_bb);

@@ -225,7 +225,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 self.context.f64_type().const_float(*double).into()
             }
             MlirLiteral::String(string) => {
-                let string_type = self.context.i8_type().array_type(string.len() as u32);
+                let string_type = self.context.i8_type().array_type(string.len() as u32 + 1); // add one for null term
                 let global = self.module.add_global(string_type, None, "global_string");
                 global.set_initializer(&self.context.const_string(string, true));
                 global.as_pointer_value().into()
