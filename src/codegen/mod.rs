@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::Formatter;
+use std::fmt::{format, Formatter};
 use std::rc::Rc;
 
 use derive_new::new;
@@ -10,7 +10,9 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::support::LLVMString;
-use inkwell::types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
+use inkwell::types::{
+    AnyType, AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType,
+};
 use inkwell::values::{
     BasicValue, BasicValueEnum, FloatValue, FunctionValue, IntMathValue, PointerValue,
 };
@@ -18,9 +20,10 @@ use inkwell::values::IntValue;
 use log::debug;
 use serde::ser::SerializeTuple;
 
+use crate::data::ast::BinaryOp::Add;
 use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirModule, MlirStmt, MlirStruct,
-    MlirType, MlirTypeDecl, MlirTypeKind, MlirVariable, VOID_TYPE,
+    MlirType, MlirTypeDecl, MlirTypeKind, MlirVariable, VOID_PTR, VOID_TYPE,
 };
 use crate::data::symbols::BUILTINS;
 use crate::util::str_intern;
@@ -41,6 +44,7 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) variables: HashMap<usize, PointerValue<'ctx>>,
     pub(in crate::codegen) fn_value_opt: Option<FunctionValue<'ctx>>,
     pub(in crate::codegen) struct_types: HashMap<InternedStr, StructType<'ctx>>,
+    pub(in crate::codegen) block_has_jumped: bool,
 }
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -54,6 +58,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             struct_types: Default::default(),
             fn_value_opt: None,
             builder: None,
+            block_has_jumped: false,
         };
         compiler.builder = Some(compiler.context.create_builder());
         compiler.compile_builtins();
@@ -125,15 +130,14 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn compile_builtins(&mut self) {
         for (ident, builtin) in BUILTINS.iter() {
-            let ret_type = self.convert_type(&builtin.return_ty);
-
             let param_types = builtin
                 .params
                 .iter()
                 .map(|param_type| self.convert_type(param_type).into())
                 .collect::<Vec<BasicMetadataTypeEnum>>();
 
-            let fn_type = ret_type.fn_type(&param_types, builtin.varargs);
+            let fn_type =
+                self.convert_function_type(&builtin.return_ty, &param_types, builtin.varargs);
 
             let fn_val = self
                 .module
@@ -154,11 +158,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .collect();
 
         // void types 'fn_type' method is only accessible via VoidType directly
-        let fn_type = if *function.ty == VOID_TYPE {
-            self.context.void_type().fn_type(&param_types, false)
-        } else {
-            self.convert_type(&function.ty).fn_type(&param_types, false)
-        };
+        let fn_type = self.convert_function_type(&function.ty, &param_types, false);
 
         let fn_val =
             self.module
@@ -195,8 +195,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         self.process_function_body(&function.body);
 
-        if cfg!(debug_assertions) {
-            debug_assert!(self.fn_value().verify(false))
+        if cfg!(debug_assertions) && !self.fn_value().verify(true) {
+            self.fn_value().print_to_stderr();
+            panic!();
         }
 
         self.fn_value_opt = None;
@@ -227,8 +228,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         while let (Some(mlir_bb), Some(llvm_bb)) = (mlir_block_iter.next(), llvm_block_iter.next())
         {
+            if !self.block_has_jumped {
+                self.builder().build_unconditional_branch(llvm_bb);
+            }
             let next_llvm_bb = llvm_block_iter.peek().copied();
             self.builder().position_at_end(llvm_bb);
+            self.block_has_jumped = false;
             self.compile_mlir_basic_block(mlir_bb);
         }
     }
@@ -264,26 +269,46 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    pub(in crate::codegen) fn convert_type(&self, ty: &MlirType) -> BasicTypeEnum<'ctx> {
-        let any_type_enum = self.get_type_kind_as_llvm_any_type(&ty.kind);
-        match &ty.decl {
-            MlirTypeDecl::Array(size) => any_type_enum.into_array_type().into(),
-            MlirTypeDecl::Pointer => any_type_enum.into_pointer_type().into(),
-            MlirTypeDecl::Basic => any_type_enum
-                .try_into()
-                .expect("Could not convert AnyTypeEnum variant into BasicTypeEnum"),
+    pub(in crate::codegen) fn convert_function_type(
+        &self,
+        func_ty: &MlirType,
+        param_types: &[BasicMetadataTypeEnum<'ctx>],
+        is_var_args: bool,
+    ) -> FunctionType<'ctx> {
+        if func_ty.decl == MlirTypeDecl::Basic && func_ty.kind == MlirTypeKind::Void {
+            self.context.void_type().fn_type(param_types, is_var_args)
+        } else {
+            self.convert_type(func_ty).fn_type(param_types, is_var_args)
         }
     }
 
-    fn get_type_kind_as_llvm_any_type(&self, kind: &MlirTypeKind) -> AnyTypeEnum<'ctx> {
+    pub(in crate::codegen) fn convert_type(&self, ty: &MlirType) -> BasicTypeEnum<'ctx> {
+        if ty == &VOID_PTR {
+            return self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .into();
+        }
+
+        let basic_type = self.get_type_kind_as_llvm_any_type(&ty.kind);
+
+        match &ty.decl {
+            MlirTypeDecl::Array(size) => basic_type.into_array_type().into(),
+            MlirTypeDecl::Pointer => basic_type.ptr_type(AddressSpace::default()).into(),
+            MlirTypeDecl::Basic => basic_type,
+        }
+    }
+
+    fn get_type_kind_as_llvm_any_type(&self, kind: &MlirTypeKind) -> BasicTypeEnum<'ctx> {
         match kind {
-            MlirTypeKind::Void => self.context.void_type().into(),
             MlirTypeKind::Char(_) => self.context.i8_type().into(),
             MlirTypeKind::Int(_) => self.context.i32_type().into(),
             MlirTypeKind::Long(_) => self.context.i64_type().into(),
             MlirTypeKind::Float => self.context.f32_type().into(),
             MlirTypeKind::Double => self.context.f64_type().into(),
             MlirTypeKind::Struct(ident) => self.get_struct_type(ident).into(),
+            _ => panic!(),
         }
     }
 
