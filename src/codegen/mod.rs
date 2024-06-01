@@ -26,8 +26,10 @@ use crate::data::symbols::BUILTINS;
 use crate::util::str_intern;
 use crate::util::str_intern::InternedStr;
 
+pub(in crate::codegen) mod binary_expressions;
 pub(in crate::codegen) mod declarations;
 pub(in crate::codegen) mod expressions;
+pub(in crate::codegen) mod lvals;
 pub(in crate::codegen) mod statements;
 
 pub struct Compiler<'a, 'mlir, 'ctx> {
