@@ -160,9 +160,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         // void types 'fn_type' method is only accessible via VoidType directly
         let fn_type = self.convert_function_type(&function.ty, &param_types, false);
 
-        let fn_val =
-            self.module
-                .add_function(function.ident.as_ref(), fn_type, Some(Linkage::Internal));
+        let fn_val = self
+            .module
+            .add_function(function.ident.as_ref(), fn_type, None);
 
         for (i, arg) in fn_val.get_param_iter().enumerate() {
             arg.set_name(function.parameters[i].ident.as_ref());
