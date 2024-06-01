@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hasher;
 use std::ops::Deref;
@@ -37,9 +37,9 @@ pub const VOID_TYPE: MlirType = MlirType {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct MlirModule {
-    pub functions: HashMap<InternedStr, MlirFunction>,
-    pub structs: HashMap<InternedStr, MlirStruct>,
-    pub globals: HashMap<InternedStr, MlirVariable>,
+    pub functions: BTreeMap<InternedStr, MlirFunction>,
+    pub structs: BTreeMap<InternedStr, MlirStruct>,
+    pub globals: BTreeMap<InternedStr, MlirVariable>,
 }
 
 impl MlirModule {
@@ -149,10 +149,10 @@ impl MlirType {
 
     pub fn is_unsigned_int(&self) -> bool {
         debug_assert!(self.is_basic());
-        match &self.kind {
-            MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true) => true,
-            _ => false,
-        }
+        matches!(
+            &self.kind,
+            MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true)
+        )
     }
 
     pub fn as_basic(&self) -> Self {

@@ -9,6 +9,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
+use inkwell::support::LLVMString;
 use inkwell::types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{
     BasicValue, BasicValueEnum, FloatValue, FunctionValue, IntMathValue, PointerValue,
@@ -28,13 +29,6 @@ use crate::util::str_intern::InternedStr;
 pub(in crate::codegen) mod declarations;
 pub(in crate::codegen) mod expressions;
 pub(in crate::codegen) mod statements;
-
-// pub fn compile(mlir: &MidLevelIR, name: &str) {
-//     let context = Context::create();
-//     let builder = context.create_builder();
-//     let module = context.create_module(name);
-//     let compiler = Compiler::new(mlir, &context, &builder, &module);
-// }
 
 pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) mlir: &'mlir MlirModule,
@@ -60,6 +54,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             builder: None,
         };
         compiler.builder = Some(compiler.context.create_builder());
+        compiler.compile_builtins();
         compiler
     }
 
@@ -103,6 +98,27 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
     pub(in crate::codegen) fn get_struct_type(&self, ident: &InternedStr) -> StructType<'ctx> {
         *self.struct_types.get(ident).unwrap()
+    }
+
+    pub fn compile(mut self, output_path: &str) -> Result<(), LLVMString> {
+        for _struct in self.mlir.structs.values() {
+            self.create_struct_type(_struct);
+        }
+
+        for global in self.mlir.globals.values() {
+            self.compile_global(global);
+        }
+
+        for function in self.mlir.functions.values() {
+            self.compile_function(function);
+        }
+
+        self.module.print_to_file(output_path)
+    }
+
+    #[inline(always)]
+    fn compile_global(&mut self, global: &MlirVariable) {
+        self.compile_variable_declaration(global, true);
     }
 
     fn compile_builtins(&mut self) {

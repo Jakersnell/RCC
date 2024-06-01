@@ -1,3 +1,4 @@
+use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::PointerValue;
 
@@ -5,7 +6,7 @@ use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub fn compile_variable_declaration(&mut self, var: &MlirVariable) {
+    pub fn compile_variable_declaration(&mut self, var: &MlirVariable, is_global: bool) {
         let MlirVariable {
             uid,
             span,
@@ -15,17 +16,21 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             initializer,
         } = var;
 
-        let (ty, var_ptr) = match &mlir_type.decl {
-            MlirTypeDecl::Array(size) => {
-                let element_type = self.convert_type(&mlir_type.as_basic());
-                (
-                    element_type,
-                    self.create_entry_block_array_allocation(element_type, *size),
-                )
-            }
-            _ => {
-                let ty = self.convert_type(mlir_type);
-                (ty, self.create_entry_block_allocation(ty, ident))
+        let ty = if matches!(&mlir_type.decl, MlirTypeDecl::Array(_)) {
+            mlir_type.as_basic()
+        } else {
+            mlir_type.value.clone()
+        };
+        let ty = self.convert_type(&ty);
+
+        let var_ptr = match &mlir_type.decl {
+            _ if is_global => self
+                .module
+                .add_global(ty, Some(AddressSpace::default()), ident)
+                .as_pointer_value(),
+            MlirTypeDecl::Array(size) => self.create_entry_block_array_allocation(ty, *size),
+            MlirTypeDecl::Pointer | MlirTypeDecl::Basic => {
+                self.create_entry_block_allocation(ty, ident)
             }
         };
 

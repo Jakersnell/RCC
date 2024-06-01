@@ -56,7 +56,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     #[inline(always)]
     fn compile_variable_declaration_statement(&mut self, var: &MlirVariable) {
-        self.compile_variable_declaration(var);
+        self.compile_variable_declaration(var, false);
     }
 
     #[inline(always)]

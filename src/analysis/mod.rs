@@ -1,14 +1,15 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::iter::Map;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 use crate::analysis::symbols::SymbolResolver;
 use crate::data::ast::*;
 use crate::data::mlir::*;
+use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
 
 mod binary_expressions;
 mod casting;
@@ -66,9 +67,9 @@ impl Analyzer {
     }
 
     pub fn validate(mut self) -> Result<MlirModule, SharedReporter> {
-        let mut globals = HashMap::new();
-        let mut functions = HashMap::new();
-        let mut structs = HashMap::new();
+        let mut globals = BTreeMap::new();
+        let mut functions = BTreeMap::new();
+        let mut structs = BTreeMap::new();
         let ast = self.ast.take().expect("Ast must be Some(T)");
         macro_rules! push_locatable {
             ($map:expr, $func:expr, $locatable:ident) => {
@@ -131,10 +132,14 @@ impl Analyzer {
             }
         }
 
-        fn deref_map<K: Eq + std::hash::Hash, T>(map: HashMap<K, Locatable<T>>) -> HashMap<K, T> {
-            map.into_iter()
-                .map(|(ident, item)| (ident, item.value))
-                .collect()
+        fn deref_map<K: Eq + std::hash::Hash + std::cmp::Ord, T>(
+            map: BTreeMap<K, Locatable<T>>,
+        ) -> BTreeMap<K, T> {
+            let mut dest = BTreeMap::new();
+            for (key, value) in map.into_iter() {
+                dest.insert(key, value.value);
+            }
+            dest
         }
 
         let functions = deref_map(functions);
@@ -424,9 +429,9 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
 
 #[cfg(test)]
 mod tests {
+    use crate::{analysis, lexer, parser};
     use crate::analysis::SharedReporter;
     use crate::data::mlir::MlirModule;
-    use crate::{analysis, lexer, parser};
 
     pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MlirModule, SharedReporter> {
         let source = std::fs::read_to_string(path).expect("Could not read file.");
