@@ -198,7 +198,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[rustfmt::skip]
-    fn compile_literal(&self, literal: &MlirLiteral) -> BasicValueEnum<'ctx> {
+    fn compile_literal(&mut self, literal: &MlirLiteral) -> BasicValueEnum<'ctx> {
         match literal {
             MlirLiteral::Char(char) => {
                 self.context.i8_type().const_int(*char as u64, true).into()
@@ -224,14 +224,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirLiteral::Double(double) => {
                 self.context.f64_type().const_float(*double).into()
             }
-            MlirLiteral::String(bytes) => {
-                let bytes = bytes
-                    .iter()
-                    .map(|byte| {
-                        self.context.i8_type().const_int(*byte as u64, false)
-                    })
-                    .collect::<Vec<_>>();
-                self.context.i8_type().const_array(&bytes).into()
+            MlirLiteral::String(string) => {
+                let string_type = self.context.i8_type().array_type(string.len() as u32);
+                let global = self.module.add_global(string_type, None, "global_string");
+                global.set_initializer(&self.context.const_string(string, true));
+                global.as_pointer_value().into()
             }
         }
     }

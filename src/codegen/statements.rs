@@ -1,4 +1,4 @@
-use inkwell::values::{BasicValue, BasicValueEnum};
+use inkwell::values::BasicValue;
 
 use crate::codegen::{Compiler, MlirBasicBlock};
 use crate::data::mlir::{MlirExpr, MlirStmt, MlirVariable};
@@ -57,13 +57,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     #[inline(always)]
     fn compile_cond_goto(&mut self, condition: &MlirExpr, then: &InternedStr, _else: &InternedStr) {
-        let condition = match self.compile_expression(condition) {
-            BasicValueEnum::IntValue(int_value) => int_value,
-            _ => panic!(
-                "Cannot build conditional comparison to zero for non IntValue type: '{:?}'",
-                condition
-            ),
-        };
+        let condition = self.compile_expression(condition).into_int_value();
+        let i1_type = self.context.bool_type();
+        let condition = self
+            .builder()
+            .build_int_cast(condition, i1_type, "conv_to_i1_type")
+            .unwrap();
         let then_block = self.get_block_by_name(then).unwrap();
         let else_block = self.get_block_by_name(_else).unwrap();
         self.builder()
