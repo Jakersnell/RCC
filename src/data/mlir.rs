@@ -6,7 +6,6 @@ use std::ops::Deref;
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
-use crate::data::mlir::MlirTypeDecl::Basic;
 use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
 
@@ -19,6 +18,11 @@ macro_rules! basic_ty {
     };
 }
 pub(crate) use basic_ty;
+
+pub const VOID_PTR: MlirType = MlirType {
+    kind: MlirTypeKind::Void,
+    decl: MlirTypeDecl::Pointer,
+};
 
 pub const UNSIGNED_LONG_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Long(true),
@@ -158,7 +162,7 @@ impl MlirType {
     pub fn as_basic(&self) -> Self {
         debug_assert!(!self.is_basic());
         Self {
-            decl: Basic,
+            decl: MlirTypeDecl::Basic,
             kind: self.kind.clone(),
         }
     }

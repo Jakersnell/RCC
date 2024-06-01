@@ -1,6 +1,9 @@
 #![allow(unused)]
 
+use inkwell::context::Context;
+
 use crate::analysis::Analyzer;
+use crate::codegen::Compiler;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
@@ -27,17 +30,10 @@ fn main() {
     let parser = Parser::new(lexer);
     let analyzer = Analyzer::new(parser.parse_all().unwrap());
     let mlir = analyzer.validate().unwrap();
-    for (func_name, func) in mlir.functions.iter() {
-        println!("\n-- function '{}' --", func_name);
-        let basic_blocks = crate::codegen::pre_construct_blocks(&func.body);
-        for block in basic_blocks {
-            println!(
-                "{}",
-                crate::util::display_utils::indent_string(format!("{}", block), 0, 4)
-            );
-        }
-        println!("--");
-    }
+    let context = Context::create();
+    let module = context.create_module("main");
+    let compiler = Compiler::new(&mlir, &context, &module);
+    compiler.compile("main.ll").unwrap()
 }
 
 /// Integration tests
@@ -46,10 +42,10 @@ mod tests {
     use std::panic::catch_unwind;
     use std::path::PathBuf;
 
+    use crate::{analysis, lexer, parser};
     use crate::analysis::SharedReporter;
     use crate::data::ast::{Expression, InitDeclaration};
     use crate::util::error::CompilerError;
-    use crate::{analysis, lexer, parser};
 
     pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
