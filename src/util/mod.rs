@@ -1,20 +1,18 @@
-pub mod ast_pretty_print;
-pub mod error;
-pub mod str_intern;
-
-use crate::data::ast::InitDeclaration;
-use crate::data::tokens::Token as LexToken;
-use crate::util::error::CompilerWarning;
-use arcstr::ArcStr;
-use derive_new::new;
-use error::CompilerError;
-use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use std::ops::Deref;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::ops::{Deref, DerefMut};
+
+use derive_new::new;
+
+use error::CompilerError;
+
+use crate::data::tokens::Token as LexToken;
+
+pub mod ast_pretty_print;
+pub mod display_utils;
+pub mod error;
+pub mod mlir_display;
+pub mod str_intern;
 
 pub type LocatableToken = Locatable<LexToken>;
 pub type CompilerResult<T> = Result<T, Vec<CompilerError>>;
@@ -50,6 +48,12 @@ impl<T> Deref for Locatable<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+
+impl<T> DerefMut for Locatable<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 

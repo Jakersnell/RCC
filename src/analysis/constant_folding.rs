@@ -59,6 +59,7 @@ macro_rules! unary_fold {
 
 macro_rules! debug_assert_numeric_type_validity {
     ($lit:expr) => {
+        // Out of debug mode this will be compiled out, and not exist in production code
         if cfg!(debug_assertions) {
             if let MlirExprKind::Literal(literal) = &*$lit.kind {
                 macro_rules! assert_type {
@@ -88,47 +89,48 @@ macro_rules! debug_assert_numeric_type_validity {
 
 impl MlirExpr {
     pub(in crate::analysis) fn fold(self) -> Self {
-        // debug_assert_numeric_type_validity!(self);
-        self
-        // match &*self.kind {
-        //     MlirExprKind::Assign(_, _)
-        //     | MlirExprKind::FunctionCall { .. }
-        //     | MlirExprKind::Index(_, _)
-        //     | MlirExprKind::Member(_, _)
-        //     | MlirExprKind::Deref(_)
-        //     | MlirExprKind::Literal(_)
-        //     | MlirExprKind::Variable(_)
-        //     | MlirExprKind::PostIncrement(_)
-        //     | MlirExprKind::PostDecrement(_)
-        //     | MlirExprKind::AddressOf(_) => self,
-        //
-        //     MlirExprKind::Add(_, _)
-        //     | MlirExprKind::Sub(_, _)
-        //     | MlirExprKind::Mul(_, _)
-        //     | MlirExprKind::Div(_, _)
-        //     | MlirExprKind::Mod(_, _) => self.arithmetic_fold(),
-        //
-        //     MlirExprKind::Equal(_, _)
-        //     | MlirExprKind::NotEqual(_, _)
-        //     | MlirExprKind::GreaterThan(_, _)
-        //     | MlirExprKind::GreaterThanEqual(_, _)
-        //     | MlirExprKind::LessThan(_, _)
-        //     | MlirExprKind::LessThanEqual(_, _) => self.equivalence_fold(),
-        //
-        //     MlirExprKind::BitwiseAnd(_, _)
-        //     | MlirExprKind::BitwiseOr(_, _)
-        //     | MlirExprKind::BitwiseXor(_, _)
-        //     | MlirExprKind::LeftShift(_, _)
-        //     | MlirExprKind::RightShift(_, _) => self.bitwise_fold(),
-        //
-        //     MlirExprKind::LogicalAnd(_, _) | MlirExprKind::LogicalOr(_, _) => self.logical_fold(),
-        //
-        //     MlirExprKind::Negate(_) => self.fold_negate(),
-        //     MlirExprKind::LogicalNot(_) => self.fold_logical_not(),
-        //     MlirExprKind::BitwiseNot(_) => self.fold_bitwise_not(),
-        //
-        //     MlirExprKind::Cast(_, _) => self.fold_cast(),
-        // }
+        if self.is_const() {
+            debug_assert_numeric_type_validity!(self);
+        }
+        match &*self.kind {
+            MlirExprKind::Assign(_, _)
+            | MlirExprKind::FunctionCall { .. }
+            | MlirExprKind::Index(_, _)
+            | MlirExprKind::Member(_, _)
+            | MlirExprKind::Deref(_)
+            | MlirExprKind::Literal(_)
+            | MlirExprKind::Variable(_)
+            | MlirExprKind::PostIncrement(_)
+            | MlirExprKind::PostDecrement(_)
+            | MlirExprKind::AddressOf(_) => self,
+
+            MlirExprKind::Add(_, _)
+            | MlirExprKind::Sub(_, _)
+            | MlirExprKind::Mul(_, _)
+            | MlirExprKind::Div(_, _)
+            | MlirExprKind::Mod(_, _) => self.arithmetic_fold(),
+
+            MlirExprKind::Equal(_, _)
+            | MlirExprKind::NotEqual(_, _)
+            | MlirExprKind::GreaterThan(_, _)
+            | MlirExprKind::GreaterThanEqual(_, _)
+            | MlirExprKind::LessThan(_, _)
+            | MlirExprKind::LessThanEqual(_, _) => self.equivalence_fold(),
+
+            MlirExprKind::BitwiseAnd(_, _)
+            | MlirExprKind::BitwiseOr(_, _)
+            | MlirExprKind::BitwiseXor(_, _)
+            | MlirExprKind::LeftShift(_, _)
+            | MlirExprKind::RightShift(_, _) => self.bitwise_fold(),
+
+            MlirExprKind::LogicalAnd(_, _) | MlirExprKind::LogicalOr(_, _) => self.logical_fold(),
+
+            MlirExprKind::Negate(_) => self.fold_negate(),
+            MlirExprKind::LogicalNot(_) => self.fold_logical_not(),
+            MlirExprKind::BitwiseNot(_) => self.fold_bitwise_not(),
+
+            MlirExprKind::Cast(_, _) => self.fold_cast(),
+        }
     }
 
     fn arithmetic_fold(self) -> Self {
@@ -569,7 +571,10 @@ impl MlirExpr {
     }
 
     fn is_const(&self) -> bool {
-        matches!(&*self.kind, MlirExprKind::Literal(_))
+        match &*self.kind {
+            MlirExprKind::Literal(literal) => !matches!(literal, MlirLiteral::String(_)),
+            _ => false,
+        }
     }
 
     fn get_const(self) -> MlirLiteral {

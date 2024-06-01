@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hasher;
 use std::ops::Deref;
@@ -19,22 +19,87 @@ macro_rules! basic_ty {
 }
 pub(crate) use basic_ty;
 
+pub const VOID_PTR: MlirType = MlirType {
+    kind: MlirTypeKind::Void,
+    decl: MlirTypeDecl::Pointer,
+};
+
+pub const UNSIGNED_LONG_TYPE: MlirType = MlirType {
+    kind: MlirTypeKind::Long(true),
+    decl: MlirTypeDecl::Basic,
+};
+
+pub const SIGNED_INT_TYPE: MlirType = MlirType {
+    kind: MlirTypeKind::Int(false),
+    decl: MlirTypeDecl::Basic,
+};
+
 pub const VOID_TYPE: MlirType = MlirType {
     kind: MlirTypeKind::Void,
     decl: MlirTypeDecl::Basic,
 };
+
 #[derive(Debug, Default, PartialEq)]
-pub struct MidLevelIR {
-    pub functions: HashMap<InternedStr, MlirFunction>,
-    pub structs: HashMap<InternedStr, MlirStruct>,
-    pub globals: HashMap<InternedStr, MlirVariable>,
+pub struct MlirModule {
+    pub functions: BTreeMap<InternedStr, MlirFunction>,
+    pub structs: BTreeMap<InternedStr, MlirStruct>,
+    pub globals: BTreeMap<InternedStr, MlirVariable>,
+}
+
+impl MlirModule {
+    pub fn get_struct_member_offset(
+        &self,
+        struct_ident: &InternedStr,
+        member: &InternedStr,
+    ) -> u32 {
+        self.structs
+            .get(struct_ident)
+            .expect("Struct not found in module!")
+            .get_member_offset(member)
+    }
+
+    pub fn get_struct_member_type(
+        &self,
+        struct_ident: &InternedStr,
+        member: &InternedStr,
+    ) -> &MlirType {
+        self.structs
+            .get(struct_ident)
+            .unwrap()
+            .get_member_type(member)
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct MlirStruct {
     pub ident: Locatable<InternedStr>,
-    pub fields: Vec<Locatable<MlirVariable>>,
+    pub members: Vec<Locatable<MlirVariable>>,
     pub size: u64,
+}
+
+impl MlirStruct {
+    fn get_member_offset(&self, member: &str) -> u32 {
+        self.members
+            .iter()
+            .enumerate()
+            .find(|(_, var)| var.ident.as_ref() == member)
+            .map(|(idx, _)| idx as u32)
+            .expect(&format!(
+                "Struct member '{member}' does not exist in struct '{}'",
+                &self.ident.value
+            ))
+    }
+
+    fn get_member_type(&self, member: &str) -> &MlirType {
+        self.members
+            .iter()
+            .find(|var| var.ident.as_ref() == member)
+            .map(|var| &var.ty)
+            .expect(&format!(
+                "Struct member '{member}' does not exist in struct '{}'",
+                &self.ident.value
+            ))
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -48,6 +113,7 @@ pub struct MlirFunction {
 
 #[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirVariable {
+    pub uid: usize,
     pub span: Span,
     pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,
@@ -74,6 +140,33 @@ impl Display for MlirType {
 }
 
 impl MlirType {
+    pub fn get_struct_ident(&self) -> &InternedStr {
+        debug_assert!(self.is_basic());
+        match &self.kind {
+            MlirTypeKind::Struct(ident) => ident,
+            unexpected => panic!(
+                "Cannot unwrap '{:?}' as an MlirTypeKind::Struct(ident).",
+                unexpected
+            ),
+        }
+    }
+
+    pub fn is_unsigned_int(&self) -> bool {
+        debug_assert!(self.is_basic());
+        matches!(
+            &self.kind,
+            MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true)
+        )
+    }
+
+    pub fn as_basic(&self) -> Self {
+        debug_assert!(!self.is_basic());
+        Self {
+            decl: MlirTypeDecl::Basic,
+            kind: self.kind.clone(),
+        }
+    }
+
     pub fn is_array(&self) -> bool {
         matches!(self.decl, MlirTypeDecl::Array(_)) && !matches!(&self.decl, MlirTypeDecl::Pointer)
     }
@@ -92,6 +185,7 @@ impl MlirType {
         use MlirTypeKind::*;
         matches!(&self.kind, Char(_) | Int(_) | Long(_)) && !self.is_pointer()
     }
+
     pub fn try_implicit_cast(&self, to: &MlirType) -> Option<MlirType> {
         if self == to {
             return None;
@@ -169,29 +263,14 @@ impl MlirTypeKind {
         use MlirTypeKind::*;
         matches!(&self, Char(_) | Int(_) | Long(_) | Float | Double)
     }
-}
 
-impl Display for MlirTypeKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        macro_rules! write_signed {
-            ($name:literal, $unsigned:expr) => {
-                write!(
-                    f,
-                    "{} {}",
-                    if $unsigned { "unsigned" } else { "signed" },
-                    $name
-                )
-            };
-        }
-        use MlirTypeKind::*;
+    pub fn get_struct_ident(&self) -> &InternedStr {
         match self {
-            Void => write!(f, "void"),
-            Char(unsigned) => write_signed!("char", *unsigned),
-            Int(unsigned) => write_signed!("int", *unsigned),
-            Long(unsigned) => write_signed!("long", *unsigned),
-            Float => write!(f, "float"),
-            Double => write!(f, "double"),
-            Struct(ident) => write!(f, "struct {}", ident),
+            MlirTypeKind::Struct(ident) => ident,
+            _ => panic!(
+                "'{:?} cannot be unwrapped as MlirTypeKind::Struct(ident).'",
+                self
+            ),
         }
     }
 }
@@ -269,7 +348,7 @@ impl MlirExpr {
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
     Literal(MlirLiteral),
-    Variable(InternedStr),
+    Variable(usize),
 
     // unary
     PostIncrement(MlirExpr),
@@ -365,7 +444,9 @@ impl MlirExprKind {
 
 #[derive(Debug, PartialEq, Hash, PartialOrd)]
 pub struct MlirBlock(pub Vec<MlirStmt>);
+
 impl std::cmp::Eq for MlirBlock {}
+
 impl Deref for MlirBlock {
     type Target = Vec<MlirStmt>;
     fn deref(&self) -> &Self::Target {
@@ -380,8 +461,7 @@ pub enum MlirStmt {
     VariableDeclaration(MlirVariable),
     Label(InternedStr),
     Goto(InternedStr),
-    GotoTrue(MlirExpr, InternedStr),
-    GotoFalse(MlirExpr, InternedStr),
+    CondGoto(MlirExpr, InternedStr, InternedStr),
     Return(Option<MlirExpr>),
 }
 
@@ -393,8 +473,7 @@ impl MlirStmt {
             MlirStmt::VariableDeclaration(_) => "declaration",
             MlirStmt::Label(_) => "label",
             MlirStmt::Goto(_) => "goto",
-            MlirStmt::GotoTrue(_, _) => "goto true",
-            MlirStmt::GotoFalse(_, _) => "goto false",
+            MlirStmt::CondGoto(_, _, _) => "goto false",
             MlirStmt::Return(_) => "return",
         }
         .to_string()

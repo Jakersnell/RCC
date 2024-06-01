@@ -1,12 +1,17 @@
 use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
-use crate::data::mlir::{MlirBlock, MlirStmt, MlirType};
-use crate::data::mlir::MlirTypeDecl::Basic;
-use crate::data::mlir::MlirTypeKind::Void;
-use crate::util::{Locatable, Span, str_intern};
+use crate::data::mlir::{MlirBlock, MlirExpr, MlirStmt, SIGNED_INT_TYPE, VOID_TYPE};
 use crate::util::error::CompilerError;
+use crate::util::{str_intern, Locatable, Span};
 
 impl Analyzer {
+    #[inline(always)]
+    fn validate_conditional(&mut self, expression: &Expression) -> Result<MlirExpr, ()> {
+        let cond = self.validate_expression(expression)?;
+        let cond_span = cond.span;
+        Ok(self.implicit_cast(cond, SIGNED_INT_TYPE, cond_span))
+    }
+
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
         self.push_scope();
         let mut statements = Vec::new();
@@ -72,8 +77,8 @@ impl Analyzer {
         var_dec: &Locatable<VariableDeclaration>,
     ) -> Result<Option<MlirStmt>, ()> {
         let span = var_dec.location;
-        let var_dec = self.validate_variable_declaration(var_dec)?;
-        self.add_variable_to_scope(&var_dec, span)?;
+        let mut var_dec = self.validate_variable_declaration(var_dec)?;
+        self.add_variable_to_scope(&mut var_dec, span)?;
         Ok(Some(MlirStmt::VariableDeclaration(var_dec)))
     }
 
@@ -83,19 +88,18 @@ impl Analyzer {
         then: &Locatable<Statement>,
         otherwise: &Option<Box<Locatable<Statement>>>,
     ) -> Result<Option<MlirStmt>, ()> {
-        let start_label = str_intern::intern(format!("if_label_{}", super::create_label()));
+        let start_label = str_intern::intern(format!("if_{}", super::create_label()));
+        let then_label = str_intern::intern(format!("{}_then", start_label));
         let else_label = str_intern::intern(format!("{}_else", start_label));
         let end_label = str_intern::intern(format!("{}_end", start_label));
         let mut block = Vec::new();
 
-        let jump_to = if otherwise.is_some() {
-            else_label.clone()
-        } else {
-            end_label.clone()
-        };
-        let condition = self.validate_expression(condition)?;
-        let conditional_goto = MlirStmt::GotoFalse(condition, jump_to);
+        let condition = self.validate_conditional(condition)?;
+        let conditional_goto =
+            MlirStmt::CondGoto(condition, then_label.clone(), else_label.clone());
         block.push(conditional_goto);
+
+        block.push(MlirStmt::Label(then_label));
 
         if let Some(then) = self.validate_statement(then)? {
             block.push(then);
@@ -103,16 +107,15 @@ impl Analyzer {
             block.push(goto_end);
         }
 
+        block.push(MlirStmt::Label(else_label));
+
         if let Some(otherwise) = otherwise {
-            let else_label = MlirStmt::Label(else_label);
-            block.push(else_label);
             if let Some(otherwise) = self.validate_statement(otherwise)? {
                 block.push(otherwise);
             }
         }
 
-        let end_label = MlirStmt::Label(end_label);
-        block.push(end_label);
+        block.push(MlirStmt::Label(end_label));
 
         Ok(Some(MlirStmt::Block(MlirBlock(block))))
     }
@@ -125,16 +128,24 @@ impl Analyzer {
         self.push_scope();
 
         let mut block = Vec::new();
-        let label_string = str_intern::intern(format!("label_{}", super::create_label()));
+        let label_string = str_intern::intern(format!("loop_{}", super::create_label()));
+        let label_string_then = str_intern::intern(format!("{}_body", label_string));
         let label_string_end = str_intern::intern(format!("{}_end", label_string));
 
         self.loop_label_stack.push_front(label_string.clone());
         let label = MlirStmt::Label(label_string.clone());
         block.push(label);
 
-        let condition = self.validate_expression(condition)?;
-        let goto_end = MlirStmt::GotoFalse(condition, label_string_end.clone());
-        block.push(goto_end);
+        let condition = self.validate_conditional(condition)?;
+        let branch = MlirStmt::CondGoto(
+            condition,
+            label_string_then.clone(),
+            label_string_end.clone(),
+        );
+        block.push(branch);
+
+        let body_label = MlirStmt::Label(label_string_then);
+        block.push(body_label);
 
         if let Some(body) = self.validate_statement(body)? {
             block.push(body);
@@ -157,17 +168,21 @@ impl Analyzer {
         value: &Option<Locatable<Expression>>,
         span: Span,
     ) -> Result<Option<MlirStmt>, ()> {
+        let function_ty = self.return_ty.as_ref().unwrap_or(&VOID_TYPE).clone();
         let value = if let Some(value) = value {
-            Some(self.validate_expression(value)?)
+            let value_mlir = self.validate_expression(value)?;
+            let casted_value_mlir = self
+                .implicit_cast(value_mlir, function_ty.clone(), span)
+                .fold();
+            Some(casted_value_mlir)
         } else {
             None
         };
-        static NONE_TYPE: MlirType = MlirType {
-            kind: Void,
-            decl: Basic,
-        };
-        let function_ty = self.return_ty.as_ref().unwrap_or(&NONE_TYPE);
-        let value_ty = value.as_ref().map(|expr| &expr.ty).unwrap_or(&NONE_TYPE);
+        let value_ty = value
+            .as_ref()
+            .map(|expr| &expr.ty)
+            .unwrap_or(&VOID_TYPE)
+            .clone();
         if function_ty != value_ty {
             self.report_error(CompilerError::InvalidReturnType(
                 function_ty.to_string(),
@@ -178,9 +193,6 @@ impl Analyzer {
         Ok(Some(MlirStmt::Return(value)))
     }
 
-    /*
-    Breaks a for loop into a block containing a potential initializer and a while loop
-     */
     fn validate_for_loop(
         &mut self,
         initializer: &Option<Locatable<VariableDeclaration>>,
@@ -190,25 +202,28 @@ impl Analyzer {
     ) -> Result<Option<MlirStmt>, ()> {
         self.push_scope();
         let loop_start_label = str_intern::intern(format!("loop_{}", super::create_label()));
-        let loop_end = str_intern::intern(format!("{}_end", loop_start_label));
+        let loop_body_label = str_intern::intern(format!("{}_body", loop_start_label));
+        let loop_end_label = str_intern::intern(format!("{}_end", loop_start_label));
         let mut block = Vec::new();
 
         if let Some(initializer) = initializer {
-            let var_dec = self.validate_variable_declaration(initializer)?;
-            self.add_variable_to_scope(&var_dec, initializer.location);
+            let mut var_dec = self.validate_variable_declaration(initializer)?;
+            self.add_variable_to_scope(&mut var_dec, initializer.location);
             let var_stmt = MlirStmt::VariableDeclaration(var_dec);
             block.push(var_stmt);
         }
 
         self.loop_label_stack.push_front(loop_start_label.clone());
-        let start_label = MlirStmt::Label(loop_start_label.clone());
-        block.push(start_label);
+        block.push(MlirStmt::Label(loop_start_label.clone()));
 
         if let Some(condition) = condition {
-            let condition = self.validate_expression(condition)?;
-            let condition = MlirStmt::GotoFalse(condition, loop_end.clone());
+            let condition = self.validate_conditional(condition)?;
+            let condition =
+                MlirStmt::CondGoto(condition, loop_body_label.clone(), loop_end_label.clone());
             block.push(condition);
         }
+
+        block.push(MlirStmt::Label(loop_body_label));
 
         if let Some(body) = self.validate_statement(body)? {
             block.push(body);
@@ -223,7 +238,7 @@ impl Analyzer {
         let goto_start = MlirStmt::Goto(loop_start_label);
         block.push(goto_start);
 
-        let end_label = MlirStmt::Label(loop_end);
+        let end_label = MlirStmt::Label(loop_end_label);
         block.push(end_label);
 
         self.pop_scope();

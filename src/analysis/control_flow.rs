@@ -1,10 +1,3 @@
-use crate::data::mlir::{
-    MidLevelIR, MlirBlock, MlirExpr, MlirFunction, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
-    VOID_TYPE,
-};
-use crate::util::str_intern::InternedStr;
-use crate::OUTPUT_GRAPH;
-use derive_new::new;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{write, Debug, Display, Formatter};
@@ -13,6 +6,15 @@ use std::hash::Hasher;
 use std::io::{BufWriter, Write};
 use std::ops::{DerefMut, Index};
 use std::rc::Rc;
+
+use derive_new::new;
+
+use crate::data::mlir::{
+    MlirBlock, MlirExpr, MlirFunction, MlirModule, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
+    VOID_TYPE,
+};
+use crate::util::str_intern::InternedStr;
+use crate::OUTPUT_GRAPH;
 
 /*
 Some resources on control flow analysis:
@@ -90,6 +92,7 @@ impl<'a> BasicBlock<'a> {
 }
 
 impl<'a> Eq for BasicBlock<'a> {}
+
 impl<'a> Display for BasicBlock<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", self.id);
@@ -175,10 +178,7 @@ impl<'a> BasicBlockFactory<'a> {
     pub fn build(mut self) -> Vec<Rc<RefCell<BasicBlock<'a>>>> {
         for stmt in self.mlir.0.iter() {
             match &stmt {
-                MlirStmt::Return(_)
-                | MlirStmt::Goto(_)
-                | MlirStmt::GotoFalse(_, _)
-                | MlirStmt::GotoTrue(_, _) => {
+                MlirStmt::Return(_) | MlirStmt::Goto(_) | MlirStmt::CondGoto(_, _, _) => {
                     self.statements.push(stmt);
                     self.transition_block();
                 }
@@ -267,23 +267,22 @@ impl<'a> GraphFactory<'a> {
                             .expect("Corresponding label not found.");
                         self.connect(current.clone(), to_block.clone(), None);
                     }
-                    MlirStmt::GotoFalse(condition, label)
-                    | MlirStmt::GotoTrue(condition, label) => {
-                        let jump_if_true = !matches!(stmt, MlirStmt::GotoTrue(_, _));
-                        let to_block = self
+                    MlirStmt::CondGoto(condition, then, _else) => {
+                        let then_block = self
                             .block_from_label
-                            .get(label)
-                            .expect("Corresponding label not found.");
-                        let else_block = &next;
-                        self.connect(
-                            current.clone(),
-                            to_block.clone(),
-                            Some((condition, jump_if_true)),
-                        );
+                            .get(then)
+                            .expect("Corresponding label not found.")
+                            .clone();
+                        let else_block = self
+                            .block_from_label
+                            .get(_else)
+                            .expect("Corresponding label not found.")
+                            .clone();
+                        self.connect(current.clone(), then_block.clone(), Some((condition, true)));
                         self.connect(
                             current.clone(),
                             else_block.clone(),
-                            Some((condition, !jump_if_true)),
+                            Some((condition, false)),
                         );
                     }
                     MlirStmt::Return(_) => {
@@ -360,25 +359,21 @@ impl<'a> GraphFactory<'a> {
 
 #[derive(Debug)]
 pub struct ControlFlowGraph<'a> {
-    start: Rc<RefCell<BasicBlock<'a>>>,
-    end: Rc<RefCell<BasicBlock<'a>>>,
-    blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
-    edges: Vec<Rc<BasicBlockEdge<'a>>>,
+    pub start: Rc<RefCell<BasicBlock<'a>>>,
+    pub end: Rc<RefCell<BasicBlock<'a>>>,
+    pub blocks: Vec<Rc<RefCell<BasicBlock<'a>>>>,
+    pub edges: Vec<Rc<BasicBlockEdge<'a>>>,
 }
-static mut GRAPH_COUNT: usize = 0;
+
 impl<'a> ControlFlowGraph<'a> {
-    pub fn new(mlir: &'a MlirBlock) -> Self {
+    pub fn new(mlir: &'a MlirBlock, name: &str) -> Self {
         let block_factory = BasicBlockFactory::new(mlir);
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
         let graph = graph_factory.build(blocks);
         if !cfg!(test) && OUTPUT_GRAPH {
             let cfg_to_string = graph.to_string();
-            let mut file = File::create(format!("graph_{}.dot", unsafe {
-                GRAPH_COUNT += 1;
-                GRAPH_COUNT
-            }))
-            .unwrap();
+            let mut file = File::create(format!("graph_{name}.dot")).unwrap();
             let mut writer = BufWriter::new(file);
             writer.write_all(cfg_to_string.as_bytes());
         }

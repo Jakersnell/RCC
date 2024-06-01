@@ -1,7 +1,8 @@
+use thiserror::Error;
+
 use crate::data::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
 use crate::util::str_intern::InternedStr;
 use crate::util::Span;
-use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Reporter {
@@ -281,6 +282,9 @@ pub enum CompilerError {
 
     #[error("Cannot cast '{0}' to '{1}': {2}")]
     CannotExplicitCast(String, String, Span),
+
+    #[error("Cannot take address of non lval type: {0}")]
+    CannotAddressNonLVal(Span),
 }
 
 #[derive(Error, Debug)]

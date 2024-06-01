@@ -1,10 +1,14 @@
 #![allow(unused)]
 
+use inkwell::context::Context;
+
 use crate::analysis::Analyzer;
+use crate::codegen::Compiler;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
 mod analysis;
+mod codegen;
 mod data;
 mod lexer;
 mod parser;
@@ -19,16 +23,20 @@ static DISPLAY_AST: bool = false;
 static OUTPUT_GRAPH: bool = false;
 static DISPLAY_MLIR: bool = false;
 static PRETTY_PRINT_AST: bool = false;
+
 fn main() {
-    let source =
-        std::fs::read_to_string("_c_test_files/should_fail/control_flow_analysis.c").unwrap();
+    let source = std::fs::read_to_string("_c_test_files/should_succeed/basic_blocks.c").unwrap();
     let lexer = Lexer::new(source.into());
     let parser = Parser::new(lexer);
     let analyzer = Analyzer::new(parser.parse_all().unwrap());
-    let result = analyzer.validate();
+    let mlir = analyzer.validate().unwrap();
+    let context = Context::create();
+    let module = context.create_module("main");
+    let compiler = Compiler::new(&mlir, &context, &module);
+    compiler.compile("main.ll").unwrap()
 }
 
-/// Contains integration tests for the components and their cohesion
+/// Integration tests
 #[cfg(test)]
 mod tests {
     use std::panic::catch_unwind;

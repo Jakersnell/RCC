@@ -1,102 +1,32 @@
-use crate::data::mlir::{
-    MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
-    MlirVariable,
-};
-use crate::util::error::CompilerError;
-use crate::util::str_intern::InternedStr;
-use crate::util::{str_intern, Locatable, Span};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-pub type SymbolResult = Result<(), CompilerError>;
-#[derive(Debug, Clone)]
-pub struct BuiltinFunctionSymbol {
-    ty: &'static str,
-    location: &'static str,
-    ident: &'static str,
-    params: Vec<MlirType>,
-    varargs: bool,
-    return_ty: MlirType,
-}
-thread_local! {
-    static BUILTINS: [(&'static str, FunctionSymbol); 3] = [
-        (
-            "printf",
-            FunctionSymbol {
-                location: Some("stdio.h"),
-                params: vec![MlirType {
-                    kind: MlirTypeKind::Char(true),
-                    decl: MlirTypeDecl::Pointer,
-                }],
-                varargs: true,
-                return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
-                },
-            }
-        ),
-        (
-            "malloc",
-            FunctionSymbol {
-                location: Some("stdlib.h"),
-                  params: vec![MlirType {
-                    kind: MlirTypeKind::Int(true),
-                    decl: MlirTypeDecl::Basic,
-                }],
-                varargs: false,
-                return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
-                },
-            }
-        ),
-        (
-            "free",
-            FunctionSymbol {
-                location: Some("stdlib.h"),
-                params: vec![MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Pointer,
-                }],
-                varargs: false,
-                return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
-                },
-            }
-        ),
-    ];
+use crate::data::mlir::{
+    MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
+    MlirVariable,
+};
+use crate::data::symbols::*;
+use crate::util::error::CompilerError;
+use crate::util::str_intern::{get, InternedStr};
+use crate::util::{str_intern, Locatable, Span};
+
+static mut VARIABLE_COUNT: usize = 0;
+
+pub fn update_global_variable_count() -> usize {
+    unsafe {
+        VARIABLE_COUNT += 1;
+        VARIABLE_COUNT
+    }
 }
 
+pub type SymbolResult = Result<(), CompilerError>;
+
 #[derive(Debug, Clone)]
-pub(super) enum SymbolKind {
+pub(crate) enum SymbolKind {
     Function(FunctionSymbol),
     Struct(StructSymbol),
     Variable(VariableSymbol),
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct StructSymbol {
-    pub(super) size: u64,
-    pub(super) as_type: MlirType,
-    pub(super) body: HashMap<InternedStr, VariableSymbol>,
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct FunctionSymbol {
-    pub(super) location: Option<&'static str>,
-    pub(super) return_ty: MlirType,
-    pub(super) varargs: bool,
-    pub(super) params: Vec<MlirType>,
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct VariableSymbol {
-    pub(super) ty: MlirType,
-    pub(super) is_const: bool,
-    pub(super) is_initialized: bool,
-    pub(super) array_size: Option<u64>,
 }
 
 #[derive(Default, Debug)]
@@ -123,14 +53,12 @@ impl SymbolResolver {
 
     fn init_builtins(&mut self) {
         debug_assert!(self.parent.is_none());
-        BUILTINS.with(|builtins| {
-            for builtin in builtins.iter() {
-                self.symbols.insert(
-                    str_intern::intern(builtin.0),
-                    SymbolKind::Function(builtin.1.clone()), // ignore access check on builtins
-                );
-            }
-        });
+        for builtin in BUILTINS.iter() {
+            self.symbols.insert(
+                str_intern::intern(builtin.0),
+                SymbolKind::Function(builtin.1.clone()), // ignore access check on builtins
+            );
+        }
     }
     pub fn new(parent: Option<Box<RefCell<SymbolResolver>>>) -> Self {
         Self {
@@ -149,6 +77,7 @@ impl SymbolResolver {
         span: Span,
     ) -> SymbolResult {
         let symbol = SymbolKind::Function(FunctionSymbol {
+            ident: ident.clone(),
             location: None,
             return_ty,
             varargs: false,
@@ -157,23 +86,26 @@ impl SymbolResolver {
         self.add_symbol(ident, symbol, span)
     }
 
-    #[inline]
     pub fn add_variable(
         &mut self,
-        ident: &InternedStr,
-        ty: &MlirType,
-        is_const: bool,
-        is_initialized: bool,
-        array_size: Option<u64>,
+        var: &mut MlirVariable,
         span: Span,
-    ) -> SymbolResult {
+    ) -> Result<usize, CompilerError> {
+        let uid = update_global_variable_count();
+        var.uid = uid;
+        let array_size = match &var.ty.decl {
+            MlirTypeDecl::Array(size) => Some(*size),
+            _ => None,
+        };
         let symbol = SymbolKind::Variable(VariableSymbol {
-            ty: ty.clone(),
-            is_const,
-            is_initialized,
+            uid,
+            ty: var.ty.clone(),
+            is_const: var.is_const,
+            is_initialized: var.initializer.is_some(),
             array_size,
         });
-        self.add_symbol(ident, symbol, span)
+        self.add_symbol(&var.ident, symbol, span)?;
+        Ok(uid)
     }
 
     #[inline]
@@ -230,13 +162,13 @@ impl SymbolResolver {
         }
     }
 
-    pub fn get_variable_type(
+    pub fn get_variable_type_and_id(
         &mut self,
         ident: &InternedStr,
         span: Span,
-    ) -> Result<MlirType, CompilerError> {
+    ) -> Result<(MlirType, usize), CompilerError> {
         match self.retrieve(ident, span)? {
-            SymbolKind::Variable(var) => Ok(var.ty.clone()),
+            SymbolKind::Variable(var) => Ok((var.ty.clone(), var.uid)),
             _ => Err(CompilerError::NotAVariable(span)),
         }
     }
@@ -268,13 +200,15 @@ impl SymbolResolver {
             assert_eq!(ident, *ty_ident);
         }
         let mut body = HashMap::default();
-        for field in &_struct.fields {
+        for field in &_struct.members {
             let array_size = if let MlirTypeDecl::Array(size) = &field.ty.decl {
                 Some(*size)
             } else {
                 None
             };
+            let uid = update_global_variable_count();
             let var = VariableSymbol {
+                uid,
                 ty: field.ty.clone(),
                 is_const: field.is_const,
                 is_initialized: field.initializer.is_some(),
@@ -373,3 +307,6 @@ fn test_parent_scope_is_accessed_in_retrieve() {
     let result = resolver.retrieve(&ident, Span::default());
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_variable_call_uid_is_same_as_variable_uid() {}

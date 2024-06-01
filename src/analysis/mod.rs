@@ -1,5 +1,6 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::iter::Map;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
@@ -16,7 +17,6 @@ mod constant_folding;
 mod control_flow;
 mod declarations;
 mod expressions;
-mod folding;
 mod statements;
 mod symbols;
 
@@ -25,6 +25,7 @@ static mut LABEL_COUNT: usize = 0;
 pub(in crate::analysis) fn peek_current_label() -> usize {
     unsafe { LABEL_COUNT }
 }
+
 pub(in crate::analysis) fn peek_next_label() -> usize {
     peek_current_label() + 1
 }
@@ -65,10 +66,10 @@ impl Analyzer {
         }
     }
 
-    pub fn validate(mut self) -> Result<MidLevelIR, SharedReporter> {
-        let mut globals = HashMap::new();
-        let mut functions = HashMap::new();
-        let mut structs = HashMap::new();
+    pub fn validate(mut self) -> Result<MlirModule, SharedReporter> {
+        let mut globals = BTreeMap::new();
+        let mut functions = BTreeMap::new();
+        let mut structs = BTreeMap::new();
         let ast = self.ast.take().expect("Ast must be Some(T)");
         macro_rules! push_locatable {
             ($map:expr, $func:expr, $locatable:ident) => {
@@ -88,8 +89,8 @@ impl Analyzer {
                     push_locatable!(
                         globals,
                         |item| {
-                            let var = self.validate_variable_declaration(item);
-                            if let Ok(var) = var.as_ref() {
+                            let mut var = self.validate_variable_declaration(item);
+                            if let Ok(var) = var.as_mut() {
                                 self.add_variable_to_scope(var, item.location);
                             }
                             var
@@ -113,7 +114,9 @@ impl Analyzer {
                 }
             }
         }
+
         let idents = self.scope.borrow().get_unused_idents();
+
         for ident in idents {
             if let Some(variable) = globals.get(&ident.0) {
                 self.report_warning(CompilerWarning::UnusedVariable(variable.location));
@@ -128,21 +131,29 @@ impl Analyzer {
                 );
             }
         }
-        fn deref_map<K: Eq + std::hash::Hash, T>(map: HashMap<K, Locatable<T>>) -> HashMap<K, T> {
-            map.into_iter()
-                .map(|(ident, item)| (ident, item.value))
-                .collect()
+
+        fn deref_map<K: Eq + std::hash::Hash + std::cmp::Ord, T>(
+            map: BTreeMap<K, Locatable<T>>,
+        ) -> BTreeMap<K, T> {
+            let mut dest = BTreeMap::new();
+            for (key, value) in map.into_iter() {
+                dest.insert(key, value.value);
+            }
+            dest
         }
+
         let functions = deref_map(functions);
         let structs = deref_map(structs);
         let globals = deref_map(globals);
+
         if self.reporter.borrow().status().is_ok() && !functions.contains_key("main") {
             self.report_error(CompilerError::MissingMain);
         }
+
         if self.reporter.borrow().status().is_err() {
             Err(self.reporter)
         } else {
-            Ok(MidLevelIR {
+            Ok(MlirModule {
                 functions,
                 structs,
                 globals,
@@ -159,19 +170,12 @@ impl Analyzer {
         self.reporter.0.borrow_mut().report_warning(warning);
     }
 
-    fn add_variable_to_scope(&mut self, var: &MlirVariable, span: Span) -> Result<(), ()> {
+    fn add_variable_to_scope(&mut self, var: &mut MlirVariable, span: Span) -> Result<(), ()> {
         let array_size = match &var.ty.decl {
             MlirTypeDecl::Array(size) => Some(*size),
             _ => None,
         };
-        let result = self.scope.borrow_mut().add_variable(
-            &var.ident,
-            &var.ty,
-            var.is_const,
-            var.initializer.is_some(),
-            array_size,
-            span,
-        );
+        let result = self.scope.borrow_mut().add_variable(var, span);
         if let Err(err) = result {
             self.report_error(err);
         }
@@ -207,7 +211,7 @@ impl Analyzer {
                 assert!(self
                     .scope
                     .borrow_mut()
-                    .get_variable_type(&item, span)
+                    .get_variable_type_and_id(&item, span)
                     .is_ok());
             }
             self.report_warning(CompilerWarning::UnusedVariable(span));
@@ -420,5 +424,20 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
         };
         let result = validator.validate_type(&dec_spec, Span::default(), false, false);
         assert_eq!(result, Ok(expected));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{analysis, lexer, parser};
+    use crate::analysis::SharedReporter;
+    use crate::data::mlir::MlirModule;
+
+    pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MlirModule, SharedReporter> {
+        let source = std::fs::read_to_string(path).expect("Could not read file.");
+        let lexer = lexer::Lexer::new(source.into());
+        let parser = parser::Parser::new(lexer);
+        let result = parser.parse_all().expect("Error in Parser.");
+        analysis::Analyzer::new(result).validate()
     }
 }
