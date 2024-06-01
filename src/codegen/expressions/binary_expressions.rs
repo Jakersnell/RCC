@@ -141,16 +141,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_addition(
-        &mut self,
-        left: &MlirExpr,
-        right: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
+    pub fn compile_addition(&mut self, left: &MlirExpr, right: &MlirExpr) -> BasicValueEnum<'ctx> {
         self.compile_addition_or_subtraction(left, right, true)
     }
 
     #[inline(always)]
-    pub(super) fn compile_subtraction(
+    pub fn compile_subtraction(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -158,7 +154,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.compile_addition_or_subtraction(left, right, false)
     }
 
-    pub(super) fn compile_multiplication(
+    pub fn compile_multiplication(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -170,7 +166,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         )
     }
 
-    pub(super) fn compile_division(
+    pub fn compile_division(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -185,7 +181,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         )
     }
 
-    pub(super) fn compile_modulus(
+    pub fn compile_modulus(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -238,20 +234,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_equal(
-        &mut self,
-        left: &MlirExpr,
-        right: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
+    pub fn compile_equal(&mut self, left: &MlirExpr, right: &MlirExpr) -> BasicValueEnum<'ctx> {
         self.build_comparison(left, right, IntPredicate::EQ, FloatPredicate::OEQ, "equal")
     }
 
     #[inline(always)]
-    pub(super) fn compile_not_equal(
-        &mut self,
-        left: &MlirExpr,
-        right: &MlirExpr,
-    ) -> BasicValueEnum<'ctx> {
+    pub fn compile_not_equal(&mut self, left: &MlirExpr, right: &MlirExpr) -> BasicValueEnum<'ctx> {
         self.build_comparison(
             left,
             right,
@@ -262,7 +250,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_greater_than(
+    pub fn compile_greater_than(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -282,7 +270,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_greater_than_equal(
+    pub fn compile_greater_than_equal(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -302,7 +290,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_less_than(
+    pub fn compile_less_than(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -322,7 +310,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_less_than_equal(
+    pub fn compile_less_than_equal(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -393,7 +381,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_logical_and(
+    pub fn compile_logical_and(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -404,7 +392,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_logical_or(
+    pub fn compile_logical_or(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -434,7 +422,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_bitwise_and(
+    pub fn compile_bitwise_and(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -445,7 +433,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_bitwise_or(
+    pub fn compile_bitwise_or(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -456,7 +444,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_bitwise_xor(
+    pub fn compile_bitwise_xor(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -467,7 +455,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_left_shift(
+    pub fn compile_left_shift(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -478,7 +466,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(super) fn compile_right_shift(
+    pub fn compile_right_shift(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
