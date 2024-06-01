@@ -48,6 +48,21 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
 }
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
+    pub fn new(mlir: &'mlir MlirModule, context: &'ctx Context, module: &'a Module<'ctx>) -> Self {
+        let mut compiler = Self {
+            mlir,
+            context,
+            module,
+            functions: Default::default(),
+            variables: Default::default(),
+            struct_types: Default::default(),
+            fn_value_opt: None,
+            builder: None,
+        };
+        compiler.builder = Some(compiler.context.create_builder());
+        compiler
+    }
+
     #[inline(always)]
     pub(in crate::codegen) fn insert_pointer(&mut self, uid: usize, ptr: PointerValue<'ctx>) {
         self.variables.insert(uid, ptr);
@@ -160,7 +175,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             self.insert_pointer(mlir_param.uid, allocation)
         }
 
-        todo!("build body and compile statements");
+        self.process_function_body(&function.body);
+
+        if cfg!(debug_assertions) {
+            debug_assert!(self.fn_value().verify(false))
+        }
+
+        self.fn_value_opt = None;
     }
 
     fn process_function_body(&mut self, mlir_block: &MlirBlock) {
