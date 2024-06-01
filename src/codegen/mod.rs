@@ -25,9 +25,9 @@ use crate::data::symbols::BUILTINS;
 use crate::util::str_intern;
 use crate::util::str_intern::InternedStr;
 
-mod declarations;
-mod expressions;
-mod statements;
+pub(in crate::codegen) mod declarations;
+pub(in crate::codegen) mod expressions;
+pub(in crate::codegen) mod statements;
 
 // pub fn compile(mlir: &MidLevelIR, name: &str) {
 //     let context = Context::create();
@@ -194,18 +194,35 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
-    pub(in crate::codegen) fn create_entry_block_allocation(
-        &self,
-        ty: BasicTypeEnum<'ctx>,
-        name: &str,
-    ) -> PointerValue<'ctx> {
+    fn create_entry_builder(&self) -> Builder<'ctx> {
         let builder = self.context.create_builder();
         let entry = self.fn_value().get_first_basic_block().unwrap();
         match entry.get_first_instruction() {
             Some(first_instr) => builder.position_before(&first_instr),
             None => builder.position_at_end(entry),
         }
+        builder
+    }
+
+    pub(in crate::codegen) fn create_entry_block_allocation(
+        &self,
+        ty: BasicTypeEnum<'ctx>,
+        name: &str,
+    ) -> PointerValue<'ctx> {
+        let builder = self.create_entry_builder();
         builder.build_alloca(ty, name).unwrap()
+    }
+
+    pub(in crate::codegen) fn create_entry_block_array_allocation(
+        &mut self,
+        element_ty: BasicTypeEnum<'ctx>,
+        size: u64,
+    ) -> PointerValue<'ctx> {
+        let builder = self.create_entry_builder();
+        let size = self.context.i32_type().const_int(size, false);
+        builder
+            .build_array_alloca(element_ty, size, "alloc_array")
+            .unwrap()
     }
 
     pub(in crate::codegen) fn convert_type(&self, ty: &MlirType) -> BasicTypeEnum<'ctx> {
