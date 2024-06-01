@@ -54,15 +54,18 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.compile_expression(expression);
     }
 
+    #[inline(always)]
     fn compile_variable_declaration_statement(&mut self, var: &MlirVariable) {
-        todo!()
+        self.compile_variable_declaration(var);
     }
 
+    #[inline(always)]
     fn compile_goto(&self, label: &InternedStr) {
         let goto_block = self.get_block_by_name(label).unwrap();
         self.builder().build_unconditional_branch(goto_block);
     }
 
+    #[inline(always)]
     fn compile_cond_goto(&mut self, condition: &MlirExpr, then: &InternedStr, _else: &InternedStr) {
         let condition = match self.compile_expression(condition) {
             BasicValueEnum::IntValue(int_value) => int_value,
@@ -77,6 +80,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .build_conditional_branch(condition, then_block, else_block);
     }
 
+    #[inline(always)]
     fn compile_return_statement(&mut self, expression_opt: &Option<MlirExpr>) {
         let expression = expression_opt
             .as_ref()
