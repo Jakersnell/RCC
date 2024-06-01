@@ -6,7 +6,7 @@ use crate::data::mlir::{MlirExpr, MlirExprKind, MlirType};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub(super) fn compile_deref(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub fn compile_deref(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         let ptr = self.compile_expression(expr).into_pointer_value();
         let ptr_type = self.convert_type(&expr.ty.as_basic());
         self.builder()
@@ -14,25 +14,27 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    pub(super) fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         let ptr = match &*expr.kind {
             MlirExprKind::Variable(ident) => self.get_pointer(ident),
             MlirExprKind::Deref(pointer) => self.compile_expression(pointer).into_pointer_value(),
             MlirExprKind::Assign(left, right) => self
                 .compile_assignment(left, right, true)
                 .into_pointer_value(),
-            MlirExprKind::Index(array, index) => {
-                self.get_array_index_pointer(self.convert_type(&array.ty.as_basic()), array, index)
-            }
+            MlirExprKind::Index(array, index) => self.compile_array_index_pointer(
+                self.convert_type(&array.ty.as_basic()),
+                array,
+                index,
+            ),
             MlirExprKind::Member(_struct, member) => {
-                self.get_struct_member_pointer(self.convert_type(&expr.ty), _struct, member)
+                self.compile_struct_member_pointer(self.convert_type(&expr.ty), _struct, member)
             }
             _ => panic!(),
         };
         BasicValueEnum::from(ptr)
     }
 
-    pub(super) fn compile_assignment(
+    pub fn compile_assignment(
         &mut self,
         left: &MlirExpr,
         right: &MlirExpr,
@@ -44,14 +46,16 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let assign_ptr = match &*left.kind {
             MlirExprKind::Variable(id) => self.get_pointer(id),
             MlirExprKind::Deref(expr) => self.compile_expression(expr).into_pointer_value(),
-            MlirExprKind::Member(_struct, member) => self.get_struct_member_pointer(
+            MlirExprKind::Member(_struct, member) => self.compile_struct_member_pointer(
                 self.convert_type(&left.ty.as_basic()),
                 _struct,
                 member,
             ),
-            MlirExprKind::Index(array, index) => {
-                self.get_array_index_pointer(self.convert_type(&left.ty.as_basic()), array, index)
-            }
+            MlirExprKind::Index(array, index) => self.compile_array_index_pointer(
+                self.convert_type(&left.ty.as_basic()),
+                array,
+                index,
+            ),
             _ => self.compile_expression(left).into_pointer_value(),
         };
 
@@ -66,7 +70,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
-    pub(super) fn get_struct_member_pointer(
+    pub fn compile_struct_member_pointer(
         &mut self,
         access_ty: BasicTypeEnum<'ctx>,
         _struct: &MlirExpr,
@@ -80,7 +84,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    pub(super) fn get_array_index_pointer(
+    pub fn compile_array_index_pointer(
         &mut self,
         access_ty: BasicTypeEnum<'ctx>,
         array: &MlirExpr,
@@ -88,6 +92,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     ) -> PointerValue<'ctx> {
         let array_ptr = self.compile_expression(array).into_pointer_value();
         let index_value = self.compile_expression(index).into_int_value();
+        self.get_array_index_pointer(access_ty, array_ptr, index_value)
+    }
+
+    pub fn get_array_index_pointer(
+        &mut self,
+        access_ty: BasicTypeEnum<'ctx>,
+        array_ptr: PointerValue<'ctx>,
+        index_value: IntValue<'ctx>,
+    ) -> PointerValue<'ctx> {
         unsafe {
             self.builder()
                 .build_gep(access_ty, array_ptr, &[index_value], "get_array_index_ptr")
@@ -95,37 +108,33 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
-    pub(super) fn compile_array_access(
+    pub fn compile_array_access(
         &mut self,
         array: &MlirExpr,
         index: &MlirExpr,
         element_type: &MlirType,
     ) -> BasicValueEnum<'ctx> {
         let element_type = self.convert_type(element_type);
-        let array_index_ptr = self.get_array_index_pointer(element_type, array, index);
+        let array_index_ptr = self.compile_array_index_pointer(element_type, array, index);
         self.builder()
             .build_load(element_type, array_index_ptr, "load_element_from_array")
             .unwrap()
     }
 
-    pub(super) fn compile_member_access(
+    pub fn compile_member_access(
         &mut self,
         _struct: &MlirExpr,
         member: &InternedStr,
         member_type: &MlirType,
     ) -> BasicValueEnum<'ctx> {
         let member_type = self.convert_type(member_type);
-        let member_ptr = self.get_struct_member_pointer(member_type, _struct, member);
+        let member_ptr = self.compile_struct_member_pointer(member_type, _struct, member);
         self.builder()
             .build_load(member_type, member_ptr, "load_member_ptr")
             .unwrap()
     }
 
-    pub(super) fn compile_variable_access(
-        &mut self,
-        ty: &MlirType,
-        id: usize,
-    ) -> BasicValueEnum<'ctx> {
+    pub fn compile_variable_access(&mut self, ty: &MlirType, id: usize) -> BasicValueEnum<'ctx> {
         let pointee_ty = self.convert_type(ty);
         let ptr = *self
             .variables
@@ -136,11 +145,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    pub(super) fn compile_post_increment(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub fn compile_post_increment(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         self.compile_post_inc_or_dec(expr, true)
     }
 
-    pub(super) fn compile_post_decrement(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub fn compile_post_decrement(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         self.compile_post_inc_or_dec(expr, false)
     }
 
