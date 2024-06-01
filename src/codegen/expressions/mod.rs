@@ -9,7 +9,7 @@ mod binary_expressions;
 mod lvals;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub(super) fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
+    pub fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         macro_rules! unsigned_int {
             () => {
                 expr.ty.is_unsigned_int()
