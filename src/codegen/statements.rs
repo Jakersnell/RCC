@@ -5,7 +5,7 @@ use crate::data::mlir::{MlirExpr, MlirStmt, MlirVariable};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub(in crate::codegen) fn compile_mlir_basic_block(&mut self, mlir_bb: &MlirBasicBlock) {
+    pub fn compile_mlir_basic_block(&mut self, mlir_bb: &MlirBasicBlock) {
         for stmt in &mlir_bb.stmts {
             let mut block_has_jumped = false;
             match stmt {
@@ -49,8 +49,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
+    #[inline(always)]
     fn compile_expression_statement(&mut self, expression: &MlirExpr) {
-        todo!()
+        self.compile_expression(expression);
     }
 
     fn compile_variable_declaration_statement(&mut self, var: &MlirVariable) {
