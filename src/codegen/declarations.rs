@@ -34,7 +34,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             }
         };
 
-        self.variables.insert(*uid, var_ptr).unwrap();
+        self.variables.insert(*uid, var_ptr);
 
         if let Some(initializer) = initializer {
             match &initializer.value {
