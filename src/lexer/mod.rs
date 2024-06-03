@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_eat_string_values_match() {
-        let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$"%^&*()_+"#];
+        let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$%^&*()_+"#];
         for test in tests {
             let mut lexer = Lexer::new(format!("\"{}\"", test).into());
             let token = lexer.eat_string().expect("Expected token");

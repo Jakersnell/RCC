@@ -170,7 +170,7 @@ impl Lexer {
         self.next_char();
         let span = self.start_span();
         let value = match self.current {
-            Some('\\') => self.eat_escape_char(),
+            Some('\\') => Some(self.eat_escape_char()),
             Some(current) => {
                 self.next_char();
                 Some(current)
@@ -197,6 +197,7 @@ impl Lexer {
         }
         self.next_char();
         let span = self.start_span();
+        let mut value = String::new();
         while let Some(current) = self.current {
             match current {
                 '"' => {
@@ -204,7 +205,8 @@ impl Lexer {
                     break;
                 }
                 '\\' => {
-                    self.eat_escape_char();
+                    let esc = self.eat_escape_char();
+                    value.push(esc);
                 }
                 '\n' | '\r' | '\0' => {
                     let span = self.end_span(span);
@@ -212,33 +214,39 @@ impl Lexer {
                     break;
                 }
                 _ => {
+                    value.push(current);
                     self.next_char();
                 }
             }
         }
         let span = self.end_span(span);
-        let value = self.source.substr(span.start..span.end - 1);
         let value = str_intern::intern(value);
         Some(Token::Literal(Literal::String { value }))
     }
 
-    pub(super) fn eat_escape_char(&mut self) -> Option<char> {
+    pub(super) fn eat_escape_char(&mut self) -> char {
         let span = self.start_span();
         debug_assert!(self.current == Some('\\'));
         self.next_char();
-        self.next_char().map(|current| match current {
-            'n' => '\n',
-            't' => '\t',
-            'r' => '\r',
-            '0' => '\0',
-            '\\' => '\\',
-            '\'' => '\'',
-            '"' => '"',
-            _ => {
+        self.current
+            .and_then(|current| match current {
+                'n' => Some('\n'),
+                't' => Some('\t'),
+                'r' => Some('\r'),
+                '0' => Some('\0'),
+                '\\' => Some('\\'),
+                '\'' => Some('\''),
+                '"' => Some('"'),
+                _ => None,
+            })
+            .map(|char| {
+                self.next_char();
+                char
+            })
+            .unwrap_or_else(|| {
                 let span = self.end_span(span);
                 self.report_error(CompilerError::InvalidEscapeSequence(span));
-                '\0'
-            }
-        })
+                '\\'
+            })
     }
 }
