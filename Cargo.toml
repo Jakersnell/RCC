@@ -12,10 +12,10 @@ edition = "2021"
 arcstr = "1.1.5"
 thiserror = "1.0.57"
 derive-new = "0.6.0"
-clap = "4.5.0"
 lazy_static = "1.4.0"
 rand = "0.8.5"
 serde = "1.0.197"
 ron = "0.8.1"
 log = "0.4.20"
 inkwell = { version = "0.4.0", features = ["llvm17-0"] }
+clap = { version = "4.5.4", features = ["derive"] }
