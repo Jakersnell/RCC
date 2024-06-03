@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::process::Command;
+
 use inkwell::context::Context;
 
 use crate::analysis::Analyzer;
@@ -41,7 +43,30 @@ fn main() {
     let context = Context::create();
     let module = context.create_module("main");
     let compiler = Compiler::new(&mlir, &context, &module);
-    compiler.compile("main.ll").unwrap()
+    compiler.compile("main.ll").unwrap();
+    macro_rules! cmd {
+        ($cmd:literal, $($args:literal),*) => {
+            Command::new($cmd).args(&[
+                $(
+                    $args,
+                )*
+            ]).output().unwrap();
+        };
+    }
+    cmd!("llc", "main.ll", "-o", "main.s");
+    cmd!("as", "main.s", "-o", "main.o");
+    cmd!(
+        "ld",
+        "-o",
+        "main",
+        "main.o",
+        "-e",
+        "_main",
+        "-arch",
+        "arm64",
+        "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
+        "-lSystem"
+    );
 }
 
 /// Integration tests
