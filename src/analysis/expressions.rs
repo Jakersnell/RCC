@@ -4,8 +4,7 @@ use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
 use crate::data::mlir::{
-    MlirBlock, MlirExpr, MlirExprKind, MlirLiteral, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
-    MlirVariable, MlirVarInit,
+    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
 };
 use crate::data::tokens::Literal;
 use crate::util::{Locatable, Span};
@@ -40,9 +39,9 @@ impl Analyzer {
             .scope
             .borrow_mut()
             .get_variable_type_and_id(&variable.value, variable.location)
-            .map(|(ty, id)| MlirExpr {
+            .map(|ty| MlirExpr {
                 span: variable.location,
-                kind: Box::new(MlirExprKind::Variable(id)),
+                kind: Box::new(MlirExprKind::Variable(variable.value.clone())),
                 ty,
                 is_lval: true,
             });
@@ -599,108 +598,5 @@ impl Analyzer {
         };
 
         self.validate_assign_op(&op, expr, literal_one, span)
-    }
-}
-
-#[test]
-fn test_variable_id_tracking_does_not_create_rogue_ids() {
-    use std::collections::HashSet;
-    let mlir_result =
-        super::tests::run_analysis_test("_c_test_files/unit_tests/variable_id_tracking.c")
-            .expect("Errors occurred in Analysis processing.");
-
-    let mut set = HashSet::new();
-    for var in mlir_result.globals.values() {
-        set.insert(var.uid);
-    }
-
-    fn walk_mlir_stmts(id_set: &mut HashSet<usize>, block: &MlirBlock) {
-        for stmt in block.iter() {
-            match stmt {
-                MlirStmt::Block(inner_block) => {
-                    walk_mlir_stmts(id_set, inner_block);
-                }
-
-                MlirStmt::Expression(expr) | MlirStmt::CondGoto(expr, _, _) => {
-                    walk_mlir_expr_for_variable_access(id_set, expr);
-                }
-
-                MlirStmt::VariableDeclaration(var) => {
-                    process_variable_for_id_tracking_test(id_set, var);
-                }
-
-                _ => {}
-            }
-        }
-    }
-
-    fn process_variable_for_id_tracking_test(id_set: &mut HashSet<usize>, var: &MlirVariable) {
-        id_set.insert(var.uid);
-        let init = var.initializer.as_ref();
-        if let Some(init) = init {
-            match &init.value {
-                MlirVarInit::Expr(expr) => {
-                    walk_mlir_expr_for_variable_access(id_set, expr);
-                }
-                MlirVarInit::Array(array) => {
-                    for expr in array {
-                        walk_mlir_expr_for_variable_access(id_set, expr);
-                    }
-                }
-            }
-        }
-    }
-
-    fn walk_mlir_expr_for_variable_access(id_set: &HashSet<usize>, expr: &MlirExpr) {
-        match &*expr.kind {
-            MlirExprKind::Variable(uid) => {
-                if !id_set.contains(uid) {
-                    panic!("{uid} does not exist in ID_SET");
-                }
-            }
-
-            MlirExprKind::Member(expr, ..) | MlirExprKind::Cast(_, expr) => {}
-            MlirExprKind::PostIncrement(expr)
-            | MlirExprKind::AddressOf(expr)
-            | MlirExprKind::PostDecrement(expr)
-            | MlirExprKind::Negate(expr)
-            | MlirExprKind::LogicalNot(expr)
-            | MlirExprKind::BitwiseNot(expr)
-            | MlirExprKind::Deref(expr) => {
-                walk_mlir_expr_for_variable_access(id_set, expr);
-            }
-
-            MlirExprKind::Index(left, right)
-            | MlirExprKind::Add(left, right)
-            | MlirExprKind::Sub(left, right)
-            | MlirExprKind::Mul(left, right)
-            | MlirExprKind::Div(left, right)
-            | MlirExprKind::Mod(left, right)
-            | MlirExprKind::Equal(left, right)
-            | MlirExprKind::NotEqual(left, right)
-            | MlirExprKind::GreaterThan(left, right)
-            | MlirExprKind::GreaterThanEqual(left, right)
-            | MlirExprKind::LessThan(left, right)
-            | MlirExprKind::LessThanEqual(left, right)
-            | MlirExprKind::LogicalAnd(left, right)
-            | MlirExprKind::LogicalOr(left, right)
-            | MlirExprKind::BitwiseAnd(left, right)
-            | MlirExprKind::BitwiseOr(left, right)
-            | MlirExprKind::BitwiseXor(left, right)
-            | MlirExprKind::LeftShift(left, right)
-            | MlirExprKind::RightShift(left, right)
-            | MlirExprKind::Assign(left, right) => {
-                walk_mlir_expr_for_variable_access(id_set, left);
-                walk_mlir_expr_for_variable_access(id_set, right);
-            }
-
-            MlirExprKind::FunctionCall { args, .. } => {
-                for expr in args.iter() {
-                    walk_mlir_expr_for_variable_access(id_set, expr);
-                }
-            }
-
-            MlirExprKind::Literal(_) => {}
-        }
     }
 }

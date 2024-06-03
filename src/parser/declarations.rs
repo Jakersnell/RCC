@@ -1,15 +1,14 @@
-use super::macros::*;
 use crate::data::ast::*;
 use crate::data::tokens::*;
-use crate::lexer::LexResult;
-use crate::parser::{ParseResult, Parser};
+use crate::parser::{Parser, ParseResult};
 use crate::util::error::CompilerError;
 use crate::util::Locatable;
-use arcstr::ArcStr;
+
+use super::macros::*;
 
 impl<L> Parser<L>
 where
-    L: Iterator<Item = LexResult>,
+    L: Iterator<Item = Locatable<Token>>,
 {
     pub(super) fn parse_init_declaration(&mut self) -> ParseResult<Locatable<InitDeclaration>> {
         let location = self.current_span()?;

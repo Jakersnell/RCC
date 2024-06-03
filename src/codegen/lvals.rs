@@ -137,11 +137,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    pub fn compile_variable_access(&mut self, ty: &MlirType, id: usize) -> BasicValueEnum<'ctx> {
+    pub fn compile_variable_access(
+        &mut self,
+        ty: &MlirType,
+        id: &InternedStr,
+    ) -> BasicValueEnum<'ctx> {
         let pointee_ty = self.convert_type(ty);
         let ptr = *self
             .variables
-            .get(&id)
+            .get(id)
             .expect("Invalid variable accesses must be handled in Analysis.");
         self.builder()
             .build_load(pointee_ty, ptr, "access_variable")

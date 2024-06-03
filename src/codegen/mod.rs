@@ -41,7 +41,7 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) builder: Option<Builder<'ctx>>,
     pub(in crate::codegen) module: &'a Module<'ctx>,
     pub(in crate::codegen) functions: HashMap<InternedStr, FunctionValue<'ctx>>,
-    pub(in crate::codegen) variables: HashMap<usize, PointerValue<'ctx>>,
+    pub(in crate::codegen) variables: HashMap<InternedStr, PointerValue<'ctx>>,
     pub(in crate::codegen) fn_value_opt: Option<FunctionValue<'ctx>>,
     pub(in crate::codegen) struct_types: HashMap<InternedStr, StructType<'ctx>>,
     pub(in crate::codegen) block_has_jumped: bool,
@@ -65,14 +65,35 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         compiler
     }
 
+    pub fn compile(mut self) -> Result<LLVMString, LLVMString> {
+        for _struct in self.mlir.structs.iter() {
+            self.create_struct_type(_struct);
+        }
+
+        for global in self.mlir.globals.values() {
+            self.compile_global(global);
+        }
+
+        for function in self.mlir.functions.values() {
+            self.compile_function(function);
+        }
+
+        self.module.verify()?;
+        let llir = self.module.print_to_string();
+        Ok(llir)
+    }
+
     #[inline(always)]
-    pub(in crate::codegen) fn insert_pointer(&mut self, uid: usize, ptr: PointerValue<'ctx>) {
+    pub(in crate::codegen) fn insert_pointer(&mut self, uid: InternedStr, ptr: PointerValue<'ctx>) {
         self.variables.insert(uid, ptr);
     }
 
     #[inline(always)]
-    pub(in crate::codegen) fn get_pointer(&self, uid: &usize) -> PointerValue<'ctx> {
-        *self.variables.get(uid).unwrap()
+    pub(in crate::codegen) fn get_pointer(&self, ident: &InternedStr) -> PointerValue<'ctx> {
+        *self
+            .variables
+            .get(ident)
+            .expect(&format!("Pointer for '{ident}' does not exist in memory."))
     }
 
     #[inline(always)]
@@ -104,23 +125,10 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     #[inline(always)]
     pub(in crate::codegen) fn get_struct_type(&self, ident: &InternedStr) -> StructType<'ctx> {
-        *self.struct_types.get(ident).unwrap()
-    }
-
-    pub fn compile(mut self, output_path: &str) -> Result<(), LLVMString> {
-        for _struct in self.mlir.structs.values() {
-            self.create_struct_type(_struct);
-        }
-
-        for global in self.mlir.globals.values() {
-            self.compile_global(global);
-        }
-
-        for function in self.mlir.functions.values() {
-            self.compile_function(function);
-        }
-
-        self.module.print_to_file(output_path)
+        *self
+            .struct_types
+            .get(ident)
+            .unwrap_or_else(|| panic!("Struct '{}' does not exist!", ident))
     }
 
     #[inline(always)]
@@ -190,7 +198,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
             self.builder().build_store(allocation, llvm_param).unwrap();
 
-            self.insert_pointer(mlir_param.uid, allocation)
+            self.insert_pointer(mlir_param.ident.clone(), allocation)
         }
 
         self.process_function_body(&function.body);
@@ -311,13 +319,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
     }
 
-    fn create_struct_type(&self, _struct: &'mlir MlirStruct) -> StructType<'ctx> {
+    fn create_struct_type(&mut self, _struct: &'mlir MlirStruct) -> StructType<'ctx> {
         let member_types = _struct
             .members
             .iter()
             .map(|field| self.convert_type(&field.ty))
             .collect::<Vec<_>>();
-        self.context.struct_type(&member_types, false)
+        let struct_type = self.context.struct_type(&member_types, false);
+        self.struct_types.insert(_struct.ident.clone(), struct_type);
+        struct_type
     }
 }
 

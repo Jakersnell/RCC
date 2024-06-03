@@ -8,7 +8,6 @@ use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_variable_declaration(&mut self, var: &MlirVariable, is_global: bool) {
         let MlirVariable {
-            uid,
             span,
             ty: mlir_type,
             ident,
@@ -34,7 +33,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             }
         };
 
-        self.variables.insert(*uid, var_ptr);
+        self.variables.insert(ident.value.clone(), var_ptr);
 
         if let Some(initializer) = initializer {
             match &initializer.value {

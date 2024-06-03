@@ -42,18 +42,22 @@ pub const VOID_TYPE: MlirType = MlirType {
 #[derive(Debug, Default, PartialEq)]
 pub struct MlirModule {
     pub functions: BTreeMap<InternedStr, MlirFunction>,
-    pub structs: BTreeMap<InternedStr, MlirStruct>,
+    pub structs: Vec<MlirStruct>,
     pub globals: BTreeMap<InternedStr, MlirVariable>,
 }
 
 impl MlirModule {
+    pub fn get_struct(&self, ident: &str) -> Option<&MlirStruct> {
+        self.structs
+            .iter()
+            .find(|_struct| _struct.ident.value.as_ref() == ident)
+    }
     pub fn get_struct_member_offset(
         &self,
         struct_ident: &InternedStr,
         member: &InternedStr,
     ) -> u32 {
-        self.structs
-            .get(struct_ident)
+        self.get_struct(struct_ident)
             .expect("Struct not found in module!")
             .get_member_offset(member)
     }
@@ -63,8 +67,7 @@ impl MlirModule {
         struct_ident: &InternedStr,
         member: &InternedStr,
     ) -> &MlirType {
-        self.structs
-            .get(struct_ident)
+        self.get_struct(struct_ident)
             .unwrap()
             .get_member_type(member)
     }
@@ -84,10 +87,12 @@ impl MlirStruct {
             .enumerate()
             .find(|(_, var)| var.ident.as_ref() == member)
             .map(|(idx, _)| idx as u32)
-            .expect(&format!(
-                "Struct member '{member}' does not exist in struct '{}'",
-                &self.ident.value
-            ))
+            .unwrap_or_else(|| {
+                panic!(
+                    "Struct member '{member}' does not exist in struct '{}'",
+                    &self.ident.value
+                )
+            })
     }
 
     fn get_member_type(&self, member: &str) -> &MlirType {
@@ -95,10 +100,12 @@ impl MlirStruct {
             .iter()
             .find(|var| var.ident.as_ref() == member)
             .map(|var| &var.ty)
-            .expect(&format!(
-                "Struct member '{member}' does not exist in struct '{}'",
-                &self.ident.value
-            ))
+            .unwrap_or_else(|| {
+                panic!(
+                    "Struct member '{member}' does not exist in struct '{}'",
+                    &self.ident.value
+                )
+            })
     }
 }
 
@@ -113,7 +120,6 @@ pub struct MlirFunction {
 
 #[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirVariable {
-    pub uid: usize,
     pub span: Span,
     pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,
@@ -348,7 +354,7 @@ impl MlirExpr {
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
     Literal(MlirLiteral),
-    Variable(usize),
+    Variable(InternedStr),
 
     // unary
     PostIncrement(MlirExpr),

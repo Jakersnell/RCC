@@ -203,7 +203,7 @@ impl Display for MlirModule {
         }
 
         write!(f, "{{\n Structs {{")?;
-        for (_, _struct) in self.structs.iter() {
+        for _struct in self.structs.iter() {
             indent_write!(_struct);
         }
 

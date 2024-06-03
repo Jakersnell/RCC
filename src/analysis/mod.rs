@@ -69,7 +69,7 @@ impl Analyzer {
     pub fn validate(mut self) -> Result<MlirModule, SharedReporter> {
         let mut globals = BTreeMap::new();
         let mut functions = BTreeMap::new();
-        let mut structs = BTreeMap::new();
+        let mut structs = Vec::new();
         let ast = self.ast.take().expect("Ast must be Some(T)");
         macro_rules! push_locatable {
             ($map:expr, $func:expr, $locatable:ident) => {
@@ -106,30 +106,17 @@ impl Analyzer {
                     )
                 }
                 Struct(locatable_struct) => {
-                    push_locatable!(
-                        structs,
-                        |item| self.validate_struct_definition(item),
-                        locatable_struct
-                    )
+                    if let Ok(_struct) = self.validate_struct_definition(locatable_struct) {
+                        structs.push(_struct);
+                    }
                 }
             }
         }
 
         let idents = self.scope.borrow().get_unused_idents();
 
-        for ident in idents {
-            if let Some(variable) = globals.get(&ident.0) {
-                self.report_warning(CompilerWarning::UnusedVariable(variable.location));
-            } else if let Some(function) = functions.get(&ident.0) {
-                self.report_warning(CompilerWarning::UnusedFunction(function.location));
-            } else if let Some(_struct) = structs.get(&ident.0) {
-                self.report_warning(CompilerWarning::UnusedStruct(_struct.location))
-            } else {
-                panic!(
-                    "Could not match unused ident to type: ident = '{}': {}",
-                    ident.0, ident.1
-                );
-            }
+        for (ident, span) in idents {
+            self.report_warning(CompilerWarning::UnusedItem(ident.to_string(), span))
         }
 
         fn deref_map<K: Eq + std::hash::Hash + std::cmp::Ord, T>(
@@ -143,7 +130,6 @@ impl Analyzer {
         }
 
         let functions = deref_map(functions);
-        let structs = deref_map(structs);
         let globals = deref_map(globals);
 
         if self.reporter.borrow().status().is_ok() && !functions.contains_key("main") {
@@ -435,7 +421,10 @@ mod tests {
 
     pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MlirModule, SharedReporter> {
         let source = std::fs::read_to_string(path).expect("Could not read file.");
-        let lexer = lexer::Lexer::new(source.into());
+        let lexer = lexer::Lexer::new(source.into())
+            .lex_all()
+            .unwrap()
+            .into_iter();
         let parser = parser::Parser::new(lexer);
         let result = parser.parse_all().expect("Error in Parser.");
         analysis::Analyzer::new(result).validate()

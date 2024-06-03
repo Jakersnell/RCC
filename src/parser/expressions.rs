@@ -1,15 +1,14 @@
-use super::macros::*;
 use crate::data::ast::{BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp};
 use crate::data::tokens::{Symbol, Token};
-use crate::lexer::LexResult;
-use crate::parser::{ParseResult, Parser};
+use crate::parser::{Parser, ParseResult};
 use crate::util::error::CompilerError;
 use crate::util::Locatable;
-use arcstr::ArcStr;
+
+use super::macros::*;
 
 impl<L> Parser<L>
 where
-    L: Iterator<Item = LexResult>,
+    L: Iterator<Item = Locatable<Token>>,
 {
     fn parse_type(&mut self) -> ParseResult<Locatable<Declaration>> {
         let ty = self.parse_declaration()?;

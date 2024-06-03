@@ -7,9 +7,9 @@ use crate::data::mlir::{
     MlirVariable,
 };
 use crate::data::symbols::*;
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::{get, InternedStr};
-use crate::util::{str_intern, Locatable, Span};
 
 static mut VARIABLE_COUNT: usize = 0;
 
@@ -92,13 +92,11 @@ impl SymbolResolver {
         span: Span,
     ) -> Result<usize, CompilerError> {
         let uid = update_global_variable_count();
-        var.uid = uid;
         let array_size = match &var.ty.decl {
             MlirTypeDecl::Array(size) => Some(*size),
             _ => None,
         };
         let symbol = SymbolKind::Variable(VariableSymbol {
-            uid,
             ty: var.ty.clone(),
             is_const: var.is_const,
             is_initialized: var.initializer.is_some(),
@@ -166,9 +164,9 @@ impl SymbolResolver {
         &mut self,
         ident: &InternedStr,
         span: Span,
-    ) -> Result<(MlirType, usize), CompilerError> {
+    ) -> Result<MlirType, CompilerError> {
         match self.retrieve(ident, span)? {
-            SymbolKind::Variable(var) => Ok((var.ty.clone(), var.uid)),
+            SymbolKind::Variable(var) => Ok(var.ty.clone()),
             _ => Err(CompilerError::NotAVariable(span)),
         }
     }
@@ -208,7 +206,6 @@ impl SymbolResolver {
             };
             let uid = update_global_variable_count();
             let var = VariableSymbol {
-                uid,
                 ty: field.ty.clone(),
                 is_const: field.is_const,
                 is_initialized: field.initializer.is_some(),

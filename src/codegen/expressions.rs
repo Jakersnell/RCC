@@ -19,7 +19,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
         match &*expr.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
-            MlirExprKind::Variable(id) => self.compile_variable_access(expr_ty!(), *id),
+            MlirExprKind::Variable(id) => self.compile_variable_access(expr_ty!(), id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
             MlirExprKind::PostDecrement(expr) => self.compile_post_decrement(expr),
             MlirExprKind::Negate(expr) => self.compile_negate(expr),

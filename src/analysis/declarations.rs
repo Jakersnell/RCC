@@ -1,8 +1,8 @@
-use crate::analysis::{control_flow, Analyzer};
+use crate::analysis::{Analyzer, control_flow};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::{Locatable, Span};
+use crate::util::error::{CompilerError, CompilerWarning};
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(
@@ -259,7 +259,6 @@ impl Analyzer {
         let ty = span.into_locatable(self.validate_type(&dec.specifier, span, false, false)?);
 
         Ok(MlirVariable {
-            uid: 0,
             span,
             ty,
             ident,
