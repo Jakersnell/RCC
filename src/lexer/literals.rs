@@ -218,6 +218,7 @@ impl Lexer {
         }
         let span = self.end_span(span);
         let value = self.source.substr(span.start..span.end - 1);
+        let value = str_intern::intern(value);
         Some(Token::Literal(Literal::String { value }))
     }
 

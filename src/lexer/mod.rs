@@ -3,9 +3,9 @@ use std::io::Read;
 use arcstr::ArcStr;
 
 use crate::data::tokens::Token;
-use crate::util::error::CompilerError;
 use crate::util::*;
 use crate::util::{Locatable, Span};
+use crate::util::error::CompilerError;
 
 mod literals;
 mod symbols;
@@ -224,6 +224,20 @@ mod tests {
     }
 
     #[test]
+    fn test_eat_string_escapes_newline_escape_character_correctly() {
+        let src = "\"\\n\"".into();
+        let mut lexer = Lexer::new(src);
+        let string = lexer.eat_string().unwrap();
+        let value = match string {
+            Token::Literal(Literal::String { value }) => value,
+            _ => panic!(),
+        }
+        .to_string();
+        let first_char = value.chars().next().unwrap();
+        assert_eq!(first_char, '\n');
+    }
+
+    #[test]
     fn test_parse_number_works_for_valid_int() {
         let mut lexer = Lexer::new("344".into());
         let kind = lexer.eat_number();
@@ -360,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_eat_string_values_match() {
-        let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$\\\"%^&*()_+"#];
+        let tests = [r#"sgasf"#, r#"1234"#, r#"!@#$"%^&*()_+"#];
         for test in tests {
             let mut lexer = Lexer::new(format!("\"{}\"", test).into());
             let token = lexer.eat_string().expect("Expected token");

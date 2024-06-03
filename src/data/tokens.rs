@@ -1,7 +1,6 @@
-use crate::util::str_intern::InternedStr;
-use arcstr::Substr;
 use std::fmt::Display;
-use std::sync::Arc;
+
+use crate::util::str_intern::InternedStr;
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -45,7 +44,7 @@ pub enum Literal {
         value: char,
     },
     String {
-        value: Substr,
+        value: InternedStr,
     },
 }
 

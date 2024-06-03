@@ -341,7 +341,7 @@ impl Analyzer {
                 MlirType::new(MlirTypeKind::Char(true), MlirTypeDecl::Basic),
             ),
             Literal::String { value } => {
-                let mut value = value.as_str().bytes().collect::<Vec<_>>();
+                let mut value = value.bytes().collect::<Vec<_>>();
                 (
                     MlirLiteral::String(value),
                     MlirType::new(MlirTypeKind::Char(true), MlirTypeDecl::Pointer),

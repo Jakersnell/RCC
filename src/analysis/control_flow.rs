@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{write, Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, write};
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufWriter, Write};
@@ -13,8 +13,8 @@ use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirFunction, MlirModule, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
     VOID_TYPE,
 };
-use crate::util::str_intern::InternedStr;
 use crate::OUTPUT_GRAPH;
+use crate::util::str_intern::InternedStr;
 
 /*
 Some resources on control flow analysis:
@@ -371,7 +371,7 @@ impl<'a> ControlFlowGraph<'a> {
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
         let graph = graph_factory.build(blocks);
-        if !cfg!(test) && OUTPUT_GRAPH {
+        if !cfg!(test) && unsafe { OUTPUT_GRAPH } {
             let cfg_to_string = graph.to_string();
             let mut file = File::create(format!("graph_{name}.dot")).unwrap();
             let mut writer = BufWriter::new(file);

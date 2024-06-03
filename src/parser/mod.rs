@@ -6,14 +6,14 @@ use rand::RngCore;
 
 use macros::*;
 
+use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
 use crate::data::ast::*;
 use crate::data::tokens::{Keyword, Literal};
 use crate::data::tokens::{Symbol, Token};
-use crate::lexer::{LexResult, Lexer};
+use crate::lexer::{Lexer, LexResult};
+use crate::util::{Locatable, LocatableToken, Span};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, LocatableToken, Span};
-use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
 
 pub(super) mod declarations;
 pub(super) mod expressions;
@@ -72,7 +72,7 @@ where
             global.push(init_dec.unwrap());
         }
         let ast = AbstractSyntaxTree::new(global.into_iter().map(|dec| dec.value).collect());
-        if DISPLAY_AST || PRETTY_PRINT_AST {
+        if unsafe { DISPLAY_AST || PRETTY_PRINT_AST } {
             if cfg!(PRETTY_PRINT_AST) {
                 println!("{}", ast);
             } else {

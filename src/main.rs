@@ -19,10 +19,18 @@ mod util;
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't have a compiler.
 
-static DISPLAY_AST: bool = false;
-static OUTPUT_GRAPH: bool = false;
-static DISPLAY_MLIR: bool = false;
-static PRETTY_PRINT_AST: bool = false;
+static mut DISPLAY_AST: bool = false;
+static mut OUTPUT_GRAPH: bool = false;
+static mut DISPLAY_MLIR: bool = false;
+static mut PRETTY_PRINT_AST: bool = false;
+static mut PRINT_IR_ERRORS: bool = false;
+static mut OUTPUT_IR_GRAPH: bool = false;
+
+static mut STOP_AT_LEXER: bool = false;
+static mut STOP_AT_PARSER: bool = false;
+static mut STOP_AT_ANALYZER: bool = false;
+static mut STOP_AT_COMPILER: bool = false;
+static mut OUTPUT_STEP_DATA: bool = false;
 
 fn main() {
     let source = std::fs::read_to_string("_c_test_files/should_succeed/basic_blocks.c").unwrap();
