@@ -1,16 +1,10 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use arcstr::ArcStr;
 use rand::RngCore;
 
 use macros::*;
 
-use crate::{DISPLAY_AST, PRETTY_PRINT_AST};
 use crate::data::ast::*;
 use crate::data::tokens::{Keyword, Literal};
 use crate::data::tokens::{Symbol, Token};
-use crate::lexer::{Lexer, LexResult};
 use crate::util::{Locatable, LocatableToken, Span};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
@@ -31,7 +25,7 @@ pub type ParseResult<T> = Result<T, ()>;
 /// Core implementations only here, more is implemented in the supporting files in this directory
 pub struct Parser<L>
 where
-    L: Iterator<Item = LexResult>,
+    L: Iterator<Item = Locatable<Token>>,
 {
     tokens: L,
     errors: Vec<CompilerError>,
@@ -44,7 +38,7 @@ where
 
 impl<L> Parser<L>
 where
-    L: Iterator<Item = LexResult>,
+    L: Iterator<Item = Locatable<Token>>,
 {
     pub fn new(lexer: L) -> Self {
         Self {
@@ -72,13 +66,6 @@ where
             global.push(init_dec.unwrap());
         }
         let ast = AbstractSyntaxTree::new(global.into_iter().map(|dec| dec.value).collect());
-        if unsafe { DISPLAY_AST || PRETTY_PRINT_AST } {
-            if cfg!(PRETTY_PRINT_AST) {
-                println!("{}", ast);
-            } else {
-                println!("{:#?}", ast);
-            }
-        }
         Ok(ast)
     }
 
@@ -162,13 +149,7 @@ where
 
     pub(super) fn advance(&mut self) -> ParseResult<()> {
         self.current = self.next.take();
-        self.next = match self.tokens.next() {
-            Some(Ok(token)) => Some(token),
-            Some(Err(errors)) => {
-                return Err(());
-            }
-            None => None,
-        };
+        self.next = self.tokens.next();
         Ok(())
     }
 }
