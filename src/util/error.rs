@@ -1,8 +1,7 @@
 use thiserror::Error;
 
-use crate::data::ast::{StorageSpecifier, TypeQualifier, TypeSpecifier};
-use crate::util::str_intern::InternedStr;
 use crate::util::Span;
+use crate::util::str_intern::InternedStr;
 
 #[derive(Debug)]
 pub struct Reporter {
@@ -23,16 +22,10 @@ impl Reporter {
     }
 
     pub fn report_error(&mut self, error: CompilerError) {
-        if cfg!(not(test)) {
-            println!("Error: {}", error);
-        }
         self.errors.push(error);
     }
 
     pub fn report_warning(&mut self, warning: CompilerWarning) {
-        if cfg!(not(test)) {
-            println!("Warning: {}", warning);
-        }
         self.warnings.push(warning);
     }
 
@@ -289,6 +282,9 @@ pub enum CompilerError {
 
 #[derive(Error, Debug)]
 pub enum CompilerWarning {
+    #[error("Item '{0}' is not used: {1}")]
+    UnusedItem(String, Span),
+
     #[error("This expression has no effect: {0}")]
     ExprNoEffect(Span),
 
