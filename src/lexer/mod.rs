@@ -29,6 +29,24 @@ impl From<(ArcStr)> for Lexer {
 }
 
 impl Lexer {
+    pub fn lex_all(mut self) -> Result<Vec<Locatable<Token>>, Vec<CompilerError>> {
+        let mut tokens = vec![];
+        let mut errors = vec![];
+
+        for lex_result in self {
+            match lex_result {
+                Ok(token) => tokens.push(token),
+                Err(_errors) => errors.extend(_errors),
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(tokens)
+        } else {
+            Err(errors)
+        }
+    }
+
     pub fn new(source: ArcStr) -> Self {
         let mut chars = source.chars();
         let current = chars.next();
