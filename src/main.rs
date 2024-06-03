@@ -1,8 +1,12 @@
 #![allow(unused)]
 
+use std::fmt::Display;
+use std::path::PathBuf;
 use std::process::Command;
 
+use clap::Parser as ArgParser;
 use inkwell::context::Context;
+use thiserror::__private::AsDisplay;
 
 use crate::analysis::Analyzer;
 use crate::codegen::Compiler;
@@ -21,45 +25,248 @@ mod util;
 /// requires the API to be complete in order to function.
 /// Cant compile a program if you don't have a compiler.
 
-static mut DISPLAY_AST: bool = false;
-static mut OUTPUT_GRAPH: bool = false;
-static mut DISPLAY_MLIR: bool = false;
-static mut PRETTY_PRINT_AST: bool = false;
-static mut PRINT_IR_ERRORS: bool = false;
-static mut OUTPUT_IR_GRAPH: bool = false;
+static mut ARGS: Option<Args> = None;
 
-static mut STOP_AT_LEXER: bool = false;
-static mut STOP_AT_PARSER: bool = false;
-static mut STOP_AT_ANALYZER: bool = false;
-static mut STOP_AT_COMPILER: bool = false;
-static mut OUTPUT_STEP_DATA: bool = false;
+fn file_path() -> &'static str {
+    unsafe { &ARGS.as_ref().unwrap().file_path }
+}
+
+macro_rules! build_access_flag {
+    ($($flag:ident),+) => {
+        $(
+            pub(crate) fn $flag() -> bool {
+                unsafe { ARGS.as_ref().unwrap().$flag }
+            }
+        )+
+    };
+}
+
+build_access_flag!(
+    display_ast,
+    display_mlir,
+    display_llvm_graph,
+    display_internal_graphs,
+    output_lexer,
+    output_parser,
+    output_analyzer,
+    stop_at_lexer,
+    stop_at_parser,
+    stop_at_analyzer
+);
+
+#[derive(ArgParser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, help = "The file path for the source file to compile.")]
+    file_path: String,
+
+    #[arg(short, long, help = "Display abstract syntax tree.")]
+    display_ast: bool,
+
+    #[arg(short, long, help = "Display the validated mid level ir.")]
+    display_mlir: bool,
+
+    #[arg(short, long, help = "Output LLVM graphs as '.dot' files.")]
+    display_llvm_graph: bool,
+
+    #[arg(short, long, help = "Output internal CFG graphs as '.dot' files.")]
+    display_internal_graphs: bool,
+
+    #[arg(short, long, help = "Display raw data output from the Lexer.")]
+    output_lexer: bool,
+
+    #[arg(short, long, help = "Display raw data output from the Parser.")]
+    output_parser: bool,
+
+    #[arg(short, long, help = "Display raw data output from the Analyzer.")]
+    output_analyzer: bool,
+
+    #[arg(short, long, help = "Stop operation after completing the Lexer phase.")]
+    stop_at_lexer: bool,
+
+    #[arg(
+        short,
+        long,
+        help = "Stop operation after completing the Parser phase."
+    )]
+    stop_at_parser: bool,
+
+    #[arg(
+        short,
+        long,
+        help = "Stop operation after completing the Analyzer phase."
+    )]
+    stop_at_analyzer: bool,
+}
 
 fn main() {
-    let source = std::fs::read_to_string("_c_test_files/should_succeed/basic_blocks.c").unwrap();
+    unsafe {
+        ARGS = Some(Args::parse());
+    }
+
+    if let Err(errors) = run() {
+        for error in errors {
+            eprintln!("{}", error);
+        }
+    }
+}
+
+fn run() -> Result<(), Vec<String>> {
+    let file_path = file_path();
+    let source = load_src(file_path.into())?;
+    let llir = compile(source)?;
+    output_file(file_path.into(), llir)?;
+    link(file_path.into())?;
+    Ok(())
+}
+
+/// the parser outputs errors as a vec and so this function
+/// is to homogenize the error reporting on various steps
+#[inline]
+fn display_to_vec<T: Display>(item: T) -> Vec<String> {
+    vec![format!("{}", item)]
+}
+fn load_src(path: PathBuf) -> Result<String, Vec<String>> {
+    if !path.exists() {
+        Err(display_to_vec(format!(
+            "'{:?}' does not exist.",
+            path.as_display()
+        )))?;
+    }
+    let file_name = path.file_name();
+    if file_name.is_none() {
+        Err(display_to_vec(format!(
+            "'{:?}' is not a file.",
+            path.as_display()
+        )))?;
+    }
+    let source = std::fs::read_to_string(path);
+    if let Err(io_error) = source {
+        return Err(display_to_vec(format!("{}", io_error)));
+    }
+    let source = source.unwrap();
+    Ok(source)
+}
+
+fn compile(source: String) -> Result<String, Vec<String>> {
+    macro_rules! abort {
+        () => {
+            return Err(vec![]);
+        };
+    }
+
     let lexer = Lexer::new(source.into());
-    let parser = Parser::new(lexer);
-    let analyzer = Analyzer::new(parser.parse_all().unwrap());
-    let mlir = analyzer.validate().unwrap();
+    let lexemes = lexer.lex_all().map_err(|errors| {
+        errors
+            .into_iter()
+            .map(|err| err.to_string())
+            .collect::<Vec<_>>()
+    })?;
+
+    if output_lexer() {
+        println!("{:#?}", lexemes);
+    }
+
+    if stop_at_lexer() {
+        abort!();
+    }
+
+    let ast = Parser::new(lexemes.into_iter())
+        .parse_all()
+        .map_err(|vec| {
+            vec.into_iter()
+                .map(|err| err.to_string())
+                .collect::<Vec<_>>()
+        })?;
+
+    if display_ast() {
+        println!("{}", ast); // pretty print
+    }
+
+    if output_parser() {
+        println!("{:#?}", ast); // disgusting print
+    }
+
+    if stop_at_parser() {
+        abort!();
+    }
+
+    let analyzer = Analyzer::new(ast);
+    let mlir = analyzer.validate().map_err(|rep| {
+        rep.borrow()
+            .errors
+            .iter()
+            .map(|err| err.to_string())
+            .collect::<Vec<_>>()
+    })?;
+
+    if display_mlir() {
+        println!("{}", mlir); // pretty print
+    }
+
+    if output_analyzer() {
+        println!("{:#?}", mlir); // disgusting print
+    }
+
     let context = Context::create();
     let module = context.create_module("main");
     let compiler = Compiler::new(&mlir, &context, &module);
-    compiler.compile("main.ll").unwrap();
+    let llir = compiler.compile().map_err(display_to_vec)?;
+
+    Ok(llir.to_string())
+}
+
+fn output_file(path: PathBuf, llir: String) -> Result<(), Vec<String>> {
+    assert!(path.exists());
+    let ll_path = path.with_extension("ll");
+    std::fs::write(ll_path, llir).map_err(display_to_vec)
+}
+
+fn link(path: PathBuf) -> Result<(), Vec<String>> {
+    let base_path = path.parent();
+    let base_path = if let Some(base_path) = base_path {
+        Ok(base_path.to_path_buf())
+    } else {
+        std::env::current_dir()
+    };
+    let base_path = base_path.map_err(display_to_vec)?;
+
+    let file_name = path
+        .file_name()
+        .expect("File should have prior verification.")
+        .to_string_lossy()
+        .to_string();
+
+    let mut reported = vec![];
+
     macro_rules! cmd {
-        ($cmd:literal, $($args:literal),*) => {
-            Command::new($cmd).args(&[
+        ($cmd:expr, $($args:expr),*) => {
+            let mut command = Command::new($cmd);
+            command.args(&[
                 $(
                     $args,
                 )*
-            ]).output().unwrap();
+            ]);
+            let result = command.output();
+            if let Err(err) = result {
+                reported.push(format!("{}", err));
+            }
         };
     }
-    cmd!("llc", "main.ll", "-o", "main.s");
-    cmd!("as", "main.s", "-o", "main.o");
+
+    macro_rules! filename {
+        ($ext:literal) => {
+            &format!("{file_name}.{}", $ext)
+        };
+    }
+
+    cmd!("llc", filename!("ll"), "-o", filename!("s"));
+    cmd!("as", filename!("s"), "-o", filename!("o"));
     cmd!(
         "ld",
         "-o",
-        "main",
-        "main.o",
+        &file_name,
+        filename!("o"),
         "-e",
         "_main",
         "-arch",
@@ -67,16 +274,25 @@ fn main() {
         "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
         "-lSystem"
     );
+
+    if !reported.is_empty() {
+        Err(reported)
+    } else {
+        Ok(())
+    }
 }
 
 /// Integration tests
 #[cfg(test)]
 mod tests {
-    use std::panic::catch_unwind;
     use std::path::PathBuf;
+
+    use inkwell::context::Context;
+    use inkwell::support::LLVMString;
 
     use crate::{analysis, lexer, parser};
     use crate::analysis::SharedReporter;
+    use crate::codegen::Compiler;
     use crate::data::ast::{Expression, InitDeclaration};
     use crate::util::error::CompilerError;
 
@@ -91,20 +307,26 @@ mod tests {
 
     #[derive(Debug)]
     enum FailReason {
+        Lexer(Vec<CompilerError>),
         Parser(Vec<CompilerError>),
         Analyzer(SharedReporter),
+        Compiler(LLVMString),
     }
 
     fn run_test_on_file(path: &PathBuf) -> Result<(), FailReason> {
         let source = std::fs::read_to_string(path).expect("Could not read file.");
-        let lexer = lexer::Lexer::new(source.into());
-        let parser = parser::Parser::new(lexer);
+        let lexer = lexer::Lexer::new(source.into())
+            .lex_all()
+            .map_err(FailReason::Lexer)?;
+        let parser = parser::Parser::new(lexer.into_iter());
         let result = parser.parse_all().map_err(FailReason::Parser)?;
-        let global_validator = analysis::Analyzer::new(result);
-        global_validator
+        let mlir_module = analysis::Analyzer::new(result)
             .validate()
-            .map(|_| ())
-            .map_err(FailReason::Analyzer)
+            .map_err(FailReason::Analyzer)?;
+        let context = Context::create();
+        let module = context.create_module("test");
+        let compiler = Compiler::new(&mlir_module, &context, &module);
+        compiler.compile().map(|_| ()).map_err(FailReason::Compiler)
     }
 
     macro_rules! file_test_assert {
@@ -120,39 +342,109 @@ mod tests {
         };
     }
 
-    #[test]
-    fn test_should_succeed_files() {
-        get_file_paths(&"_c_test_files/should_succeed".into())
-            .unwrap()
-            .iter()
-            .for_each(|test| {
-                match catch_unwind(|| run_test_on_file(test)) {
-                    Ok(result) => {
-                        file_test_assert!(test, result.is_ok(), result);
-                    }
-                    Err(err) => {
-                        panic!("Panic in thread from file '{:#?}'.", test);
-                    }
-                };
-            });
+    mod should_succeed {
+        use std::panic::catch_unwind;
+
+        use super::run_test_on_file;
+
+        fn test_should_succeed_file(name: &str) {
+            let file_path = format!("_c_test_files/should_succeed/{}.c", name);
+            let test = &file_path.into();
+            match catch_unwind(|| run_test_on_file(test)) {
+                Ok(result) => {
+                    file_test_assert!(test, result.is_ok(), result);
+                }
+                Err(err) => {
+                    panic!("Panic in thread from file '{:#?}'.", test);
+                }
+            };
+        }
+
+        #[test]
+        fn test_basic_blocks() {
+            test_should_succeed_file("test_basic_blocks")
+        }
+
+        #[test]
+        fn comments_and_functions() {
+            test_should_succeed_file("comments_and_functions")
+        }
+
+        #[test]
+        fn const_ptr() {
+            test_should_succeed_file("const_ptr")
+        }
+
+        #[test]
+        fn control_flow_analysis() {
+            test_should_succeed_file("control_flow_analysis")
+        }
+
+        #[test]
+        fn fuzz() {
+            test_should_succeed_file("fuzz")
+        }
+
+        #[test]
+        fn member_access() {
+            test_should_succeed_file("member_access")
+        }
+
+        #[test]
+        fn sizeof() {
+            test_should_succeed_file("sizeof")
+        }
+
+        #[test]
+        fn structs() {
+            test_should_succeed_file("structs")
+        }
     }
 
-    #[test]
-    fn test_should_fail_files() {
-        get_file_paths(&"_c_test_files/should_fail".into())
-            .unwrap()
-            .iter()
-            .for_each(|test| {
-                let result = run_test_on_file(test);
-                file_test_assert!(test, result.is_err(), result);
-            })
+    mod should_fail {
+        use std::panic::catch_unwind;
+
+        use crate::tests::run_test_on_file;
+
+        fn test_should_fail_file(name: &str) {
+            let file_path = format!("_c_test_files/should_fail/{}.c", name);
+            let test = &file_path.into();
+            match catch_unwind(|| run_test_on_file(test)) {
+                Ok(result) => {
+                    file_test_assert!(test, result.is_err(), result);
+                }
+                Err(err) => {
+                    panic!("Panic in thread from file '{:#?}'.", test);
+                }
+            };
+        }
+
+        #[test]
+        fn control_flow_analysis() {
+            test_should_fail_file("control_flow_analysis")
+        }
+
+        #[test]
+        fn declaration_in_expression() {
+            test_should_fail_file("declaration_in_expression")
+        }
+
+        #[test]
+        fn function_in_struct() {
+            test_should_fail_file("function_in_struct")
+        }
+
+        #[test]
+        fn if_in_condition() {
+            test_should_fail_file("if_in_condition")
+        }
     }
 
     #[test]
     fn test_subscripting_order() {
         let src = "int y = &x[3];";
-        let lexer = lexer::Lexer::new(src.into());
-        let parser = parser::Parser::new(lexer);
+        let lexer = lexer::Lexer::new(src.into()).lex_all().unwrap();
+        let parser = parser::Parser::new(lexer.into_iter());
         let result = parser.parse_all().unwrap();
         let var_dec = result.first().expect("Expected non-empty result.");
 
