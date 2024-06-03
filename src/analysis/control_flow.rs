@@ -13,7 +13,7 @@ use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirFunction, MlirModule, MlirStmt, MlirType, MlirTypeDecl, MlirTypeKind,
     VOID_TYPE,
 };
-use crate::OUTPUT_GRAPH;
+use crate::display_internal_graphs;
 use crate::util::str_intern::InternedStr;
 
 /*
@@ -371,7 +371,7 @@ impl<'a> ControlFlowGraph<'a> {
         let blocks = block_factory.build();
         let graph_factory = GraphFactory::new();
         let graph = graph_factory.build(blocks);
-        if !cfg!(test) && unsafe { OUTPUT_GRAPH } {
+        if !cfg!(test) && unsafe { display_internal_graphs() } {
             let cfg_to_string = graph.to_string();
             let mut file = File::create(format!("graph_{name}.dot")).unwrap();
             let mut writer = BufWriter::new(file);
