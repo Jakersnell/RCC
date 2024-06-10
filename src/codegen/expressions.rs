@@ -69,14 +69,17 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .functions
             .get(ident)
             .expect("Function does not exist in memory.");
+
         let compiled_args: Vec<BasicMetadataValueEnum> = args
             .iter()
             .map(|arg| self.compile_expression(arg).into())
             .collect();
+
         let call_site_value = self
             .builder()
             .build_call(function, &compiled_args, "function_call")
             .unwrap();
+
         // hack to preserve returning VOID without having to return Some(BasicValueEnum<'ctx> at every method
         let const_i8 = BasicValueEnum::from(self.context.i8_type().const_int(0, false));
         call_site_value.try_as_basic_value().left_or(const_i8)
