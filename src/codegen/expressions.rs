@@ -7,19 +7,9 @@ use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
-        macro_rules! unsigned_int {
-            () => {
-                expr.ty.is_unsigned_int()
-            };
-        }
-        macro_rules! expr_ty {
-            () => {
-                &expr.ty
-            };
-        }
         match &*expr.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
-            MlirExprKind::Variable(id) => self.compile_variable_access(expr_ty!(), id),
+            MlirExprKind::Variable(id) => self.compile_variable_access(&expr.ty, id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
             MlirExprKind::PostDecrement(expr) => self.compile_post_decrement(expr),
             MlirExprKind::Negate(expr) => self.compile_negate(expr),
@@ -31,21 +21,25 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::Add(left, right) => self.compile_addition(left, right),
             MlirExprKind::Sub(left, right) => self.compile_subtraction(left, right),
             MlirExprKind::Mul(left, right) => self.compile_multiplication(left, right),
-            MlirExprKind::Div(left, right) => self.compile_division(left, right, unsigned_int!()),
-            MlirExprKind::Mod(left, right) => self.compile_modulus(left, right, unsigned_int!()),
+            MlirExprKind::Div(left, right) => {
+                self.compile_division(left, right, expr.ty.is_unsigned_int())
+            }
+            MlirExprKind::Mod(left, right) => {
+                self.compile_modulus(left, right, expr.ty.is_unsigned_int())
+            }
             MlirExprKind::Equal(left, right) => self.compile_equal(left, right),
             MlirExprKind::NotEqual(left, right) => self.compile_not_equal(left, right),
             MlirExprKind::GreaterThan(left, right) => {
-                self.compile_greater_than(left, right, unsigned_int!())
+                self.compile_greater_than(left, right, expr.ty.is_unsigned_int())
             }
             MlirExprKind::GreaterThanEqual(left, right) => {
-                self.compile_greater_than_equal(left, right, unsigned_int!())
+                self.compile_greater_than_equal(left, right, expr.ty.is_unsigned_int())
             }
             MlirExprKind::LessThan(left, right) => {
-                self.compile_less_than(left, right, unsigned_int!())
+                self.compile_less_than(left, right, expr.ty.is_unsigned_int())
             }
             MlirExprKind::LessThanEqual(left, right) => {
-                self.compile_less_than_equal(left, right, unsigned_int!())
+                self.compile_less_than_equal(left, right, expr.ty.is_unsigned_int())
             }
             MlirExprKind::LogicalAnd(left, right) => self.compile_logical_and(left, right),
             MlirExprKind::LogicalOr(left, right) => self.compile_logical_or(left, right),
@@ -54,13 +48,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::BitwiseXor(left, right) => self.compile_bitwise_xor(left, right),
             MlirExprKind::LeftShift(left, right) => self.compile_left_shift(left, right),
             MlirExprKind::RightShift(left, right) => self.compile_right_shift(left, right),
-            MlirExprKind::Index(array, index) => {
-                self.compile_array_access(array, index, expr_ty!())
-            }
-            MlirExprKind::Member(_struct, member) => {
-                self.compile_member_access(_struct, member, expr_ty!())
-            }
-            MlirExprKind::Cast(cast_type, expr) => self.compile_cast(cast_type, expr, expr_ty!()),
+            MlirExprKind::Index(array, index) => self.compile_array_access(array, index, &expr.ty),
+            MlirExprKind::Member(_struct, member) => self.compile_member_access(_struct, member),
+            MlirExprKind::Cast(cast_type, expr) => self.compile_cast(cast_type, expr, &expr.ty),
             MlirExprKind::FunctionCall {
                 location,
                 ident,

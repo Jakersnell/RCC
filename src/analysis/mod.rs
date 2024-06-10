@@ -67,7 +67,7 @@ impl Analyzer {
     }
 
     pub fn validate(mut self) -> Result<MlirModule, SharedReporter> {
-        let mut globals = BTreeMap::new();
+        let mut globals = Vec::new();
         let mut functions = BTreeMap::new();
         let mut structs = Vec::new();
         let ast = self.ast.take().expect("Ast must be Some(T)");
@@ -86,17 +86,10 @@ impl Analyzer {
             use crate::data::ast::InitDeclaration::*;
             match node {
                 Declaration(locatable_variable) => {
-                    push_locatable!(
-                        globals,
-                        |item| {
-                            let mut var = self.validate_variable_declaration(item);
-                            if let Ok(var) = var.as_mut() {
-                                self.add_variable_to_scope(var, item.location);
-                            }
-                            var
-                        },
-                        locatable_variable
-                    )
+                    if let Ok(mut var) = self.validate_variable_declaration(locatable_variable) {
+                        self.add_variable_to_scope(&mut var, locatable_variable.location);
+                        globals.push(var);
+                    }
                 }
                 Function(locatable_function) => {
                     push_locatable!(
@@ -130,7 +123,6 @@ impl Analyzer {
         }
 
         let functions = deref_map(functions);
-        let globals = deref_map(globals);
 
         if self.reporter.borrow().status().is_ok() && !functions.contains_key("main") {
             self.report_error(CompilerError::MissingMain);

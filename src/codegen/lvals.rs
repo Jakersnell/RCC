@@ -1,3 +1,4 @@
+use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
@@ -41,9 +42,8 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         return_ptr: bool,
     ) -> BasicValueEnum<'ctx> {
         debug_assert!(left.is_lval);
-        let assign_value = self.compile_expression(right);
-
         let assign_ptr = self.get_lval_as_pointer(left);
+        let assign_value = self.compile_expression(right);
 
         self.builder()
             .build_store(assign_ptr, assign_value)
@@ -58,13 +58,14 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn get_lval_as_pointer(&mut self, lval: &MlirExpr) -> PointerValue<'ctx> {
         match &*lval.kind {
-            MlirExprKind::Variable(id) => self.get_pointer(id),
-            MlirExprKind::Deref(expr) => self.compile_expression(expr).into_pointer_value(),
-            MlirExprKind::Member(_struct, member) => self.compile_struct_member_pointer(
-                self.convert_type(&lval.ty.as_basic()),
-                _struct,
-                member,
-            ),
+            MlirExprKind::Deref(expr) => self.get_lval_as_pointer(expr),
+
+            MlirExprKind::Variable(ident) => self.get_pointer(ident),
+
+            MlirExprKind::Member(_struct, member) => {
+                self.compile_struct_member_pointer(self.convert_type(&lval.ty), _struct, member)
+            }
+
             MlirExprKind::Index(array, index) => self.compile_array_index_pointer(
                 self.convert_type(&lval.ty.as_basic()),
                 array,
@@ -79,11 +80,26 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         _struct: &MlirExpr,
         member: &InternedStr,
     ) -> PointerValue<'ctx> {
-        let struct_ident = _struct.ty.kind.get_struct_ident();
-        let _struct = self.compile_expression(_struct).into_pointer_value();
-        let member_offset = self.mlir.get_struct_member_offset(&struct_ident, member);
+        let var_ptr = self.get_lval_as_pointer(_struct);
+        let struct_ident = _struct.ty.get_struct_ident();
+        let member_index = self.mlir.get_struct_member_offset(struct_ident, member);
+
+        let struct_type = self.get_struct_type(struct_ident);
+        let pointee_type = struct_type.ptr_type(AddressSpace::default());
+
+        let struct_ptr = self
+            .builder()
+            .build_load(pointee_type, var_ptr, "load_struct_ptr_from_variable")
+            .unwrap()
+            .into_pointer_value();
+
         self.builder()
-            .build_struct_gep(access_ty, _struct, member_offset, "get_struct_member_ptr")
+            .build_struct_gep(
+                struct_type,
+                struct_ptr,
+                member_index,
+                &format!("member_access_{}_{}", struct_ident, member),
+            )
             .unwrap()
     }
 
@@ -128,13 +144,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         &mut self,
         _struct: &MlirExpr,
         member: &InternedStr,
-        member_type: &MlirType,
     ) -> BasicValueEnum<'ctx> {
-        let member_type = self.convert_type(member_type);
-        let member_ptr = self.compile_struct_member_pointer(member_type, _struct, member);
-        self.builder()
-            .build_load(member_type, member_ptr, "load_member_ptr")
-            .unwrap()
+        let struct_ident = _struct.ty.get_struct_ident();
+        let member_offset = self.mlir.get_struct_member_offset(struct_ident, member);
+        let compiled_struct = self.compile_expression(_struct).into_struct_value();
+        compiled_struct.get_field_at_index(member_offset).unwrap()
     }
 
     pub fn compile_variable_access(
@@ -143,10 +157,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         id: &InternedStr,
     ) -> BasicValueEnum<'ctx> {
         let pointee_ty = self.convert_type(ty);
-        let ptr = *self
-            .variables
-            .get(id)
-            .expect("Invalid variable accesses must be handled in Analysis.");
+        let ptr = self.get_pointer(id);
         self.builder()
             .build_load(pointee_ty, ptr, "access_variable")
             .unwrap()

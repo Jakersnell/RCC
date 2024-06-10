@@ -54,7 +54,7 @@ build_access_flag!(
     stop_at_analyzer
 );
 
-#[derive(ArgParser, Debug)]
+#[derive(ArgParser, Debug, Default)]
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long, help = "The file path for the source file to compile.")]
@@ -101,7 +101,10 @@ struct Args {
 
 fn main() {
     unsafe {
-        ARGS = Some(Args::parse());
+        let mut args = Args::parse();
+        args.output_analyzer = true;
+        args.stop_at_analyzer = true;
+        ARGS = Some(args);
     }
 
     if let Err(errors) = run() {
@@ -287,14 +290,27 @@ fn link(path: PathBuf) -> Result<(), Vec<String>> {
 mod tests {
     use std::path::PathBuf;
 
-    use inkwell::context::Context;
-    use inkwell::support::LLVMString;
-
-    use crate::{analysis, lexer, parser};
-    use crate::analysis::SharedReporter;
-    use crate::codegen::Compiler;
+    use crate::{Args, lexer, parser};
     use crate::data::ast::{Expression, InitDeclaration};
-    use crate::util::error::CompilerError;
+
+    fn init_args() {
+        let mut args = Args {
+            file_path: "".to_string(),
+            display_ast: false,
+            display_mlir: false,
+            display_llvm_graph: false,
+            display_internal_graphs: false,
+            output_lexer: false,
+            output_parser: false,
+            output_analyzer: false,
+            stop_at_lexer: false,
+            stop_at_parser: false,
+            stop_at_analyzer: false,
+        };
+        unsafe {
+            super::ARGS = Some(args);
+        }
+    }
 
     pub(crate) fn get_file_paths(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
@@ -305,64 +321,43 @@ mod tests {
         Ok(paths)
     }
 
-    #[derive(Debug)]
-    enum FailReason {
-        Lexer(Vec<CompilerError>),
-        Parser(Vec<CompilerError>),
-        Analyzer(SharedReporter),
-        Compiler(LLVMString),
-    }
-
-    fn run_test_on_file(path: &PathBuf) -> Result<(), FailReason> {
-        let source = std::fs::read_to_string(path).expect("Could not read file.");
-        let lexer = lexer::Lexer::new(source.into())
-            .lex_all()
-            .map_err(FailReason::Lexer)?;
-        let parser = parser::Parser::new(lexer.into_iter());
-        let result = parser.parse_all().map_err(FailReason::Parser)?;
-        let mlir_module = analysis::Analyzer::new(result)
-            .validate()
-            .map_err(FailReason::Analyzer)?;
-        let context = Context::create();
-        let module = context.create_module("test");
-        let compiler = Compiler::new(&mlir_module, &context, &module);
-        compiler.compile().map(|_| ()).map_err(FailReason::Compiler)
-    }
-
-    macro_rules! file_test_assert {
-        ($filename:expr, $assertion:expr, $result:expr) => {
-            if !$assertion {
-                panic!(
-                    "Assertion error in '{:#?}': `{:#?}`\n{:#?}",
-                    $filename,
-                    stringify!($assertion),
-                    $result
-                )
-            }
-        };
-    }
-
     mod should_succeed {
         use std::panic::catch_unwind;
 
-        use super::run_test_on_file;
+        use crate::compile;
+        use crate::util::display_utils::indent_string;
 
-        fn test_should_succeed_file(name: &str) {
-            let file_path = format!("_c_test_files/should_succeed/{}.c", name);
-            let test = &file_path.into();
-            match catch_unwind(|| run_test_on_file(test)) {
+        fn test_should_succeed_file(filename: &str) {
+            crate::tests::init_args();
+            let file_path = format!("_c_test_files/should_succeed/{}.c", filename);
+            let test = std::fs::read_to_string(file_path).expect("Could not read file.");
+            match catch_unwind(|| compile(test)) {
                 Ok(result) => {
-                    file_test_assert!(test, result.is_ok(), result);
+                    if let Err(errors) = result {
+                        let mut error_display = String::new();
+                        error_display.push_str("ERRORS: {");
+                        for mut err in errors {
+                            err = indent_string(err, 0, 2);
+                            error_display.push_str(&err);
+                        }
+                        error_display.push_str("}}");
+                        panic!("Test '{filename}' failed!");
+                    }
                 }
                 Err(err) => {
-                    panic!("Panic in thread from file '{:#?}'.", test);
+                    panic!("Panic in thread from file '{:#?}'.", filename);
                 }
             };
         }
 
         #[test]
-        fn test_basic_blocks() {
-            test_should_succeed_file("test_basic_blocks")
+        fn pointer_member() {
+            test_should_succeed_file("pointer_member")
+        }
+
+        #[test]
+        fn basic_blocks() {
+            test_should_succeed_file("basic_blocks")
         }
 
         #[test]
@@ -404,17 +399,18 @@ mod tests {
     mod should_fail {
         use std::panic::catch_unwind;
 
-        use crate::tests::run_test_on_file;
+        use crate::compile;
 
         fn test_should_fail_file(name: &str) {
-            let file_path = format!("_c_test_files/should_fail/{}.c", name);
-            let test = &file_path.into();
-            match catch_unwind(|| run_test_on_file(test)) {
+            crate::tests::init_args();
+            let file_path = format!("_c_test_files/should_succeed/{}.c", name);
+            let test = std::fs::read_to_string(file_path).expect("Could not read file.");
+            match catch_unwind(|| compile(test)) {
                 Ok(result) => {
-                    file_test_assert!(test, result.is_err(), result);
+                    assert!(result.is_err());
                 }
                 Err(err) => {
-                    panic!("Panic in thread from file '{:#?}'.", test);
+                    panic!("Panic in thread from file '{:#?}'.", name);
                 }
             };
         }

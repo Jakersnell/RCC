@@ -208,7 +208,7 @@ impl Display for MlirModule {
         }
 
         write!(f, "}} Global Variables {{ ")?;
-        for (_, var) in self.globals.iter() {
+        for var in self.globals.iter() {
             indent_write!(var);
         }
 

@@ -6,7 +6,7 @@ use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub fn compile_variable_declaration(&mut self, var: &MlirVariable, is_global: bool) {
+    pub fn compile_variable_declaration(&mut self, var: &'mlir MlirVariable, is_global: bool) {
         let MlirVariable {
             span,
             ty: mlir_type,
@@ -33,10 +33,26 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             }
         };
 
-        self.variables.insert(ident.value.clone(), var_ptr);
+        self.insert_pointer(ident.value.clone(), var_ptr);
 
+        let initializer = initializer.as_ref().map(|val| &val.value);
+
+        if is_global {
+            self.init_in_main
+                .push((ident.value.clone(), ty, initializer));
+        } else {
+            self.initialize_variable(ty, var_ptr, initializer);
+        }
+    }
+
+    pub fn initialize_variable(
+        &mut self,
+        ty: BasicTypeEnum<'ctx>,
+        var_ptr: PointerValue<'ctx>,
+        initializer: Option<&MlirVarInit>,
+    ) {
         if let Some(initializer) = initializer {
-            match &initializer.value {
+            match initializer {
                 MlirVarInit::Array(array) => {
                     debug_assert!(ty.is_array_type());
                     self.compile_array_initializer(var_ptr, ty, array);

@@ -23,10 +23,10 @@ use serde::ser::SerializeTuple;
 use crate::data::ast::BinaryOp::Add;
 use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirModule, MlirStmt, MlirStruct,
-    MlirType, MlirTypeDecl, MlirTypeKind, MlirVariable, VOID_PTR, VOID_TYPE,
+    MlirType, MlirTypeDecl, MlirTypeKind, MlirVariable, MlirVarInit, VOID_PTR, VOID_TYPE,
 };
 use crate::data::symbols::BUILTINS;
-use crate::util::str_intern;
+use crate::util::{Locatable, str_intern};
 use crate::util::str_intern::InternedStr;
 
 pub(in crate::codegen) mod binary_expressions;
@@ -40,11 +40,13 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) context: &'ctx Context,
     pub(in crate::codegen) builder: Option<Builder<'ctx>>,
     pub(in crate::codegen) module: &'a Module<'ctx>,
-    pub(in crate::codegen) functions: HashMap<InternedStr, FunctionValue<'ctx>>,
-    pub(in crate::codegen) variables: HashMap<InternedStr, PointerValue<'ctx>>,
     pub(in crate::codegen) fn_value_opt: Option<FunctionValue<'ctx>>,
     pub(in crate::codegen) struct_types: HashMap<InternedStr, StructType<'ctx>>,
     pub(in crate::codegen) block_has_jumped: bool,
+    pub(in crate::codegen) init_in_main:
+        Vec<(InternedStr, BasicTypeEnum<'ctx>, Option<&'mlir MlirVarInit>)>,
+    functions: HashMap<InternedStr, FunctionValue<'ctx>>,
+    variables: HashMap<InternedStr, PointerValue<'ctx>>,
 }
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -59,6 +61,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             fn_value_opt: None,
             builder: None,
             block_has_jumped: false,
+            init_in_main: vec![],
         };
         compiler.builder = Some(compiler.context.create_builder());
         compiler.compile_builtins();
@@ -70,7 +73,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             self.create_struct_type(_struct);
         }
 
-        for global in self.mlir.globals.values() {
+        for global in self.mlir.globals.iter() {
             self.compile_global(global);
         }
 
@@ -90,10 +93,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     #[inline(always)]
     pub(in crate::codegen) fn get_pointer(&self, ident: &InternedStr) -> PointerValue<'ctx> {
-        *self
-            .variables
-            .get(ident)
-            .expect(&format!("Pointer for '{ident}' does not exist in memory."))
+        *self.variables.get(ident).unwrap()
     }
 
     #[inline(always)]
@@ -132,7 +132,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    fn compile_global(&mut self, global: &MlirVariable) {
+    fn compile_global(&mut self, global: &'mlir MlirVariable) {
         self.compile_variable_declaration(global, true);
     }
 
@@ -161,7 +161,8 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .iter()
             .map(|variable_param| {
                 let param_type = &variable_param.ty;
-                self.convert_type(param_type).into()
+                let ty_enum = self.convert_type(param_type).into();
+                ty_enum
             })
             .collect();
 
@@ -181,7 +182,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         fn_val
     }
 
-    fn compile_function(&mut self, function: &MlirFunction) {
+    fn init_static_globals(&mut self) {
+        let init_in_main = std::mem::take(&mut self.init_in_main);
+        for (ident, ty, initializer) in init_in_main {
+            let ptr = self.get_pointer(&ident);
+            self.initialize_variable(ty, ptr, initializer);
+        }
+    }
+
+    fn compile_function(&mut self, function: &'mlir MlirFunction) {
         let context_function = self.compile_function_signature(function);
         let entry = self.context.append_basic_block(context_function, "entry");
 
@@ -189,12 +198,35 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.fn_value_opt = Some(context_function);
         self.variables.reserve(function.parameters.len());
 
+        if function.ident.as_ref() == "main" {
+            self.init_static_globals();
+        }
+
         for (llvm_param, mlir_param) in context_function
             .get_param_iter()
             .zip(function.parameters.iter())
         {
-            let allocation =
-                self.create_entry_block_allocation(llvm_param.get_type(), &mlir_param.ident);
+            let MlirVariable {
+                span,
+                ty: mlir_type,
+                ident,
+                is_const,
+                initializer,
+            } = &mlir_param.value;
+
+            let ty = if matches!(&mlir_type.decl, MlirTypeDecl::Array(_)) {
+                mlir_type.as_basic()
+            } else {
+                mlir_type.value.clone()
+            };
+            let ty = self.convert_type(&ty);
+
+            let allocation = match &mlir_param.ty.decl {
+                MlirTypeDecl::Array(size) => self.create_entry_block_array_allocation(ty, *size),
+                MlirTypeDecl::Pointer | MlirTypeDecl::Basic => {
+                    self.create_entry_block_allocation(ty, ident)
+                }
+            };
 
             self.builder().build_store(allocation, llvm_param).unwrap();
 
@@ -211,7 +243,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         self.fn_value_opt = None;
     }
 
-    fn process_function_body(&mut self, mlir_block: &MlirBlock) {
+    fn process_function_body(&mut self, mlir_block: &'mlir MlirBlock) {
         let mlir_basic_blocks = pre_construct_blocks(mlir_block);
         let function = self.fn_value();
 
@@ -300,11 +332,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         let basic_type = self.get_type_kind_as_llvm_any_type(&ty.kind);
 
-        match &ty.decl {
+        let finished_type = match &ty.decl {
             MlirTypeDecl::Array(size) => basic_type.into_array_type().into(),
             MlirTypeDecl::Pointer => basic_type.ptr_type(AddressSpace::default()).into(),
             MlirTypeDecl::Basic => basic_type,
-        }
+        };
+
+        finished_type
     }
 
     fn get_type_kind_as_llvm_any_type(&self, kind: &MlirTypeKind) -> BasicTypeEnum<'ctx> {

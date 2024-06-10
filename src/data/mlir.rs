@@ -43,7 +43,7 @@ pub const VOID_TYPE: MlirType = MlirType {
 pub struct MlirModule {
     pub functions: BTreeMap<InternedStr, MlirFunction>,
     pub structs: Vec<MlirStruct>,
-    pub globals: BTreeMap<InternedStr, MlirVariable>,
+    pub globals: Vec<MlirVariable>,
 }
 
 impl MlirModule {
