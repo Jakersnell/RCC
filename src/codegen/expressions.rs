@@ -2,7 +2,7 @@ use inkwell::{FloatPredicate, IntPredicate};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{CastType, MlirExpr, MlirExprKind, MlirLiteral, MlirType};
+use crate::data::mlir::{CastType, MlirExpr, MlirExprKind, MlirType};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -103,11 +103,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
 
         match cast_type {
-            CastType::SignedToUnsigned
-            | CastType::UnsignedToSigned
-            | CastType::PointerToPointer
-            | CastType::ArrayToPointer => return expr,
-
             CastType::PointerToLong => {
                 let i64_type = self.context.i64_type();
                 let ptr = expr.into_pointer_value();
@@ -184,42 +179,8 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                     .unwrap();
                 BasicValueEnum::from(value)
             }
-        }
-    }
 
-    #[rustfmt::skip]
-    fn compile_literal(&mut self, literal: &MlirLiteral) -> BasicValueEnum<'ctx> {
-        match literal {
-            MlirLiteral::Char(char) => {
-                self.context.i8_type().const_int(*char as u64, true).into()
-            }
-            MlirLiteral::UChar(char) => {
-                self.context.i8_type().const_int(*char as u64, false).into()
-            }
-            MlirLiteral::Int(int) => {
-                self.context.i32_type().const_int(*int as u64, true).into()
-            }
-            MlirLiteral::UInt(int) => {
-                self.context.i32_type().const_int(*int as u64, false).into()
-            }
-            MlirLiteral::Long(long) => {
-                self.context.i64_type().const_int(*long as u64, true).into()
-            }
-            MlirLiteral::ULong(long) => {
-                self.context.i64_type().const_int(*long, false).into()
-            }
-            MlirLiteral::Float(float) => {
-                self.context.f32_type().const_float(*float as f64).into()
-            }
-            MlirLiteral::Double(double) => {
-                self.context.f64_type().const_float(*double).into()
-            }
-            MlirLiteral::String(string) => {
-                let string_type = self.context.i8_type().array_type(string.len() as u32 + 1); // add one for null term
-                let global = self.module.add_global(string_type, None, "global_string");
-                global.set_initializer(&self.context.const_string(string, true));
-                global.as_pointer_value().into()
-            }
+            _ => unreachable!(),
         }
     }
 
