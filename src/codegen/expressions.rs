@@ -50,7 +50,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::RightShift(left, right) => self.compile_right_shift(left, right),
             MlirExprKind::Index(array, index) => self.compile_array_access(array, index, &expr.ty),
             MlirExprKind::Member(_struct, member) => self.compile_member_access(_struct, member),
-            MlirExprKind::Cast(cast_type, expr) => self.compile_cast(cast_type, expr, &expr.ty),
+            MlirExprKind::Cast(cast_to, cast_type, expr) => {
+                self.compile_cast(cast_to, cast_type, expr, &expr.ty)
+            }
             MlirExprKind::FunctionCall {
                 location,
                 ident,
@@ -87,6 +89,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn compile_cast(
         &mut self,
+        cast_to: &MlirType,
         cast_type: &CastType,
         expr: &MlirExpr,
         mlir_type: &MlirType,
@@ -106,7 +109,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
 
         match cast_type {
-            CastType::PointerToLong => {
+            CastType::PointerToInt => {
                 let i64_type = self.context.i64_type();
                 let ptr = expr.into_pointer_value();
                 let value = self
@@ -116,7 +119,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 BasicValueEnum::from(value)
             }
 
-            CastType::LongToPointer => {
+            CastType::IntToPointer => {
                 let ptr_type = self.convert_type(mlir_type).into_pointer_type();
                 let long = expr.into_int_value();
                 let value = self
@@ -126,12 +129,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 BasicValueEnum::from(value)
             }
 
-            CastType::IntToLong
-            | CastType::LongToInt
-            | CastType::IntToChar
-            | CastType::CharToInt => {
+            CastType::IntToInt => {
                 let int = expr.into_int_value();
-                let int_type = self.convert_type(mlir_type).into_int_type();
+                let int_type = self.convert_type(cast_to).into_int_type();
                 let value = self
                     .builder()
                     .build_int_cast(int, int_type, "int_to_int")
@@ -139,9 +139,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 BasicValueEnum::from(value)
             }
 
-            CastType::IntToFloat | CastType::LongToDouble => {
+            CastType::IntToFloat => {
                 let int = expr.into_int_value();
-                let float_type = self.convert_type(mlir_type).into_float_type();
+                let float_type = self.convert_type(cast_to).into_float_type();
                 let value = if unsigned_int {
                     self.builder().build_unsigned_int_to_float(
                         int,
@@ -156,9 +156,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 BasicValueEnum::from(value)
             }
 
-            CastType::DoubleToLong | CastType::FloatToInt => {
+            CastType::FloatToInt => {
                 let float = expr.into_float_value();
-                let int_type = self.convert_type(mlir_type).into_int_type();
+                let int_type = self.convert_type(cast_to).into_int_type();
                 let value = if unsigned_int {
                     self.builder().build_float_to_unsigned_int(
                         float,
@@ -173,9 +173,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 BasicValueEnum::from(value)
             }
 
-            CastType::FloatToDouble | CastType::DoubleToFloat => {
+            CastType::FloatToFloat => {
                 let float = expr.into_float_value();
-                let float_type = self.convert_type(mlir_type).into_float_type();
+                let float_type = self.convert_type(cast_to).into_float_type();
                 let value = self
                     .builder()
                     .build_float_cast(float, float_type, "float_to_float")
@@ -183,7 +183,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 BasicValueEnum::from(value)
             }
 
-            _ => unreachable!(),
+            unexpected => unreachable!("{}", unexpected.to_string()),
         }
     }
 

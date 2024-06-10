@@ -1,5 +1,4 @@
 use crate::analysis::Analyzer;
-use crate::analysis::casting::numeric_cast;
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
@@ -28,7 +27,7 @@ impl Analyzer {
             Expression::Cast(dec, expr) => self.validate_cast_expression(dec, expr),
             _ => unreachable!(),
         }
-        .map(|expr| expr.fold())
+        // .map(|expr| expr.fold())
     }
 
     fn validate_variable_access(
@@ -454,33 +453,29 @@ impl Analyzer {
                     self.report_error(CompilerError::NonNumericNegation(span));
                     Ok(expr)
                 } else {
-                    let expr = match &expr.ty.kind {
-                        MlirTypeKind::Char(true) => numeric_cast(
-                            expr,
-                            MlirType {
-                                kind: MlirTypeKind::Char(false),
-                                decl: MlirTypeDecl::Basic,
-                            },
-                            span,
-                        ),
-                        MlirTypeKind::Int(true) => numeric_cast(
-                            expr,
-                            MlirType {
-                                kind: MlirTypeKind::Int(false),
-                                decl: MlirTypeDecl::Basic,
-                            },
-                            span,
-                        ),
-                        MlirTypeKind::Long(true) => numeric_cast(
-                            expr,
-                            MlirType {
-                                kind: MlirTypeKind::Long(false),
-                                decl: MlirTypeDecl::Basic,
-                            },
-                            span,
-                        ),
-                        _ => expr,
+                    let expr_cast_target = match &expr.ty.kind {
+                        MlirTypeKind::Char(true) => Some(MlirType {
+                            kind: MlirTypeKind::Char(false),
+                            decl: MlirTypeDecl::Basic,
+                        }),
+                        MlirTypeKind::Int(true) => Some(MlirType {
+                            kind: MlirTypeKind::Int(false),
+                            decl: MlirTypeDecl::Basic,
+                        }),
+                        MlirTypeKind::Long(true) => Some(MlirType {
+                            kind: MlirTypeKind::Long(false),
+                            decl: MlirTypeDecl::Basic,
+                        }),
+
+                        _ => None,
                     };
+
+                    let expr = if let Some(cast_target) = expr_cast_target {
+                        self.implicit_cast(expr, cast_target, span)
+                    } else {
+                        expr
+                    };
+
                     let ty = expr.ty.clone();
                     Ok(MlirExpr {
                         span,

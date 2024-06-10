@@ -75,20 +75,15 @@ impl Display for CastType {
         let string_repr = match self {
             CastType::ArrayToPointer => "array-to-pointer",
             CastType::PointerToPointer => "pointer-to-pointer",
-            CastType::PointerToLong => "pointer-to-long",
-            CastType::LongToPointer => "long-to-pointer",
+            CastType::PointerToInt => "pointer-to-long",
+            CastType::IntToPointer => "long-to-pointer",
             CastType::SignedToUnsigned => "signed-to-unsigned",
             CastType::UnsignedToSigned => "unsigned-to-signed",
-            CastType::CharToInt => "char-to-int",
             CastType::IntToFloat => "int-to-float",
-            CastType::IntToLong => "int-to-long",
-            CastType::FloatToDouble => "float-to-double",
-            CastType::LongToDouble => "long-to-double",
-            CastType::DoubleToLong => "double-to-long",
-            CastType::LongToInt => "long-to-int",
-            CastType::IntToChar => "int-to-char",
-            CastType::DoubleToFloat => "double-to-float",
             CastType::FloatToInt => "float-to-int",
+            CastType::InvalidCast => "invalid-cast",
+            CastType::IntToInt => "int-to-int",
+            CastType::FloatToFloat => "float-to-float",
         };
         write!(f, "{}", string_repr)
     }
@@ -161,8 +156,8 @@ impl Display for MlirExpr {
             }
             MlirExprKind::Index(left, right) => write!(f, "(({})[{}])", left, right),
             MlirExprKind::Member(left, right) => write!(f, "{}.{}", left, right),
-            MlirExprKind::Cast(cast_type, expression) => {
-                write!(f, "(<cast-{}>({}))", cast_type, expression)
+            MlirExprKind::Cast(cast_to, cast_type, expression) => {
+                write!(f, "(<cast-{}>({cast_to}, {}))", cast_type, expression)
             }
         }
     }

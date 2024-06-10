@@ -13,7 +13,6 @@ use crate::util::str_intern::InternedStr;
 
 mod binary_expressions;
 mod casting;
-mod constant_folding;
 mod control_flow;
 mod declarations;
 mod expressions;

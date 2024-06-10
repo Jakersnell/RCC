@@ -204,9 +204,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         float_predicate: FloatPredicate,
         name: &str,
     ) -> BasicValueEnum<'ctx> {
+        if cfg!(debug_assertions) && left.ty != right.ty {
+            println!("LEFT TYPE:\n{:#?}", left.ty);
+            println!("RIGHT TYPE:\n{:#?}", right.ty);
+            panic!("Left and Right CMP types are not the same.")
+        }
+
         macro_rules! tag_name {
             () => {
-                &format!("cmp_{name}___start_{}__end_{}", left.span, right.span)
+                &format!("cmp_{name}")
             };
         }
         match self.compile_binary_expr(left, right) {

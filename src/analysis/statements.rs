@@ -1,8 +1,8 @@
 use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
 use crate::data::mlir::{MlirBlock, MlirExpr, MlirStmt, SIGNED_INT_TYPE, VOID_TYPE};
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
-use crate::util::{str_intern, Locatable, Span};
 
 impl Analyzer {
     #[inline(always)]
@@ -171,9 +171,7 @@ impl Analyzer {
         let function_ty = self.return_ty.as_ref().unwrap_or(&VOID_TYPE).clone();
         let value = if let Some(value) = value {
             let value_mlir = self.validate_expression(value)?;
-            let casted_value_mlir = self
-                .implicit_cast(value_mlir, function_ty.clone(), span)
-                .fold();
+            let casted_value_mlir = self.implicit_cast(value_mlir, function_ty.clone(), span);
             Some(casted_value_mlir)
         } else {
             None
@@ -183,13 +181,6 @@ impl Analyzer {
             .map(|expr| &expr.ty)
             .unwrap_or(&VOID_TYPE)
             .clone();
-        if function_ty != value_ty {
-            self.report_error(CompilerError::InvalidReturnType(
-                function_ty.to_string(),
-                value_ty.to_string(),
-                span,
-            ));
-        }
         Ok(Some(MlirStmt::Return(value)))
     }
 

@@ -146,6 +146,10 @@ impl Display for MlirType {
 }
 
 impl MlirType {
+    pub fn is_float(&self) -> bool {
+        self.is_basic() && matches!(self.kind, MlirTypeKind::Float | MlirTypeKind::Double)
+    }
+
     pub fn get_struct_ident(&self) -> &InternedStr {
         debug_assert!(self.is_basic());
         match &self.kind {
@@ -158,11 +162,11 @@ impl MlirType {
     }
 
     pub fn is_unsigned_int(&self) -> bool {
-        debug_assert!(self.is_basic());
-        matches!(
-            &self.kind,
-            MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true)
-        )
+        self.is_basic()
+            && matches!(
+                &self.kind,
+                MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true)
+            )
     }
 
     pub fn as_basic(&self) -> Self {
@@ -396,27 +400,22 @@ pub enum MlirExprKind {
     },
     Index(MlirExpr, MlirExpr),
     Member(MlirExpr, InternedStr),
-    Cast(CastType, MlirExpr),
+    Cast(MlirType, CastType, MlirExpr),
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq, Copy)]
 pub enum CastType {
+    InvalidCast,
     ArrayToPointer,
     PointerToPointer,
-    PointerToLong,
-    LongToPointer,
+    PointerToInt,
+    IntToPointer,
     SignedToUnsigned,
     UnsignedToSigned,
-    CharToInt,
+    IntToInt,
     IntToFloat,
-    IntToLong,
-    FloatToDouble,
-    LongToDouble,
-    DoubleToLong,
-    LongToInt,
-    IntToChar,
-    DoubleToFloat,
     FloatToInt,
+    FloatToFloat,
 }
 
 impl MlirExprKind {
