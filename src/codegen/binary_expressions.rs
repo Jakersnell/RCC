@@ -204,25 +204,30 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         float_predicate: FloatPredicate,
         name: &str,
     ) -> BasicValueEnum<'ctx> {
+        macro_rules! tag_name {
+            () => {
+                &format!("cmp_{name}___start_{}__end_{}", left.span, right.span)
+            };
+        }
         match self.compile_binary_expr(left, right) {
             (BasicValueEnum::PointerValue(left), BasicValueEnum::PointerValue(right)) => {
                 BasicValueEnum::from(
                     self.builder()
-                        .build_int_compare(int_predicate, left, right, &format!("ptr_{name}"))
+                        .build_int_compare(int_predicate, left, right, tag_name!())
                         .unwrap(),
                 )
             }
             (BasicValueEnum::IntValue(left), BasicValueEnum::IntValue(right)) => {
                 BasicValueEnum::from(
                     self.builder()
-                        .build_int_compare(int_predicate, left, right, &format!("int_{name}"))
+                        .build_int_compare(int_predicate, left, right, tag_name!())
                         .unwrap(),
                 )
             }
             (BasicValueEnum::FloatValue(left), BasicValueEnum::FloatValue(right)) => {
                 BasicValueEnum::from(
                     self.builder()
-                        .build_float_compare(float_predicate, left, right, &format!("float_{name}"))
+                        .build_float_compare(float_predicate, left, right, tag_name!())
                         .unwrap(),
                 )
             }
