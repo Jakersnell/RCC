@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::io::Read;
 use std::ops::{Deref, DerefMut};
 
@@ -66,7 +66,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Default, Hash, PartialOrd, Eq)]
+#[derive(PartialEq, Clone, Copy, Default, Hash, PartialOrd, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -106,10 +106,11 @@ impl Span {
 
 impl Display for Span {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "src: {}:{}:{}:{}",
-            self.line, self.col, self.start, self.end
-        )
+        write!(f, "{}:{}:{}:{}", self.line, self.col, self.start, self.end)
+    }
+}
+impl Debug for Span {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{}:{}:{}:{}", self.line, self.col, self.start, self.end)
     }
 }
