@@ -337,11 +337,12 @@ mod tests {
                         let mut error_display = String::new();
                         error_display.push_str("ERRORS: {");
                         for mut err in errors {
-                            err = indent_string(err, 0, 2);
+                            err = indent_string(err, 0, 4);
+                            error_display.push('\n');
                             error_display.push_str(&err);
                         }
                         error_display.push_str("}}");
-                        panic!("Test '{filename}' failed!");
+                        panic!("Test '{filename}' failed!\n{error_display}");
                     }
                 }
                 Err(err) => {
@@ -403,7 +404,7 @@ mod tests {
 
         fn test_should_fail_file(name: &str) {
             crate::tests::init_args();
-            let file_path = format!("_c_test_files/should_succeed/{}.c", name);
+            let file_path = format!("_c_test_files/should_fail/{}.c", name);
             let test = std::fs::read_to_string(file_path).expect("Could not read file.");
             match catch_unwind(|| compile(test)) {
                 Ok(result) => {
