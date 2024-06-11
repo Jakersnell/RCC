@@ -70,7 +70,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let function = *self
             .functions
             .get(ident)
-            .expect("Function does not exist in memory.");
+            .unwrap_or_else(|| panic!("Function '{ident}' does not exist in memory."));
 
         let compiled_args: Vec<BasicMetadataValueEnum> = args
             .iter()

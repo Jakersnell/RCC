@@ -51,7 +51,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     #[inline(always)]
     fn compile_goto(&mut self, label: &InternedStr) {
-        let goto_block = self.get_block_by_name(label).unwrap();
+        let goto_block = self.get_block_by_name(label);
         self.builder().build_unconditional_branch(goto_block);
     }
 
@@ -63,8 +63,8 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .builder()
             .build_int_cast(condition, i1_type, "conv_to_i1_type")
             .unwrap();
-        let then_block = self.get_block_by_name(then).unwrap();
-        let else_block = self.get_block_by_name(_else).unwrap();
+        let then_block = self.get_block_by_name(then);
+        let else_block = self.get_block_by_name(_else);
         self.builder()
             .build_conditional_branch(condition, then_block, else_block);
     }

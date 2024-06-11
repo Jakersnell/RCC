@@ -208,7 +208,7 @@ impl Display for MlirModule {
         }
 
         write!(f, "}}\n Functions {{")?;
-        for (_, func) in self.functions.iter() {
+        for func in self.functions.iter() {
             indent_write!(func);
         }
 

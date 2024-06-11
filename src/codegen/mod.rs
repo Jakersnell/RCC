@@ -78,7 +78,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             self.compile_global(global);
         }
 
-        for function in self.mlir.functions.values() {
+        for function in self.mlir.functions.iter() {
             self.compile_function(function);
         }
 
@@ -108,10 +108,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(in crate::codegen) fn get_block_by_name(&self, name: &str) -> Option<BasicBlock<'ctx>> {
+    pub(in crate::codegen) fn get_block_by_name(&self, name: &str) -> BasicBlock<'ctx> {
         self.fn_value()
             .get_basic_block_iter()
             .find(|block| block.get_name().to_str().unwrap() == name)
+            .unwrap_or_else(|| panic!("Basic block by name '{name}' does not exist in memory."))
     }
 
     #[inline(always)]
@@ -397,6 +398,7 @@ pub fn pre_construct_blocks(function_block: &MlirBlock) -> Vec<MlirBasicBlock<'_
         }
     }
 
+    new_block!();
     blocks
 }
 

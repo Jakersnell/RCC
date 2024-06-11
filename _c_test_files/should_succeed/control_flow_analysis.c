@@ -6,7 +6,6 @@ int test(int a, int b) {
     } else {
         return -1;
     }
-
 }
 
 int main() {
