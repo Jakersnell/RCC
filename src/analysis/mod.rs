@@ -67,20 +67,9 @@ impl Analyzer {
 
     pub fn validate(mut self) -> Result<MlirModule, SharedReporter> {
         let mut globals = Vec::new();
-        let mut functions = BTreeMap::new();
+        let mut functions = Vec::new();
         let mut structs = Vec::new();
         let ast = self.ast.take().expect("Ast must be Some(T)");
-        macro_rules! push_locatable {
-            ($map:expr, $func:expr, $locatable:ident) => {
-                #[allow(clippy::redundant_closure_call)]
-                if let Ok(result) = $func($locatable) {
-                    $map.insert(
-                        result.ident.clone(),
-                        $locatable.location.into_locatable(result),
-                    );
-                }
-            };
-        }
         for node in &*ast {
             use crate::data::ast::InitDeclaration::*;
             match node {
@@ -91,11 +80,9 @@ impl Analyzer {
                     }
                 }
                 Function(locatable_function) => {
-                    push_locatable!(
-                        functions,
-                        |item| self.validate_function_definition(item),
-                        locatable_function
-                    )
+                    if let Ok(func) = self.validate_function_definition(locatable_function) {
+                        functions.push(func);
+                    }
                 }
                 Struct(locatable_struct) => {
                     if let Ok(_struct) = self.validate_struct_definition(locatable_struct) {
@@ -111,19 +98,9 @@ impl Analyzer {
             self.report_warning(CompilerWarning::UnusedItem(ident.to_string(), span))
         }
 
-        fn deref_map<K: Eq + std::hash::Hash + std::cmp::Ord, T>(
-            map: BTreeMap<K, Locatable<T>>,
-        ) -> BTreeMap<K, T> {
-            let mut dest = BTreeMap::new();
-            for (key, value) in map.into_iter() {
-                dest.insert(key, value.value);
-            }
-            dest
-        }
+        let main_exists = functions.iter().any(|f| f.ident.as_ref() == "main");
 
-        let functions = deref_map(functions);
-
-        if self.reporter.borrow().status().is_ok() && !functions.contains_key("main") {
+        if self.reporter.borrow().status().is_ok() && !main_exists {
             self.report_error(CompilerError::MissingMain);
         }
 
