@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hasher;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use derive_new::new;
 
@@ -41,7 +40,7 @@ pub const VOID_TYPE: MlirType = MlirType {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct MlirModule {
-    pub functions: BTreeMap<InternedStr, MlirFunction>,
+    pub functions: Vec<MlirFunction>,
     pub structs: Vec<MlirStruct>,
     pub globals: Vec<MlirVariable>,
 }
@@ -456,6 +455,12 @@ impl Deref for MlirBlock {
     type Target = Vec<MlirStmt>;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for MlirBlock {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
