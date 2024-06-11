@@ -82,7 +82,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     ) -> PointerValue<'ctx> {
         let var_ptr = self.get_lval_as_pointer(_struct);
         let struct_ident = _struct.ty.get_struct_ident();
-        let member_index = self.mlir.get_struct_member_offset(struct_ident, member);
+        let member_index = self.mlir.get_struct_member_index(struct_ident, member);
 
         let struct_type = self.get_struct_type(struct_ident);
         let pointee_type = struct_type.ptr_type(AddressSpace::default());
@@ -146,9 +146,15 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         member: &InternedStr,
     ) -> BasicValueEnum<'ctx> {
         let struct_ident = _struct.ty.get_struct_ident();
-        let member_offset = self.mlir.get_struct_member_offset(struct_ident, member);
+        let member_index = self.mlir.get_struct_member_index(struct_ident, member);
         let compiled_struct = self.compile_expression(_struct).into_struct_value();
-        compiled_struct.get_field_at_index(member_offset).unwrap()
+        self.builder()
+            .build_extract_value(
+                compiled_struct,
+                member_index,
+                &format!("{struct_ident}_{member}_extract"),
+            )
+            .unwrap()
     }
 
     pub fn compile_variable_access(

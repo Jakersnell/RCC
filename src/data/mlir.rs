@@ -51,11 +51,7 @@ impl MlirModule {
             .iter()
             .find(|_struct| _struct.ident.value.as_ref() == ident)
     }
-    pub fn get_struct_member_offset(
-        &self,
-        struct_ident: &InternedStr,
-        member: &InternedStr,
-    ) -> u32 {
+    pub fn get_struct_member_index(&self, struct_ident: &InternedStr, member: &InternedStr) -> u32 {
         self.get_struct(struct_ident)
             .expect("Struct not found in module!")
             .get_member_offset(member)
