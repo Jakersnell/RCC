@@ -15,11 +15,15 @@ impl Analyzer {
     pub(super) fn validate_block(&mut self, block: &Locatable<Block>) -> Result<MlirBlock, ()> {
         self.push_scope();
         let mut statements = Vec::new();
+        let mut branch_has_jumped = false;
         for raw_stmt in &block.0 {
             if let Some(stmt) = self.validate_statement(raw_stmt)? {
                 statements.push(stmt);
+                // jump may have unreachable code after the jump
+                branch_has_jumped = self.branch_has_jumped || branch_has_jumped;
             }
         }
+        self.branch_has_jumped = branch_has_jumped;
         self.pop_scope();
         Ok(MlirBlock(statements))
     }
@@ -53,6 +57,7 @@ impl Analyzer {
     }
 
     fn validate_continue_statement(&mut self, span: Span) -> Result<Option<MlirStmt>, ()> {
+        self.branch_has_jumped = true;
         self.loop_label_stack
             .iter()
             .last()
@@ -63,6 +68,7 @@ impl Analyzer {
     }
 
     fn validate_break_statement(&mut self, span: Span) -> Result<Option<MlirStmt>, ()> {
+        self.branch_has_jumped = true;
         self.loop_label_stack
             .iter()
             .last()
@@ -101,11 +107,15 @@ impl Analyzer {
 
         block.push(MlirStmt::Label(then_label));
 
+        self.branch_has_jumped = false;
         if let Some(then) = self.validate_statement(then)? {
             block.push(then);
-            let goto_end = MlirStmt::Goto(end_label.clone());
-            block.push(goto_end);
+            if !self.branch_has_jumped {
+                let goto_end = MlirStmt::Goto(end_label.clone());
+                block.push(goto_end);
+            }
         }
+        let mut then_has_jumped = self.branch_has_jumped;
 
         block.push(MlirStmt::Label(else_label));
 
@@ -115,7 +125,11 @@ impl Analyzer {
             }
         }
 
-        block.push(MlirStmt::Label(end_label));
+        if !then_has_jumped {
+            block.push(MlirStmt::Label(end_label));
+        }
+
+        self.branch_has_jumped = then_has_jumped && self.branch_has_jumped;
 
         Ok(Some(MlirStmt::Block(MlirBlock(block))))
     }
@@ -168,6 +182,8 @@ impl Analyzer {
         value: &Option<Locatable<Expression>>,
         span: Span,
     ) -> Result<Option<MlirStmt>, ()> {
+        self.branch_has_jumped = true;
+
         let function_ty = self.return_ty.as_ref().unwrap_or(&VOID_TYPE).clone();
         let value = if let Some(value) = value {
             let value_mlir = self.validate_expression(value)?;
@@ -176,11 +192,13 @@ impl Analyzer {
         } else {
             None
         };
+
         let value_ty = value
             .as_ref()
             .map(|expr| &expr.ty)
             .unwrap_or(&VOID_TYPE)
             .clone();
+
         Ok(Some(MlirStmt::Return(value)))
     }
 

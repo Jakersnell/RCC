@@ -57,6 +57,7 @@ impl Analyzer {
         &mut self,
         func: &Locatable<FunctionDeclaration>,
     ) -> Result<MlirFunction, ()> {
+        self.branch_has_jumped = false;
         let (func_span, func) = (func.location, &func.value);
         let (dec_span, dec) = (func.declaration.location, &func.declaration.value);
         if !dec.specifier.specifiers.is_empty() {

@@ -52,6 +52,7 @@ pub struct Analyzer {
     reporter: SharedReporter,
     return_ty: Option<MlirType>, // for functions
     loop_label_stack: VecDeque<InternedStr>,
+    branch_has_jumped: bool,
 }
 
 impl Analyzer {
@@ -62,6 +63,7 @@ impl Analyzer {
             reporter: SharedReporter::default(),
             return_ty: None,
             loop_label_stack: VecDeque::new(),
+            branch_has_jumped: false,
         }
     }
 
