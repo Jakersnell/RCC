@@ -54,7 +54,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         if let Some(initializer) = initializer {
             match initializer {
                 MlirVarInit::Array(array) => {
-                    debug_assert!(ty.is_array_type());
                     self.compile_array_initializer(var_ptr, ty, array);
                 }
                 MlirVarInit::Expr(expr) => {
