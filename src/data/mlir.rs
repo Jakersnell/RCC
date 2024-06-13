@@ -141,6 +141,7 @@ impl Display for MlirType {
 }
 
 impl MlirType {
+    #[inline]
     pub fn is_float(&self) -> bool {
         self.is_basic() && matches!(self.kind, MlirTypeKind::Float | MlirTypeKind::Double)
     }
@@ -155,7 +156,7 @@ impl MlirType {
             ),
         }
     }
-
+    #[inline]
     pub fn is_unsigned_int(&self) -> bool {
         self.is_basic()
             && matches!(
@@ -163,7 +164,7 @@ impl MlirType {
                 MlirTypeKind::Char(true) | MlirTypeKind::Int(true) | MlirTypeKind::Long(true)
             )
     }
-
+    #[inline]
     pub fn as_basic(&self) -> Self {
         debug_assert!(!self.is_basic());
         Self {
@@ -171,24 +172,28 @@ impl MlirType {
             kind: self.kind.clone(),
         }
     }
-
+    #[inline]
     pub fn is_array(&self) -> bool {
         matches!(self.decl, MlirTypeDecl::Array(_)) && !matches!(&self.decl, MlirTypeDecl::Pointer)
     }
-
+    #[inline]
     pub fn is_pointer(&self) -> bool {
         matches!(self.decl, MlirTypeDecl::Pointer)
     }
-
+    #[inline]
     pub fn is_numeric(&self) -> bool {
         self.kind.is_numeric()
             && !matches!(&self.decl, MlirTypeDecl::Pointer)
             && !matches!(&self.decl, MlirTypeDecl::Array(_))
     }
 
+    pub fn get_is_unsigned(&self) -> bool {
+        self.kind.get_is_unsigned()
+    }
+
+    #[inline]
     pub fn is_integer(&self) -> bool {
-        use MlirTypeKind::*;
-        matches!(&self.kind, Char(_) | Int(_) | Long(_)) && !self.is_pointer()
+        self.kind.is_integer()
     }
 
     pub fn try_implicit_cast(&self, to: &MlirType) -> Option<MlirType> {
@@ -278,6 +283,19 @@ impl MlirTypeKind {
             ),
         }
     }
+
+    pub fn is_integer(&self) -> bool {
+        use MlirTypeKind::*;
+        matches!(self, Char(_) | Int(_) | Long(_))
+    }
+
+    pub fn get_is_unsigned(&self) -> bool {
+        use MlirTypeKind::*;
+        match self {
+            Char(is_unsigned) | Int(is_unsigned) | Long(is_unsigned) => *is_unsigned,
+            _ => panic!("Type is not integer."),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -320,31 +338,39 @@ pub struct MlirExpr {
 }
 
 impl MlirExpr {
+    #[inline]
     pub fn is_literal(&self) -> bool {
         matches!(self.kind.as_ref(), MlirExprKind::Literal(_))
     }
+    #[inline]
     pub fn is_string(&self) -> bool {
         matches!(
             self.kind.as_ref(),
             MlirExprKind::Literal(MlirLiteral::String(_))
         )
     }
+
+    #[inline]
     pub fn is_integer_or_pointer(&self) -> bool {
         self.ty.is_integer() || self.ty.is_pointer()
     }
 
+    #[inline]
     pub fn is_integer(&self) -> bool {
         self.ty.is_integer()
     }
 
+    #[inline]
     pub fn is_pointer(&self) -> bool {
         self.ty.is_pointer()
     }
 
+    #[inline]
     pub fn is_array(&self) -> bool {
         self.ty.is_array()
     }
 
+    #[inline]
     pub fn is_numeric(&self) -> bool {
         self.ty.is_numeric()
     }
