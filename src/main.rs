@@ -101,6 +101,7 @@ struct Args {
 
 fn main() {
     unsafe {
+        // This is safe because this is a single process program
         let mut args = Args::parse();
         args.output_analyzer = true;
         args.stop_at_analyzer = true;
@@ -118,7 +119,7 @@ fn run() -> Result<(), Vec<String>> {
     let file_path = file_path();
     let source = load_src(file_path.into())?;
     let llir = compile(source)?;
-    output_file(file_path.into(), llir)?;
+    output_llir(file_path.into(), llir)?;
     link(file_path.into())?;
     Ok(())
 }
@@ -219,7 +220,7 @@ fn compile(source: String) -> Result<String, Vec<String>> {
     Ok(llir.to_string())
 }
 
-fn output_file(path: PathBuf, llir: String) -> Result<(), Vec<String>> {
+fn output_llir(path: PathBuf, llir: String) -> Result<(), Vec<String>> {
     assert!(path.exists());
     let ll_path = path.with_extension("ll");
     std::fs::write(ll_path, llir).map_err(display_to_vec)
@@ -293,20 +294,23 @@ mod tests {
     use crate::{Args, lexer, parser};
     use crate::data::ast::{Expression, InitDeclaration};
 
+    static DISPLAY_ERRORS_DURING_TESTS: bool = true;
+
     fn init_args() {
         let mut args = Args {
             file_path: "".to_string(),
-            display_ast: false,
-            display_mlir: false,
-            display_llvm_graph: false,
-            display_internal_graphs: false,
-            output_lexer: false,
-            output_parser: false,
-            output_analyzer: false,
-            stop_at_lexer: false,
-            stop_at_parser: false,
-            stop_at_analyzer: false,
+            display_ast: cfg!(display_ast_during_tests),
+            display_mlir: cfg!(display_mlir_during_tests),
+            display_llvm_graph: cfg!(display_llvm_graph_during_tests),
+            display_internal_graphs: cfg!(display_internal_graphs_during_tests),
+            output_lexer: cfg!(output_lexer_during_tests),
+            output_parser: cfg!(output_parser_during_tests),
+            output_analyzer: cfg!(output_analyzer_during_tests),
+            stop_at_lexer: cfg!(stop_at_lexer_during_tests),
+            stop_at_parser: cfg!(stop_at_parser_during_tests),
+            stop_at_analyzer: cfg!(stop_at_analyzer_during_tests),
         };
+
         unsafe {
             super::ARGS = Some(args);
         }
@@ -321,6 +325,89 @@ mod tests {
         Ok(paths)
     }
 
+    macro_rules! unexpected_error_outcome {
+        ($filename:expr, $errors:expr) => {
+            use crate::tests::DISPLAY_ERRORS_DURING_TESTS;
+            if DISPLAY_ERRORS_DURING_TESTS {
+                println!("ERRORS: {{");
+                for mut err in $errors {
+                    println!();
+                    err = indent_string(err, 0, 4);
+                    println!("{}", &err);
+                }
+                println!("}}");
+            }
+            panic!("Test '{}' failed!", $filename);
+        };
+    }
+
+    mod output_tests {
+        use std::panic::catch_unwind;
+        use std::path::PathBuf;
+        use std::process::Command;
+
+        use crate::{compile, link};
+        use crate::util::display_utils::indent_string;
+
+        fn run_capture_output_test(filename: &str) {
+            crate::tests::init_args();
+            static BASE: &str = "_c_test_files/output_tests/";
+
+            let src_filepath = format!("{BASE}{filename}.c");
+            let expected_output_filepath = format!("{BASE}{filename}.expected_output");
+            let src =
+                std::fs::read_to_string(src_filepath.clone()).expect("Could not read source file.");
+            let expected_output = std::fs::read_to_string(expected_output_filepath)
+                .expect("Could not read expected output file.");
+
+            match catch_unwind(|| compile(src)) {
+                Ok(result) => match result {
+                    Ok(llir) => {
+                        let given_output = run_program_capture_output(src_filepath.into(), llir);
+                        assert_eq!(expected_output, given_output);
+                    }
+                    Err(errors) => {
+                        unexpected_error_outcome!(src_filepath, errors);
+                    }
+                },
+                Err(err) => {
+                    panic!("Panic in thread from file '{:#?}'.", filename);
+                }
+            };
+        }
+
+        fn run_program_capture_output(src_filepath: PathBuf, llir: String) -> String {
+            let src_filepath: PathBuf = src_filepath;
+            let temp_dir_filepath = src_filepath.parent().unwrap().join(PathBuf::from("temp"));
+            std::fs::create_dir_all(temp_dir_filepath.clone()).unwrap();
+            let filename = src_filepath.file_stem().unwrap().to_str().unwrap();
+            let ll_filepath = temp_dir_filepath.join(format!("{filename}.ll"));
+            std::fs::write(ll_filepath.clone(), llir);
+            link(ll_filepath);
+            let given_output = Command::new(format!("./{filename}"))
+                .current_dir(temp_dir_filepath)
+                .output()
+                .unwrap()
+                .stdout;
+
+            String::from_utf8(given_output).expect("Could not convert program output to utf8.")
+        }
+
+        macro_rules! test {
+            ($name:ident) => {
+                #[test]
+                fn $name() {
+                    run_capture_output_test(stringify!($name))
+                }
+            };
+        }
+
+        #[test]
+        fn struct_member() {
+            run_capture_output_test("struct_member")
+        }
+    }
+
     mod should_succeed {
         use std::panic::catch_unwind;
 
@@ -330,19 +417,11 @@ mod tests {
         fn test_should_succeed_file(filename: &str) {
             crate::tests::init_args();
             let file_path = format!("_c_test_files/should_succeed/{}.c", filename);
-            let test = std::fs::read_to_string(file_path).expect("Could not read file.");
+            let test = std::fs::read_to_string(file_path.clone()).expect("Could not read file.");
             match catch_unwind(|| compile(test)) {
                 Ok(result) => {
                     if let Err(errors) = result {
-                        let mut error_display = String::new();
-                        error_display.push_str("ERRORS: {");
-                        for mut err in errors {
-                            err = indent_string(err, 0, 4);
-                            error_display.push('\n');
-                            error_display.push_str(&err);
-                        }
-                        error_display.push_str("}}");
-                        panic!("Test '{filename}' failed!\n{error_display}");
+                        unexpected_error_outcome!(file_path.clone(), errors);
                     }
                 }
                 Err(err) => {
