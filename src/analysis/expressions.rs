@@ -6,9 +6,9 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
 };
 use crate::data::tokens::Literal;
-use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {

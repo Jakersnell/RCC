@@ -1,9 +1,9 @@
-use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::PointerValue;
+use inkwell::AddressSpace;
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
+use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVarInit, MlirVariable};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_variable_declaration(&mut self, var: &'mlir MlirVariable, is_global: bool) {

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter, write};
+use std::fmt::{write, Debug, Display, Formatter};
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufWriter, Write};

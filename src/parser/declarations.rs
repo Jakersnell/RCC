@@ -1,6 +1,6 @@
 use crate::data::ast::*;
 use crate::data::tokens::*;
-use crate::parser::{Parser, ParseResult};
+use crate::parser::{ParseResult, Parser};
 use crate::util::error::CompilerError;
 use crate::util::Locatable;
 

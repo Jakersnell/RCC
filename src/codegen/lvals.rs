@@ -1,6 +1,6 @@
-use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
+use inkwell::AddressSpace;
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind, MlirType};

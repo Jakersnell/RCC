@@ -1,8 +1,8 @@
 use crate::analysis::Analyzer;
 use crate::data::ast::{Block, Expression, Statement, VariableDeclaration};
 use crate::data::mlir::{MlirBlock, MlirExpr, MlirStmt, SIGNED_INT_TYPE, VOID_TYPE};
-use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
+use crate::util::{str_intern, Locatable, Span};
 
 impl Analyzer {
     #[inline(always)]
