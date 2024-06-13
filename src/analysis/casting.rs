@@ -171,6 +171,24 @@ impl Analyzer {
         debug_assert!(expr.ty.is_numeric());
         debug_assert!(cast_to.is_numeric());
         match (&expr.ty, &cast_to) {
+            (_, _)
+                if expr.ty.is_integer()
+                    && cast_to.is_integer()
+                    && expr.ty.get_is_unsigned()
+                    && !cast_to.get_is_unsigned() =>
+            {
+                CastType::UnsignedToSigned
+            }
+
+            (_, _)
+                if expr.ty.is_integer()
+                    && cast_to.is_integer()
+                    && !expr.ty.get_is_unsigned()
+                    && cast_to.get_is_unsigned() =>
+            {
+                CastType::SignedToUnsigned
+            }
+
             (
                 // int <-> int
                 _,
