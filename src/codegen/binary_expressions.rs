@@ -1,6 +1,6 @@
-use inkwell::{FloatPredicate, IntPredicate};
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::values::{BasicValueEnum, IntValue};
+use inkwell::{FloatPredicate, IntPredicate};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::MlirExpr;

@@ -1,5 +1,14 @@
 [features]
-
+display_ast_during_tests = []
+display_mlir_during_tests = []
+display_llvm_graph_during_tests = []
+display_internal_graphs_during_tests = []
+output_lexer_during_tests = []
+output_parser_during_tests = []
+output_analyzer_during_tests = []
+stop_at_lexer_during_tests = []
+stop_at_parser_during_tests = []
+stop_at_analyzer_during_tests = []
 
 [package]
 name = "microc"
