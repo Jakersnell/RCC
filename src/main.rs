@@ -52,60 +52,70 @@ build_access_flag!(
     output_analyzer,
     stop_at_lexer,
     stop_at_parser,
-    stop_at_analyzer
+    stop_at_analyzer,
+    keep_llir,
+    keep_asm
 );
 
 #[derive(ArgParser, Debug, Default)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, help = "The file path for the source file to compile.")]
+    #[arg(help = "The file path for the source file to compile.")]
     file_path: String,
 
-    #[arg(short, long, help = "Display abstract syntax tree.")]
+    #[arg(long = "da", help = "Display abstract syntax tree.")]
     display_ast: bool,
 
-    #[arg(short, long, help = "Display the validated mid level ir.")]
+    #[arg(long = "dm", help = "Display the validated mid level ir.")]
     display_mlir: bool,
 
-    #[arg(short, long, help = "Output LLVM graphs as '.dot' files.")]
+    #[arg(long = "dlg", help = "Output LLVM graphs as '.dot' files.")]
     display_llvm_graph: bool,
 
-    #[arg(short, long, help = "Output internal CFG graphs as '.dot' files.")]
+    #[arg(long = "dig", help = "Output internal CFG graphs as '.dot' files.")]
     display_internal_graphs: bool,
 
-    #[arg(short, long, help = "Display raw data output from the Lexer.")]
+    #[arg(long = "ol", help = "Display raw data output from the Lexer.")]
     output_lexer: bool,
 
-    #[arg(short, long, help = "Display raw data output from the Parser.")]
+    #[arg(long = "op", help = "Display raw data output from the Parser.")]
     output_parser: bool,
 
-    #[arg(short, long, help = "Display raw data output from the Analyzer.")]
+    #[arg(long = "oa", help = "Display raw data output from the Analyzer.")]
     output_analyzer: bool,
 
-    #[arg(short, long, help = "Stop operation after completing the Lexer phase.")]
+    #[arg(
+        long = "sal",
+        help = "Stop operation after completing the Lexer phase."
+    )]
     stop_at_lexer: bool,
 
     #[arg(
-        short,
-        long,
+        long = "sap",
         help = "Stop operation after completing the Parser phase."
     )]
     stop_at_parser: bool,
 
     #[arg(
-        short,
-        long,
+        long = "saa",
         help = "Stop operation after completing the Analyzer phase."
     )]
     stop_at_analyzer: bool,
+
+    #[arg(long = "kl", help = "Keep the .ll file produced during compilation.")]
+    keep_llir: bool,
+
+    #[arg(
+        long = "ka",
+        help = "Keep the assembly file produced during compilation."
+    )]
+    keep_asm: bool,
 }
 
 fn main() {
     unsafe {
         // This is safe because this is a single process program
         let mut args = Args::parse();
-        args.output_analyzer = true;
-        args.stop_at_analyzer = true;
         ARGS = Some(args);
     }
 
@@ -274,14 +284,18 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    std::fs::remove_file(ll_filepath).unwrap();
+    if !keep_llir() {
+        std::fs::remove_file(ll_filepath).unwrap();
+    }
 
     Command::new("as")
         .args([&s_filepath, "-o", &o_filepath])
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    std::fs::remove_file(s_filepath).unwrap();
+    if !keep_asm() {
+        std::fs::remove_file(s_filepath).unwrap();
+    }
 
     Command::new("ld")
         .args([
@@ -326,6 +340,8 @@ mod tests {
             stop_at_lexer: false,
             stop_at_parser: false,
             stop_at_analyzer: false,
+            keep_llir: false,
+            keep_asm: false,
         };
 
         unsafe {
