@@ -274,10 +274,14 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
+    std::fs::remove_file(ll_filepath).unwrap();
+
     Command::new("as")
         .args([&s_filepath, "-o", &o_filepath])
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
+
+    std::fs::remove_file(s_filepath).unwrap();
 
     Command::new("ld")
         .args([
@@ -293,6 +297,8 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         ])
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
+
+    std::fs::remove_file(o_filepath).unwrap();
 
     Ok(())
 }
