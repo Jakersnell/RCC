@@ -410,7 +410,7 @@ mod tests {
                 .unwrap()
                 .stdout;
 
-            std::fs::remove_dir(&temp_dir_filepath).unwrap();
+            std::fs::remove_dir_all(&temp_dir_filepath).unwrap();
 
             String::from_utf8(given_output).expect("Could not convert program output to utf8.")
         }
