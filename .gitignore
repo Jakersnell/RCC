@@ -17,4 +17,6 @@ log.txt
 *.ll
 *.s
 *.o
-/_c_test_files/output_tests/temp
+_c_test_files/output_tests/temp
+_c_test_files/ignored
+
