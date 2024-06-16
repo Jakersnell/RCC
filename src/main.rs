@@ -53,8 +53,7 @@ build_access_flag!(
     stop_at_lexer,
     stop_at_parser,
     stop_at_analyzer,
-    keep_llir,
-    keep_asm
+    keep_temp_files
 );
 
 #[derive(ArgParser, Debug, Default)]
@@ -105,11 +104,8 @@ struct Args {
     #[arg(long = "kl", help = "Keep the .ll file produced during compilation.")]
     keep_llir: bool,
 
-    #[arg(
-        long = "ka",
-        help = "Keep the assembly file produced during compilation."
-    )]
-    keep_asm: bool,
+    #[arg(long = "ktf", help = "Keep temp files produced during compilation.")]
+    keep_temp_files: bool,
 }
 
 fn main() {
@@ -284,7 +280,7 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    if !keep_llir() {
+    if !keep_temp_files() {
         std::fs::remove_file(ll_filepath).unwrap();
     }
 
@@ -293,7 +289,7 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    if !keep_asm() {
+    if !keep_temp_files() {
         std::fs::remove_file(s_filepath).unwrap();
     }
 
@@ -312,8 +308,9 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         .output()
         .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    std::fs::remove_file(o_filepath).unwrap();
-
+    if !keep_temp_files() {
+        std::fs::remove_file(o_filepath).unwrap();
+    }
     Ok(())
 }
 
@@ -341,7 +338,7 @@ mod tests {
             stop_at_parser: false,
             stop_at_analyzer: false,
             keep_llir: false,
-            keep_asm: false,
+            keep_temp_files: false,
         };
 
         unsafe {
@@ -379,7 +376,7 @@ mod tests {
         use std::path::PathBuf;
         use std::process::Command;
 
-        use crate::{compile, output_program};
+        use crate::{compile, keep_temp_files, output_program};
         use crate::util::display_utils::indent_string;
 
         fn run_capture_output_test(filename: &str) {
@@ -423,12 +420,14 @@ mod tests {
             let given_output = Command::new(format!("./{src_file_stem}"))
                 .current_dir(&temp_dir_filepath)
                 .output()
-                .unwrap()
-                .stdout;
+                .unwrap();
+            let std_out = given_output.stdout;
 
-            std::fs::remove_dir_all(&temp_dir_filepath).unwrap();
+            if !keep_temp_files() {
+                std::fs::remove_dir_all(&temp_dir_filepath).unwrap();
+            }
 
-            String::from_utf8(given_output).expect("Could not convert program output to utf8.")
+            String::from_utf8(std_out).expect("Could not convert program output to utf8.")
         }
 
         macro_rules! test {
@@ -443,6 +442,11 @@ mod tests {
         #[test]
         fn struct_member() {
             run_capture_output_test("struct_member")
+        }
+
+        #[test]
+        fn fizz_buzz() {
+            run_capture_output_test("fizz_buzz")
         }
     }
 
