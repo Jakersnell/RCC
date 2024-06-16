@@ -310,16 +310,16 @@ mod tests {
     fn init_args() {
         let mut args = Args {
             file_path: "".to_string(),
-            display_ast: cfg!(display_ast_during_tests),
-            display_mlir: cfg!(display_mlir_during_tests),
-            display_llvm_graph: cfg!(display_llvm_graph_during_tests),
-            display_internal_graphs: cfg!(display_internal_graphs_during_tests),
-            output_lexer: cfg!(output_lexer_during_tests),
-            output_parser: cfg!(output_parser_during_tests),
-            output_analyzer: cfg!(output_analyzer_during_tests),
-            stop_at_lexer: cfg!(stop_at_lexer_during_tests),
-            stop_at_parser: cfg!(stop_at_parser_during_tests),
-            stop_at_analyzer: cfg!(stop_at_analyzer_during_tests),
+            display_ast: false,
+            display_mlir: false,
+            display_llvm_graph: false,
+            display_internal_graphs: false,
+            output_lexer: false,
+            output_parser: false,
+            output_analyzer: false,
+            stop_at_lexer: false,
+            stop_at_parser: false,
+            stop_at_analyzer: false,
         };
 
         unsafe {

@@ -204,14 +204,14 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         let expr = self.compile_expression(expr);
         let int_val = match expr {
             BasicValueEnum::IntValue(int_val) => {
-                let zero = self.context.i8_type().const_int(0, false);
+                let zero = int_val.get_type().const_int(0, false);
                 self.builder()
                     .build_int_compare(IntPredicate::EQ, int_val, zero, "int_cmp_zero_logical_not")
                     .unwrap()
             }
 
             BasicValueEnum::FloatValue(float_val) => {
-                let zero = self.context.f32_type().const_float(0.0);
+                let zero = float_val.get_type().const_float(0.0);
                 self.builder()
                     .build_float_compare(
                         FloatPredicate::OEQ,

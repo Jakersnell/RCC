@@ -92,14 +92,14 @@ impl Display for CastType {
 impl Display for MlirLiteral {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MlirLiteral::Char(val) => write!(f, "{}", val),
-            MlirLiteral::UChar(val) => write!(f, "{}", val),
-            MlirLiteral::Int(val) => write!(f, "{}", val),
-            MlirLiteral::UInt(val) => write!(f, "{}", val),
-            MlirLiteral::Long(val) => write!(f, "{}", val),
-            MlirLiteral::ULong(val) => write!(f, "{}", val),
-            MlirLiteral::Float(val) => write!(f, "{}", val),
-            MlirLiteral::Double(val) => write!(f, "{}", val),
+            MlirLiteral::Char(val) => write!(f, "{}C", val),
+            MlirLiteral::UChar(val) => write!(f, "{}UC", val),
+            MlirLiteral::Int(val) => write!(f, "{}I", val),
+            MlirLiteral::UInt(val) => write!(f, "{}UI", val),
+            MlirLiteral::Long(val) => write!(f, "{}L", val),
+            MlirLiteral::ULong(val) => write!(f, "{}UL", val),
+            MlirLiteral::Float(val) => write!(f, "{}F", val),
+            MlirLiteral::Double(val) => write!(f, "{}D", val),
             MlirLiteral::String(string) => {
                 write!(
                     f,
