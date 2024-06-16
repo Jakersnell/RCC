@@ -1,6 +1,6 @@
+use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
-use inkwell::AddressSpace;
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind, MlirType};
@@ -80,18 +80,12 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         _struct: &MlirExpr,
         member: &InternedStr,
     ) -> PointerValue<'ctx> {
-        let var_ptr = self.get_lval_as_pointer(_struct);
+        let struct_ptr = self.get_lval_as_pointer(_struct);
         let struct_ident = _struct.ty.get_struct_ident();
         let member_index = self.mlir.get_struct_member_index(struct_ident, member);
 
         let struct_type = self.get_struct_type(struct_ident);
         let pointee_type = struct_type.ptr_type(AddressSpace::default());
-
-        let struct_ptr = self
-            .builder()
-            .build_load(pointee_type, var_ptr, "load_struct_ptr_from_variable")
-            .unwrap()
-            .into_pointer_value();
 
         self.builder()
             .build_struct_gep(

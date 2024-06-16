@@ -1,7 +1,8 @@
 #![allow(unused)]
 
+use std::ffi::OsStr;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::Parser as ArgParser;
@@ -116,12 +117,39 @@ fn main() {
 }
 
 fn run() -> Result<(), Vec<String>> {
-    let file_path = file_path();
-    let source = load_src(file_path.into())?;
+    let file_path: PathBuf = file_path().into();
+    let file_stem = file_path
+        .file_stem()
+        .map_or_else(
+            || {
+                Err(vec![format!(
+                    "Cannot read file '{}'",
+                    file_path.to_str().unwrap()
+                )])
+            },
+            Ok,
+        )?
+        .to_str()
+        .unwrap();
+    let current_dir: PathBuf = ".".into();
+    let base_path = file_path.parent().unwrap_or_else(|| &current_dir);
+    let source = load_src(file_path.clone())?;
     let llir = compile(source)?;
-    output_llir(file_path.into(), llir)?;
-    link(file_path.into())?;
+    output_program(base_path, file_stem, llir)?;
     Ok(())
+}
+
+fn parse_file_stem_from_path(path: &Path) -> Result<String, Vec<String>> {
+    let create_error_message = || {
+        Err(vec![format!(
+            "Cannot read file '{}'",
+            path.to_str().unwrap()
+        )])
+    };
+    let map_os_str = |os_str: &OsStr| Ok(os_str.to_str().unwrap().to_string());
+
+    let file_stem_opt = path.file_stem();
+    file_stem_opt.map_or_else(create_error_message, map_os_str)
 }
 
 /// the parser outputs errors as a vec and so this function
@@ -220,70 +248,53 @@ fn compile(source: String) -> Result<String, Vec<String>> {
     Ok(llir.to_string())
 }
 
-fn output_llir(path: PathBuf, llir: String) -> Result<(), Vec<String>> {
-    assert!(path.exists());
-    let ll_path = path.with_extension("ll");
-    std::fs::write(ll_path, llir).map_err(display_to_vec)
-}
+fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), Vec<String>> {
+    let filepath = dir_path.join(file_stem);
+    let ll_filepath = filepath.with_extension("ll");
+    let s_filepath = filepath.with_extension("s");
+    let o_filepath = filepath.with_extension("o");
 
-fn link(path: PathBuf) -> Result<(), Vec<String>> {
-    let base_path = path.parent();
-    let base_path = if let Some(base_path) = base_path {
-        Ok(base_path.to_path_buf())
-    } else {
-        std::env::current_dir()
-    };
-    let base_path = base_path.map_err(display_to_vec)?;
-
-    let file_name = path
-        .file_name()
-        .expect("File should have prior verification.")
-        .to_string_lossy()
-        .to_string();
+    let filepath = filepath.to_str().unwrap().to_string();
+    let ll_filepath = ll_filepath.to_str().unwrap().to_string();
+    let s_filepath = s_filepath.to_str().unwrap().to_string();
+    let o_filepath = o_filepath.to_str().unwrap().to_string();
 
     let mut reported = vec![];
 
-    macro_rules! cmd {
-        ($cmd:expr, $($args:expr),*) => {
-            let mut command = Command::new($cmd);
-            command.args(&[
-                $(
-                    $args,
-                )*
-            ]);
-            let result = command.output();
-            if let Err(err) = result {
-                reported.push(format!("{}", err));
-            }
-        };
-    }
+    std::fs::write(ll_filepath.clone(), llir).map_or_else(
+        |_| {
+            reported.push(format!("Could not write to '{ll_filepath}'"));
+            Err(reported)
+        },
+        Ok,
+    )?;
 
-    macro_rules! filename {
-        ($ext:literal) => {
-            &format!("{file_name}.{}", $ext)
-        };
-    }
+    Command::new("llc")
+        .args([&ll_filepath, "-o", &s_filepath])
+        .output()
+        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    cmd!("llc", filename!("ll"), "-o", filename!("s"));
-    cmd!("as", filename!("s"), "-o", filename!("o"));
-    cmd!(
-        "ld",
-        "-o",
-        &file_name,
-        filename!("o"),
-        "-e",
-        "_main",
-        "-arch",
-        "arm64",
-        "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
-        "-lSystem"
-    );
+    Command::new("as")
+        .args([&s_filepath, "-o", &o_filepath])
+        .output()
+        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
 
-    if !reported.is_empty() {
-        Err(reported)
-    } else {
-        Ok(())
-    }
+    Command::new("ld")
+        .args([
+            "-o",
+            &filepath,
+            &o_filepath,
+            "-e",
+            "_main",
+            "-arch",
+            "arm64",
+            "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
+            "-lSystem",
+        ])
+        .output()
+        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
+
+    Ok(())
 }
 
 /// Integration tests
@@ -346,7 +357,7 @@ mod tests {
         use std::path::PathBuf;
         use std::process::Command;
 
-        use crate::{compile, link};
+        use crate::{compile, output_program};
         use crate::util::display_utils::indent_string;
 
         fn run_capture_output_test(filename: &str) {
@@ -363,7 +374,8 @@ mod tests {
             match catch_unwind(|| compile(src)) {
                 Ok(result) => match result {
                     Ok(llir) => {
-                        let given_output = run_program_capture_output(src_filepath.into(), llir);
+                        let given_output =
+                            run_program_capture_output(BASE.into(), filename.into(), llir);
                         assert_eq!(expected_output, given_output);
                     }
                     Err(errors) => {
@@ -376,19 +388,23 @@ mod tests {
             };
         }
 
-        fn run_program_capture_output(src_filepath: PathBuf, llir: String) -> String {
-            let src_filepath: PathBuf = src_filepath;
-            let temp_dir_filepath = src_filepath.parent().unwrap().join(PathBuf::from("temp"));
+        fn run_program_capture_output(
+            src_filepath: PathBuf,
+            src_file_stem: &str,
+            llir: String,
+        ) -> String {
+            let temp_dir_filepath = src_filepath.join(PathBuf::from("temp"));
             std::fs::create_dir_all(temp_dir_filepath.clone()).unwrap();
-            let filename = src_filepath.file_stem().unwrap().to_str().unwrap();
-            let ll_filepath = temp_dir_filepath.join(format!("{filename}.ll"));
-            std::fs::write(ll_filepath.clone(), llir);
-            link(ll_filepath);
-            let given_output = Command::new(format!("./{filename}"))
-                .current_dir(temp_dir_filepath)
+
+            output_program(&temp_dir_filepath, src_file_stem, llir).unwrap();
+
+            let given_output = Command::new(format!("./{src_file_stem}"))
+                .current_dir(&temp_dir_filepath)
                 .output()
                 .unwrap()
                 .stdout;
+
+            std::fs::remove_dir(&temp_dir_filepath).unwrap();
 
             String::from_utf8(given_output).expect("Could not convert program output to utf8.")
         }

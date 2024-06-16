@@ -12,8 +12,8 @@ int main() {
     gc.year = 2024;
     gc.price = 60000;
 
-    printf(gc.brand_name);
-    printf(gc.model_name);
+    printf("%s\n", gc.brand_name);
+    printf("%s\n",gc.model_name);
     printf("%d\n", gc.year);
     printf("%f\n", gc.price);
 

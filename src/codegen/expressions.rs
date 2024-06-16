@@ -1,5 +1,5 @@
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{CastType, MlirExpr, MlirExprKind, MlirType};
