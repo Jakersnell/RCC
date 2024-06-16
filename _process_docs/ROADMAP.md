@@ -52,15 +52,15 @@ This document is a roadmap for the development of the compiler. It will be updat
 [X] Lowering return statements
 [X] Lowering Control flow
 
-[ ] Emitting Literals
-[ ] Emitting Binary Expressions
-[ ] Emitting Unary Expressions
-[ ] Emitting postfix operations
-[ ] Emitting structs
-[ ] Emitting arrays
-[ ] Emitting function calls
-[ ] Emitting function declarations
-[ ] Emitting variable declarations
-[ ] Emitting return statements
-[ ] Emitting Control flow
+[X] Emitting Literals
+[X] Emitting Binary Expressions
+[X] Emitting Unary Expressions
+[X] Emitting postfix operations
+[X] Emitting structs
+[X] Emitting arrays
+[X] Emitting function calls
+[X] Emitting function declarations
+[X] Emitting variable declarations
+[X] Emitting return statements
+[X] Emitting Control flow
 </pre>

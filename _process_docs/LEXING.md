@@ -38,3 +38,4 @@ of input.
 
 Trivial characters are pieces of text data in the source code that can be ignored by the compiler all together. This
 includes all whitespace and comments. Trivial data is removed using a state machine.
+
