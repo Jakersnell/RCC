@@ -186,7 +186,38 @@ impl Analyzer {
         span: Span,
     ) -> Result<MlirExpr, ()> {
         // LogicalAnd, LogicalOr implement here
-        todo!()
+        let ty = MlirType {
+            kind: MlirTypeKind::Int(true),
+            decl: MlirTypeDecl::Basic,
+        };
+
+        let left = if left.is_pointer() {
+            self.explicit_cast(left, UNSIGNED_LONG_TYPE, span)
+        } else {
+            left
+        };
+
+        let right = if right.is_pointer() {
+            self.explicit_cast(right, UNSIGNED_LONG_TYPE, span)
+        } else {
+            right
+        };
+
+        let left = self.implicit_cast(left, ty.clone(), span);
+        let right = self.implicit_cast(right, ty.clone(), span);
+
+        let mlir_kind = match op {
+            BinaryOp::LogicalOr => MlirExprKind::LogicalOr(left, right),
+            BinaryOp::LogicalAnd => MlirExprKind::LogicalAnd(left, right),
+            _ => unreachable!(),
+        };
+
+        Ok(MlirExpr {
+            kind: Box::new(mlir_kind),
+            is_lval: false,
+            span,
+            ty,
+        })
     }
 
     pub(super) fn validate_binary_bitwise_expression(

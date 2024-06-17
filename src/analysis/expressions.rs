@@ -6,9 +6,9 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
 };
 use crate::data::tokens::Literal;
+use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
@@ -485,16 +485,29 @@ impl Analyzer {
                     })
                 }
             }
-            UnaryOp::LogicalNot | UnaryOp::BitwiseNot => {
-                if !expr.is_integer() {
+            UnaryOp::LogicalNot => {
+                if !expr.is_numeric() {
                     self.report_error(CompilerError::NotLogicalType(expr.ty.to_string(), span));
                     Ok(expr)
                 } else {
-                    let expr = match op {
-                        UnaryOp::LogicalNot => MlirExprKind::LogicalNot(expr),
-                        UnaryOp::BitwiseNot => MlirExprKind::BitwiseNot(expr),
-                        _ => unreachable!(),
-                    };
+                    let expr = MlirExprKind::BitwiseNot(expr);
+                    Ok(MlirExpr {
+                        ty: MlirType {
+                            decl: MlirTypeDecl::Basic,
+                            kind: MlirTypeKind::Int(false),
+                        },
+                        kind: Box::new(expr),
+                        is_lval: false,
+                        span,
+                    })
+                }
+            }
+            UnaryOp::BitwiseNot => {
+                if !expr.is_integer() {
+                    self.report_error(CompilerError::CannotBitwise(expr.ty.to_string(), span));
+                    Ok(expr)
+                } else {
+                    let expr = MlirExprKind::BitwiseNot(expr);
                     let ty = MlirType {
                         decl: MlirTypeDecl::Basic,
                         kind: MlirTypeKind::Int(false),
