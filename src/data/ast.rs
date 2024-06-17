@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
 use crate::data::tokens::{Keyword, Literal, Symbol, Token};
-use crate::util::str_intern::InternedStr;
 use crate::util::Locatable;
+use crate::util::str_intern::InternedStr;
 
 pub type ASTRoot = Vec<InitDeclaration>;
 
@@ -309,6 +309,7 @@ impl TryFrom<&Token> for BinaryOp {
             Token::Symbol(Symbol::LessThanEqual) => Ok(LessThanEqual),
 
             Token::Symbol(Symbol::Ampersand) => Ok(BitwiseAnd),
+            Token::Symbol(Symbol::DoubleAmpersand) => Ok(LogicalAnd),
             Token::Symbol(Symbol::Pipe) => Ok(BitwiseOr),
             Token::Symbol(Symbol::Caret) => Ok(BitwiseXor),
             Token::Symbol(Symbol::LeftShift) => Ok(LeftShift),

@@ -62,68 +62,52 @@ struct Args {
     #[arg(help = "The file path for the source file to compile.")]
     file_path: String,
 
-    #[arg(long = "da", help = "Display abstract syntax tree.", action)]
+    #[arg(long, help = "Display abstract syntax tree.", action)]
     display_ast: bool,
 
-    #[arg(long = "dm", help = "Display the validated mid level ir.", action)]
+    #[arg(long, help = "Display the validated mid level ir.", action)]
     display_mlir: bool,
 
-    #[arg(long = "dlg", help = "Output LLVM graphs as '.dot' files.", action)]
+    #[arg(long, help = "Output LLVM graphs as '.dot' files.", action)]
     display_llvm_graph: bool,
 
-    #[arg(
-        long = "dig",
-        help = "Output internal CFG graphs as '.dot' files.",
-        action
-    )]
+    #[arg(long, help = "Output internal CFG graphs as '.dot' files.", action)]
     display_internal_graphs: bool,
 
-    #[arg(long = "ol", help = "Display raw data output from the Lexer.", action)]
+    #[arg(long, help = "Display raw data output from the Lexer.", action)]
     output_lexer: bool,
 
-    #[arg(long = "op", help = "Display raw data output from the Parser.", action)]
+    #[arg(long, help = "Display raw data output from the Parser.", action)]
     output_parser: bool,
 
-    #[arg(
-        long = "oa",
-        help = "Display raw data output from the Analyzer.",
-        action
-    )]
+    #[arg(long, help = "Display raw data output from the Analyzer.", action)]
     output_analyzer: bool,
 
     #[arg(
-        long = "sal",
+        long,
         help = "Stop operation after completing the Lexer phase.",
         action
     )]
     stop_at_lexer: bool,
 
     #[arg(
-        long = "sap",
+        long,
         help = "Stop operation after completing the Parser phase.",
         action
     )]
     stop_at_parser: bool,
 
     #[arg(
-        long = "saa",
+        long,
         help = "Stop operation after completing the Analyzer phase.",
         action
     )]
     stop_at_analyzer: bool,
 
-    #[arg(
-        long = "kl",
-        help = "Keep the .ll file produced during compilation.",
-        action
-    )]
+    #[arg(long, help = "Keep the .ll file produced during compilation.", action)]
     keep_llir: bool,
 
-    #[arg(
-        long = "ktf",
-        help = "Keep temp files produced during compilation.",
-        action
-    )]
+    #[arg(long, help = "Keep temp files produced during compilation.", action)]
     keep_temp_files: bool,
 }
 

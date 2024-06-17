@@ -1,8 +1,8 @@
-use crate::analysis::{control_flow, Analyzer};
+use crate::analysis::{Analyzer, control_flow};
 use crate::data::ast::*;
 use crate::data::mlir::*;
-use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::{Locatable, Span};
+use crate::util::error::{CompilerError, CompilerWarning};
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(
@@ -196,10 +196,11 @@ impl Analyzer {
         }
 
         let initializer = if let Some(init) = &var.initializer {
-            Some(
-                init.location
-                    .into_locatable(self.validate_initializer(init, init.location)?),
-            )
+            Some(init.location.into_locatable(self.validate_initializer(
+                &ty,
+                init,
+                init.location,
+            )?))
         } else {
             None
         };
@@ -270,18 +271,23 @@ impl Analyzer {
 
     pub(super) fn validate_initializer(
         &mut self,
+        var_ty: &MlirType,
         expr: &Expression,
         span: Span,
     ) -> Result<MlirVarInit, ()> {
         if let Expression::ArrayInitializer(arr) = expr {
+            let basic_ty = var_ty.as_basic();
             let mut inits = Vec::with_capacity(arr.len());
             for init in arr {
                 let init = self.validate_expression(init)?;
+                let span = init.span;
+                let init = self.implicit_cast(init, basic_ty.clone(), span);
                 inits.push(init);
             }
             Ok(MlirVarInit::Array(inits))
         } else {
             let expr = self.validate_expression(expr)?;
+            let expr = self.implicit_cast(expr, var_ty.clone(), span);
             Ok(MlirVarInit::Expr(expr))
         }
     }

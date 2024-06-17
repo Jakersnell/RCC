@@ -28,9 +28,11 @@ impl Analyzer {
                 self.validate_binary_equivalence_expression(op, left, right, span)
             }
 
-            BinaryOp::LogicalAnd
-            | BinaryOp::LogicalOr
-            | BinaryOp::BitwiseAnd
+            BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
+                self.validate_logical_binary_expression(op, left, right, span)
+            }
+
+            BinaryOp::BitwiseAnd
             | BinaryOp::BitwiseOr
             | BinaryOp::BitwiseXor
             | BinaryOp::LeftShift
@@ -174,6 +176,17 @@ impl Analyzer {
             ty: MlirType::new(MlirTypeKind::Int(false), MlirTypeDecl::Basic),
             is_lval: false,
         })
+    }
+
+    pub(super) fn validate_logical_binary_expression(
+        &mut self,
+        op: &BinaryOp,
+        left: MlirExpr,
+        right: MlirExpr,
+        span: Span,
+    ) -> Result<MlirExpr, ()> {
+        // LogicalAnd, LogicalOr implement here
+        todo!()
     }
 
     pub(super) fn validate_binary_bitwise_expression(
