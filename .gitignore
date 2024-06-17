@@ -19,4 +19,5 @@ log.txt
 *.o
 _c_test_files/output_tests/temp
 _c_test_files/ignored
+personal-notes.txt
 
