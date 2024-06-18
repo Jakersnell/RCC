@@ -490,13 +490,12 @@ impl Analyzer {
                     self.report_error(CompilerError::NotLogicalType(expr.ty.to_string(), span));
                     Ok(expr)
                 } else {
-                    let expr = MlirExprKind::BitwiseNot(expr);
                     Ok(MlirExpr {
                         ty: MlirType {
                             decl: MlirTypeDecl::Basic,
                             kind: MlirTypeKind::Int(false),
                         },
-                        kind: Box::new(expr),
+                        kind: Box::new(MlirExprKind::LogicalNot(expr)),
                         is_lval: false,
                         span,
                     })
@@ -507,16 +506,14 @@ impl Analyzer {
                     self.report_error(CompilerError::CannotBitwise(expr.ty.to_string(), span));
                     Ok(expr)
                 } else {
-                    let expr = MlirExprKind::BitwiseNot(expr);
-                    let ty = MlirType {
-                        decl: MlirTypeDecl::Basic,
-                        kind: MlirTypeKind::Int(false),
-                    };
                     Ok(MlirExpr {
-                        span,
-                        kind: Box::new(expr),
+                        ty: MlirType {
+                            decl: MlirTypeDecl::Basic,
+                            kind: MlirTypeKind::Int(false),
+                        },
+                        kind: Box::new(MlirExprKind::BitwiseNot(expr)),
                         is_lval: false,
-                        ty,
+                        span,
                     })
                 }
             }

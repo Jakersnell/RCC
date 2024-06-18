@@ -205,7 +205,7 @@ fn compile(source: String) -> Result<String, Vec<String>> {
     })?;
 
     if output_lexer() {
-        println!("{:#?}", lexemes);
+        println!("\nLEXEMES-PRINTOUT: {:#?}\n", lexemes);
     }
 
     if stop_at_lexer() {
@@ -221,11 +221,11 @@ fn compile(source: String) -> Result<String, Vec<String>> {
         })?;
 
     if display_ast() {
-        println!("{}", ast); // pretty print
+        println!("\nAST-PRETTY-PRINT: {}\n", ast); // pretty print
     }
 
     if output_parser() {
-        println!("{:#?}", ast); // disgusting print
+        println!("\nAST-PRINTOUT: {:#?}\n", ast); // disgusting print
     }
 
     if stop_at_parser() {
@@ -242,11 +242,11 @@ fn compile(source: String) -> Result<String, Vec<String>> {
     })?;
 
     if display_mlir() {
-        println!("{}", mlir); // pretty print
+        println!("\nMLIR-PRETTY-PRINT: {}\n", mlir); // pretty print
     }
 
     if output_analyzer() {
-        println!("{:#?}", mlir); // disgusting print
+        println!("\nMLIR-PRINTOUT: {:#?}\n", mlir); // disgusting print
     }
 
     let context = Context::create();
@@ -379,7 +379,7 @@ mod tests {
         use std::path::PathBuf;
         use std::process::Command;
 
-        use crate::{compile, keep_temp_files, output_program};
+        use crate::{compile, output_program};
         use crate::util::display_utils::indent_string;
 
         fn run_capture_output_test(filename: &str) {
@@ -398,7 +398,14 @@ mod tests {
                     Ok(llir) => {
                         let given_output =
                             run_program_capture_output(BASE.into(), filename.into(), llir);
-                        assert_eq!(expected_output, given_output);
+                        let given_output_filepath =
+                            PathBuf::from(src_filepath).with_extension("given_output");
+                        let output_is_equal = expected_output == given_output;
+                        let given_output_len = given_output.len();
+                        std::fs::write(given_output_filepath, given_output).unwrap();
+                        if !output_is_equal {
+                            panic!("Expected did not equal given output.\nExpected output length: {}\nGiven output length: {}", expected_output.len(), given_output_len);
+                        }
                     }
                     Err(errors) => {
                         unexpected_error_outcome!(src_filepath, errors);
@@ -426,9 +433,9 @@ mod tests {
                 .unwrap();
             let std_out = given_output.stdout;
 
-            if !keep_temp_files() {
-                std::fs::remove_dir_all(&temp_dir_filepath).unwrap();
-            }
+            // if !keep_temp_files() {
+            //     std::fs::remove_dir_all(&temp_dir_filepath).unwrap();
+            // }
 
             String::from_utf8(std_out).expect("Could not convert program output to utf8.")
         }

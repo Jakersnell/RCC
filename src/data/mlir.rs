@@ -166,7 +166,6 @@ impl MlirType {
     }
     #[inline]
     pub fn as_basic(&self) -> Self {
-        debug_assert!(!self.is_basic());
         Self {
             decl: MlirTypeDecl::Basic,
             kind: self.kind.clone(),
