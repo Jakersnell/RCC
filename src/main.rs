@@ -325,7 +325,8 @@ mod tests {
     use crate::{Args, lexer, parser};
     use crate::data::ast::{Expression, InitDeclaration};
 
-    static DISPLAY_ERRORS_DURING_TESTS: bool = true;
+    static DISPLAY_ERRORS_DURING_TESTS: bool = false;
+    static CLEANUP_AFTER_TESTS: bool = true;
 
     fn init_args() {
         let mut args = Args {
@@ -380,6 +381,7 @@ mod tests {
         use std::process::Command;
 
         use crate::{compile, output_program};
+        use crate::tests::CLEANUP_AFTER_TESTS;
         use crate::util::display_utils::indent_string;
 
         fn run_capture_output_test(filename: &str) {
@@ -398,11 +400,15 @@ mod tests {
                     Ok(llir) => {
                         let given_output =
                             run_program_capture_output(BASE.into(), filename.into(), llir);
-                        let given_output_filepath =
-                            PathBuf::from(src_filepath).with_extension("given_output");
                         let output_is_equal = expected_output == given_output;
                         let given_output_len = given_output.len();
-                        std::fs::write(given_output_filepath, given_output).unwrap();
+
+                        if !CLEANUP_AFTER_TESTS {
+                            let given_output_filepath =
+                                PathBuf::from(src_filepath).with_extension("given_output");
+                            std::fs::write(given_output_filepath, given_output).unwrap();
+                        }
+
                         if !output_is_equal {
                             panic!("Expected did not equal given output.\nExpected output length: {}\nGiven output length: {}", expected_output.len(), given_output_len);
                         }
@@ -431,13 +437,30 @@ mod tests {
                 .current_dir(&temp_dir_filepath)
                 .output()
                 .unwrap();
-            let std_out = given_output.stdout;
 
-            // if !keep_temp_files() {
-            //     std::fs::remove_dir_all(&temp_dir_filepath).unwrap();
-            // }
+            macro_rules! parse_utf8 {
+                ($output:expr) => {
+                    String::from_utf8($output).expect("Could not convert program output to utf8.")
+                };
+            }
 
-            String::from_utf8(std_out).expect("Could not convert program output to utf8.")
+            let std_out = parse_utf8!(given_output.stdout);
+
+            if !CLEANUP_AFTER_TESTS {
+                let given_output_filepath = temp_dir_filepath
+                    .join(src_file_stem)
+                    .with_extension("given_output");
+
+                let std_err = parse_utf8!(given_output.stderr);
+
+                static SEPARATOR: &str = "------------------------------------------";
+                let given_output =
+                    format!("STDOUT:\n{std_out}\n{SEPARATOR}\n{SEPARATOR}\n{SEPARATOR}\nSTDERR");
+
+                std::fs::write(given_output_filepath, given_output);
+            }
+
+            std_out
         }
 
         macro_rules! test {
@@ -457,6 +480,11 @@ mod tests {
         #[test]
         fn fizz_buzz() {
             run_capture_output_test("fizz_buzz")
+        }
+
+        #[test]
+        fn malloc_int() {
+            run_capture_output_test("malloc_int")
         }
     }
 
