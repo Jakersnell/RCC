@@ -53,17 +53,14 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             MlirExprKind::Cast(cast_to, cast_type, expr) => {
                 self.compile_cast(cast_to, cast_type, expr, &expr.ty)
             }
-            MlirExprKind::FunctionCall {
-                location,
-                ident,
-                args,
-            } => self.compile_function_call(location, ident, args),
+            MlirExprKind::FunctionCall { ident, args, .. } => {
+                self.compile_function_call(ident, args)
+            }
         }
     }
 
     fn compile_function_call(
         &mut self,
-        location: &Option<&str>,
         ident: &InternedStr,
         args: &[MlirExpr],
     ) -> BasicValueEnum<'ctx> {
@@ -82,7 +79,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .build_call(function, &compiled_args, "function_call")
             .unwrap();
 
-        // hack to preserve returning VOID without having to return Some(BasicValueEnum<'ctx> at every method
         let const_i8 = BasicValueEnum::from(self.context.i8_type().const_int(0, false));
         call_site_value.try_as_basic_value().left_or(const_i8)
     }

@@ -43,7 +43,7 @@ lazy_static! {
                 }],
                 varargs: true,
                 return_ty: MlirType {
-                    kind: MlirTypeKind::Void,
+                    kind: MlirTypeKind::Int(false),
                     decl: MlirTypeDecl::Basic,
                 },
             }
@@ -54,13 +54,13 @@ lazy_static! {
                 ident: str_intern::intern("malloc"),
                 location: Some("stdlib.h"),
                 params: vec![MlirType {
-                    kind: MlirTypeKind::Int(true),
+                    kind: MlirTypeKind::Long(true),
                     decl: MlirTypeDecl::Basic,
                 }],
                 varargs: false,
                 return_ty: MlirType {
                     kind: MlirTypeKind::Void,
-                    decl: MlirTypeDecl::Basic,
+                    decl: MlirTypeDecl::Pointer,
                 },
             }
         ),

@@ -58,7 +58,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn get_lval_as_pointer(&mut self, lval: &MlirExpr) -> PointerValue<'ctx> {
         match &*lval.kind {
-            MlirExprKind::Deref(expr) => self.get_lval_as_pointer(expr),
+            MlirExprKind::Deref(expr) => self.compile_expression(expr).into_pointer_value(),
 
             MlirExprKind::Variable(ident) => self.get_pointer(ident),
 
