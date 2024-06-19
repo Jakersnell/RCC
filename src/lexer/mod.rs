@@ -3,9 +3,10 @@ use std::io::Read;
 use arcstr::ArcStr;
 
 use crate::data::tokens::Token;
-use crate::util::error::CompilerError;
+use crate::output_lexer;
 use crate::util::*;
 use crate::util::{Locatable, Span};
+use crate::util::error::CompilerError;
 
 mod literals;
 mod symbols;
@@ -38,6 +39,10 @@ impl Lexer {
                 Ok(token) => tokens.push(token),
                 Err(_errors) => errors.extend(_errors),
             }
+        }
+
+        if output_lexer() {
+            println!("\nLEXEMES-PRINTOUT: {:#?}\n", tokens);
         }
 
         if errors.is_empty() {

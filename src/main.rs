@@ -204,10 +204,6 @@ fn compile(source: String) -> Result<String, Vec<String>> {
             .collect::<Vec<_>>()
     })?;
 
-    if output_lexer() {
-        println!("\nLEXEMES-PRINTOUT: {:#?}\n", lexemes);
-    }
-
     if stop_at_lexer() {
         abort!();
     }
@@ -219,14 +215,6 @@ fn compile(source: String) -> Result<String, Vec<String>> {
                 .map(|err| err.to_string())
                 .collect::<Vec<_>>()
         })?;
-
-    if display_ast() {
-        println!("\nAST-PRETTY-PRINT: {}\n", ast); // pretty print
-    }
-
-    if output_parser() {
-        println!("\nAST-PRINTOUT: {:#?}\n", ast); // disgusting print
-    }
 
     if stop_at_parser() {
         abort!();
@@ -241,12 +229,8 @@ fn compile(source: String) -> Result<String, Vec<String>> {
             .collect::<Vec<_>>()
     })?;
 
-    if display_mlir() {
-        println!("\nMLIR-PRETTY-PRINT: {}\n", mlir); // pretty print
-    }
-
-    if output_analyzer() {
-        println!("\nMLIR-PRINTOUT: {:#?}\n", mlir); // disgusting print
+    if stop_at_analyzer() {
+        abort!()
     }
 
     let context = Context::create();

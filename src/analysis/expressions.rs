@@ -380,7 +380,7 @@ impl Analyzer {
             span: left_span.merge(index_span),
             kind: Box::new(MlirExprKind::Index(left, index)),
             ty,
-            is_lval: false,
+            is_lval: true,
         })
     }
 

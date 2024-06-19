@@ -2,12 +2,13 @@ use rand::RngCore;
 
 use macros::*;
 
+use crate::{display_ast, output_parser};
 use crate::data::ast::*;
 use crate::data::tokens::{Keyword, Literal};
 use crate::data::tokens::{Symbol, Token};
+use crate::util::{Locatable, LocatableToken, Span};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
-use crate::util::{Locatable, LocatableToken, Span};
 
 pub(super) mod declarations;
 pub(super) mod expressions;
@@ -66,6 +67,15 @@ where
             global.push(init_dec.unwrap());
         }
         let ast = AbstractSyntaxTree::new(global.into_iter().map(|dec| dec.value).collect());
+
+        if display_ast() {
+            println!("\nAST-PRETTY-PRINT: {}\n", ast); // pretty print
+        }
+
+        if output_parser() {
+            println!("\nAST-PRINTOUT: {:#?}\n", ast); // disgusting print
+        }
+
         Ok(ast)
     }
 

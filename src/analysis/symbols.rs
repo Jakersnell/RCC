@@ -7,9 +7,9 @@ use crate::data::mlir::{
     MlirVariable,
 };
 use crate::data::symbols::*;
+use crate::util::{Locatable, Span, str_intern};
 use crate::util::error::CompilerError;
 use crate::util::str_intern::{get, InternedStr};
-use crate::util::{str_intern, Locatable, Span};
 
 static mut VARIABLE_COUNT: usize = 0;
 
@@ -133,30 +133,6 @@ impl SymbolResolver {
         match self.retrieve(&ident, span)? {
             SymbolKind::Function(func) => Ok(func),
             _ => Err(CompilerError::NotAFunction(span)),
-        }
-    }
-
-    pub fn check_valid_assignment(
-        &mut self,
-        ident: &InternedStr,
-        ty: &MlirType,
-        span: Span,
-    ) -> SymbolResult {
-        let var = match self.retrieve(ident, span)? {
-            SymbolKind::Variable(var_ty) => Ok(var_ty),
-            _ => Err(CompilerError::LeftHandNotLVal(span)),
-        }?;
-
-        if &var.ty != ty {
-            Err(CompilerError::VariableTypeMismatch(
-                span,
-                ty.to_string(),
-                var.ty.to_string(),
-            ))
-        } else if var.is_const {
-            Err(CompilerError::ConstAssignment(span))
-        } else {
-            Ok(())
         }
     }
 
