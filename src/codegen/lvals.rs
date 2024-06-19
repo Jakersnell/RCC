@@ -103,7 +103,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         array: &MlirExpr,
         index: &MlirExpr,
     ) -> PointerValue<'ctx> {
-        let array_ptr = self.compile_expression(array).into_pointer_value();
+        let array_ptr = self.get_lval_as_pointer(array);
         let index_value = self.compile_expression(index).into_int_value();
         self.get_array_index_pointer(access_ty, array_ptr, index_value)
     }

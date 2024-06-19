@@ -458,17 +458,22 @@ mod tests {
 
         #[test]
         fn struct_member() {
-            run_capture_output_test("struct_member")
+            run_capture_output_test("struct_member");
         }
 
         #[test]
         fn fizz_buzz() {
-            run_capture_output_test("fizz_buzz")
+            run_capture_output_test("fizz_buzz");
         }
 
         #[test]
         fn malloc_int() {
-            run_capture_output_test("malloc_int")
+            run_capture_output_test("malloc_int");
+        }
+
+        #[test]
+        fn array_access() {
+            run_capture_output_test("array_access");
         }
     }
 

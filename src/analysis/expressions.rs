@@ -375,12 +375,12 @@ impl Analyzer {
             ));
         }
 
-        let ty = left.ty.clone();
+        let ty = left.ty.clone().as_basic();
         Ok(MlirExpr {
-            span: left_span.merge(index_span),
             kind: Box::new(MlirExprKind::Index(left, index)),
-            ty,
+            span: left_span.merge(index_span),
             is_lval: true,
+            ty,
         })
     }
 
