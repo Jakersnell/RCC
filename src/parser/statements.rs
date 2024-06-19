@@ -1,8 +1,8 @@
 use crate::data::ast::{Block, Statement};
+use crate::data::error::CompilerError;
 use crate::data::tokens::{Keyword, Symbol, Token};
+use crate::parser::{Parser, ParseResult};
 use crate::parser::macros::{confirm, is};
-use crate::parser::{ParseResult, Parser};
-use crate::util::error::CompilerError;
 use crate::util::Locatable;
 
 impl<L> Parser<L>

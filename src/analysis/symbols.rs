@@ -2,13 +2,13 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::data::error::CompilerError;
 use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirStruct, MlirType, MlirTypeDecl, MlirTypeKind,
     MlirVariable,
 };
 use crate::data::symbols::*;
 use crate::util::{Locatable, Span, str_intern};
-use crate::util::error::CompilerError;
 use crate::util::str_intern::{get, InternedStr};
 
 static mut VARIABLE_COUNT: usize = 0;

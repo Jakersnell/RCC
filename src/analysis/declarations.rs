@@ -1,8 +1,8 @@
 use crate::analysis::{Analyzer, control_flow, err};
 use crate::data::ast::*;
+use crate::data::error::{CompilerError, CompilerWarning};
 use crate::data::mlir::*;
 use crate::util::{Locatable, Span};
-use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
 
 impl Analyzer {

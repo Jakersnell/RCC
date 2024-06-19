@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
 use crate::analysis::Analyzer;
+use crate::data::error::CompilerError;
 use crate::data::mlir::*;
-use crate::util::error::CompilerError;
 use crate::util::Span;
 
 macro_rules! cast_basic {

@@ -4,13 +4,11 @@ use std::ops::{Deref, DerefMut};
 
 use derive_new::new;
 
-use error::CompilerError;
-
+use crate::data::error::CompilerError;
 use crate::data::tokens::Token as LexToken;
 
 pub mod ast_pretty_print;
 pub mod display_utils;
-pub mod error;
 pub mod mlir_display;
 pub mod str_intern;
 

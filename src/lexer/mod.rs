@@ -2,11 +2,11 @@ use std::io::Read;
 
 use arcstr::ArcStr;
 
+use crate::data::error::CompilerError;
 use crate::data::tokens::Token;
 use crate::output_lexer;
 use crate::util::*;
 use crate::util::{Locatable, Span};
-use crate::util::error::CompilerError;
 
 mod literals;
 mod symbols;

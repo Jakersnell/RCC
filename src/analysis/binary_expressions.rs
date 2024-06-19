@@ -1,7 +1,7 @@
 use crate::analysis::*;
 use crate::data::ast::{AbstractSyntaxTree, AssignOp, BinaryOp};
+use crate::data::error::CompilerError;
 use crate::data::mlir::*;
-use crate::util::error::CompilerError;
 use crate::util::Span;
 
 impl Analyzer {

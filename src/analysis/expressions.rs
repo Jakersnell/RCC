@@ -2,12 +2,12 @@ use crate::analysis::{Analyzer, err};
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
+use crate::data::error::{CompilerError, CompilerWarning};
 use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind, VOID_PTR,
 };
 use crate::data::tokens::Literal;
 use crate::util::{Locatable, Span};
-use crate::util::error::{CompilerError, CompilerWarning};
 use crate::util::str_intern::InternedStr;
 
 impl Analyzer {

@@ -4,10 +4,10 @@ use macros::*;
 
 use crate::{display_ast, output_parser};
 use crate::data::ast::*;
+use crate::data::error::CompilerError;
 use crate::data::tokens::{Keyword, Literal};
 use crate::data::tokens::{Symbol, Token};
 use crate::util::{Locatable, LocatableToken, Span};
-use crate::util::error::CompilerError;
 use crate::util::str_intern::InternedStr;
 
 pub(super) mod declarations;

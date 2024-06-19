@@ -7,9 +7,9 @@ use std::rc::Rc;
 use crate::{display_mlir, output_analyzer};
 use crate::analysis::symbols::SymbolResolver;
 use crate::data::ast::*;
+use crate::data::error::{CompilerError, CompilerWarning, Reporter};
 use crate::data::mlir::*;
 use crate::util::{Locatable, Span};
-use crate::util::error::{CompilerError, CompilerWarning, Reporter};
 use crate::util::str_intern::InternedStr;
 
 mod binary_expressions;
