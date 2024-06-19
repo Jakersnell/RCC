@@ -37,6 +37,18 @@ pub(in crate::analysis) fn create_label() -> usize {
     }
 }
 
+macro_rules! err {
+    ($compiler:ident, $kind:ident, $($arg:expr),+) => {
+        $compiler.report_error(CompilerError::$kind(
+            $(
+            $arg
+            ),+
+        ));
+    };
+}
+
+pub(in crate::analysis) use err;
+
 #[derive(Debug, Default)]
 pub struct SharedReporter(Rc<RefCell<Reporter>>);
 

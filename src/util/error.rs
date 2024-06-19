@@ -222,8 +222,8 @@ pub enum CompilerError {
     #[error("Function cannot have storage specifiers: {0}")]
     FunctionStorageSpecifiers(Span),
 
-    #[error("Parameter requires identifier: {0}")]
-    ParamRequiresIdent(Span),
+    #[error("Parameter for function '{0}' of type '{1}' requires identifier: {2}")]
+    ParamRequiresIdent(String, String, Span),
 
     #[error("Parameter cannot have storage specifiers: {0}")]
     ParamStorageSpecifiers(Span),
@@ -278,6 +278,9 @@ pub enum CompilerError {
 
     #[error("Cannot take address of non lval type: {0}")]
     CannotAddressNonLVal(Span),
+
+    #[error("Subscript of pointer with incomplete type '{0}': {1}")]
+    IncompleteSubscript(String, Span),
 }
 
 #[derive(Error, Debug)]

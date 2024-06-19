@@ -1,8 +1,9 @@
-use crate::analysis::{Analyzer, control_flow};
+use crate::analysis::{Analyzer, control_flow, err};
 use crate::data::ast::*;
 use crate::data::mlir::*;
 use crate::util::{Locatable, Span};
 use crate::util::error::{CompilerError, CompilerWarning};
+use crate::util::str_intern::InternedStr;
 
 impl Analyzer {
     pub(super) fn validate_struct_definition(
@@ -81,11 +82,9 @@ impl Analyzer {
         let raw_params = &func.parameters;
         let mut parameters = Vec::new();
         for parameter in raw_params {
-            parameters.push(
-                parameter
-                    .location
-                    .into_locatable(self.validate_function_param_declaration(parameter)?),
-            );
+            parameters.push(parameter.location.into_locatable(
+                self.validate_function_param_declaration(ident.clone(), parameter)?,
+            ));
         }
 
         let param_types = parameters
@@ -159,6 +158,7 @@ impl Analyzer {
 
     pub(crate) fn validate_function_param_declaration(
         &mut self,
+        function_ident: InternedStr,
         param: &Locatable<Declaration>,
     ) -> Result<MlirVariable, ()> {
         if !param.specifier.specifiers.is_empty() {
@@ -166,12 +166,18 @@ impl Analyzer {
             return Err(());
         }
 
+        let hlir_var = self.process_dec_to_hlir_variable(&param.value, param.location)?;
+
         if param.ident.is_none() {
-            self.report_error(CompilerError::ParamRequiresIdent(param.location));
+            err!(
+                self,
+                ParamRequiresIdent,
+                function_ident.to_string(),
+                hlir_var.ty.value.to_string(),
+                param.location
+            );
             return Err(());
         }
-
-        let hlir_var = self.process_dec_to_hlir_variable(&param.value, param.location)?;
 
         Ok(hlir_var)
     }

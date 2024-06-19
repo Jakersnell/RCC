@@ -475,6 +475,11 @@ mod tests {
         fn array_access() {
             run_capture_output_test("array_access");
         }
+
+        #[test]
+        fn string_ptr() {
+            run_capture_output_test("string_ptr");
+        }
     }
 
     mod should_succeed {

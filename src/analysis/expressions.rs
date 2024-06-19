@@ -1,9 +1,9 @@
-use crate::analysis::Analyzer;
+use crate::analysis::{Analyzer, err};
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
 use crate::data::mlir::{
-    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind,
+    MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind, VOID_PTR,
 };
 use crate::data::tokens::Literal;
 use crate::util::{Locatable, Span};
@@ -361,18 +361,16 @@ impl Analyzer {
         left_span: Span,
         index_span: Span,
     ) -> Result<MlirExpr, ()> {
+        if left.ty == VOID_PTR {
+            err!(self, IncompleteSubscript, left.ty.to_string(), left_span);
+        }
+
         if !left.is_pointer() && !left.is_array() {
-            self.report_error(CompilerError::InvalidLeftOfSubScript(
-                left.ty.to_string(),
-                left_span,
-            ));
+            err!(self, InvalidLeftOfSubScript, left.ty.to_string(), left_span);
         }
 
         if !index.is_integer() {
-            self.report_error(CompilerError::CannotIndexWith(
-                index.ty.to_string(),
-                index_span,
-            ));
+            err!(self, CannotIndexWith, index.ty.to_string(), index_span);
         }
 
         let ty = left.ty.clone().as_basic();
@@ -392,7 +390,7 @@ impl Analyzer {
         member_span: Span,
     ) -> Result<MlirExpr, ()> {
         if !body.is_pointer() {
-            self.report_error(CompilerError::ArrowOnNonPointer(body_span));
+            err!(self, ArrowOnNonPointer, body_span);
         }
         // dereference to underlying type,
         let mut ty = body.ty.clone();
@@ -414,14 +412,16 @@ impl Analyzer {
         member_span: Span,
     ) -> Result<MlirExpr, ()> {
         if !matches!(&body.ty.kind, MlirTypeKind::Struct(_)) || body.is_array() {
-            self.report_error(CompilerError::CannotMemberAccessOnType(
+            err!(
+                self,
+                CannotMemberAccessOnType,
                 body.ty.to_string(),
-                body_span,
-            ));
+                body_span
+            );
         }
 
         if body.is_pointer() {
-            self.report_error(CompilerError::DotOperatorOnPointer(body_span));
+            err!(self, DotOperatorOnPointer, body_span);
         }
 
         let body = body_span.into_locatable(body);
