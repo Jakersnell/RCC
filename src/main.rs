@@ -192,7 +192,7 @@ fn load_src(path: PathBuf) -> Result<String, Vec<String>> {
 fn compile(source: String) -> Result<String, Vec<String>> {
     macro_rules! abort {
         () => {
-            return Err(vec![]);
+            return Err(vec![])
         };
     }
 
@@ -230,7 +230,7 @@ fn compile(source: String) -> Result<String, Vec<String>> {
     })?;
 
     if stop_at_analyzer() {
-        abort!()
+        abort!();
     }
 
     let context = Context::create();
