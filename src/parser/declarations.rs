@@ -1,7 +1,7 @@
 use crate::data::ast::*;
 use crate::data::error::CompilerError;
 use crate::data::tokens::*;
-use crate::parser::{Parser, ParseResult};
+use crate::parser::{ParseResult, Parser};
 use crate::util::Locatable;
 
 use super::macros::*;

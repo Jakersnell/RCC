@@ -4,13 +4,13 @@ use std::iter::Map;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
-use crate::{display_mlir, output_analyzer};
 use crate::analysis::symbols::SymbolResolver;
 use crate::data::ast::*;
 use crate::data::error::{CompilerError, CompilerWarning, Reporter};
 use crate::data::mlir::*;
-use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, Span};
+use crate::{display_mlir, output_analyzer};
 
 mod binary_expressions;
 mod casting;
@@ -408,9 +408,9 @@ fn test_validate_type_returns_ok_for_valid_type_orientations() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{analysis, lexer, parser};
     use crate::analysis::SharedReporter;
     use crate::data::mlir::MlirModule;
+    use crate::{analysis, lexer, parser};
 
     pub(in crate::analysis) fn run_analysis_test(path: &str) -> Result<MlirModule, SharedReporter> {
         let source = std::fs::read_to_string(path).expect("Could not read file.");

@@ -140,12 +140,17 @@ fn run() -> Result<(), Vec<String>> {
         )?
         .to_str()
         .unwrap();
-    let current_dir: PathBuf = ".".into();
-    let base_path = file_path.parent().unwrap_or_else(|| &current_dir);
+    let base_path: PathBuf = file_path.parent().map_or(".".into(), |p| p.into());
     let source = load_src(file_path.clone())?;
     let llir = compile(source)?;
-    output_program(base_path, file_stem, llir)?;
+    output_program(&base_path, file_stem, llir)?;
     Ok(())
+}
+
+macro_rules! abort {
+    () => {
+        return Err(vec![])
+    };
 }
 
 fn parse_file_stem_from_path(path: &Path) -> Result<String, Vec<String>> {
@@ -190,12 +195,6 @@ fn load_src(path: PathBuf) -> Result<String, Vec<String>> {
 }
 
 fn compile(source: String) -> Result<String, Vec<String>> {
-    macro_rules! abort {
-        () => {
-            return Err(vec![])
-        };
-    }
-
     let lexer = Lexer::new(source.into());
     let lexemes = lexer.lex_all().map_err(|errors| {
         errors
@@ -242,6 +241,15 @@ fn compile(source: String) -> Result<String, Vec<String>> {
 }
 
 fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), Vec<String>> {
+    macro_rules! validate_stderr {
+        ($output:expr) => {
+            if !$output.stderr.is_empty() {
+                let error = String::from_utf8($output.stderr).unwrap();
+                Err(vec![error])?;
+            }
+        };
+    }
+
     let filepath = dir_path.join(file_stem);
     let ll_filepath = filepath.with_extension("ll");
     let s_filepath = filepath.with_extension("s");
@@ -262,25 +270,25 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
         Ok,
     )?;
 
-    Command::new("llc")
+    validate_stderr!(Command::new("llc")
         .args([&ll_filepath, "-o", &s_filepath])
         .output()
-        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
+        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?);
 
     if !keep_temp_files() {
         std::fs::remove_file(ll_filepath).unwrap();
     }
 
-    Command::new("as")
+    validate_stderr!(Command::new("as")
         .args([&s_filepath, "-o", &o_filepath])
         .output()
-        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
+        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?);
 
     if !keep_temp_files() {
         std::fs::remove_file(s_filepath).unwrap();
     }
 
-    Command::new("ld")
+    validate_stderr!(Command::new("ld")
         .args([
             "-o",
             &filepath,
@@ -293,11 +301,12 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
             "-lSystem",
         ])
         .output()
-        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?;
+        .map_or_else(|error| Err(vec![error.to_string()]), Ok)?);
 
     if !keep_temp_files() {
         std::fs::remove_file(o_filepath).unwrap();
     }
+
     Ok(())
 }
 
@@ -306,8 +315,8 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{Args, lexer, parser};
     use crate::data::ast::{Expression, InitDeclaration};
+    use crate::{lexer, parser, Args};
 
     static DISPLAY_ERRORS_DURING_TESTS: bool = false;
     static CLEANUP_AFTER_TESTS: bool = true;
@@ -364,9 +373,9 @@ mod tests {
         use std::path::PathBuf;
         use std::process::Command;
 
-        use crate::{compile, output_program};
         use crate::tests::CLEANUP_AFTER_TESTS;
         use crate::util::display_utils::indent_string;
+        use crate::{compile, output_program};
 
         fn run_capture_output_test(filename: &str) {
             crate::tests::init_args();
