@@ -62,4 +62,13 @@ compiler, such as control flow analysis.
 
 Control flow analysis is the process of representing the program in a graph form and performing certain analysis on this
 graph to process the program and determine qualities of it. This is very useful for a variety of tasks, such as
-eliminating dead code, keeping track of unused items, or validating function returns. 
+eliminating dead code, keeping track of unused items, or validating function returns.
+
+## MLIR
+
+The analysis phase of the compiler creates the MLIR, this mlir can be viewed in pretty print with the '--display-mlir'
+flag or in 'disgusting print' with the '--output-analyzer' flag when compiling a program. This data structure represents
+the logical structure of the program being compiled with a different format than the AST. Some elements that were
+present in the AST will not be present in the MLIR, and some elements in the MLIR will not have been present in the AST.
+The MLIR is designed to contain the necessary data for the binary codegen phase. The MLIR can be
+viewed [here](../src/data/mlir.rs)
