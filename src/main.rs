@@ -315,8 +315,8 @@ fn output_program(dir_path: &Path, file_stem: &str, llir: String) -> Result<(), 
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{Args, lexer, parser};
     use crate::data::ast::{Expression, InitDeclaration};
+    use crate::{lexer, parser, Args};
 
     static DISPLAY_ERRORS_DURING_TESTS: bool = false;
     static CLEANUP_AFTER_TESTS: bool = true;
@@ -373,9 +373,9 @@ mod tests {
         use std::path::PathBuf;
         use std::process::Command;
 
-        use crate::{compile, output_program};
         use crate::tests::CLEANUP_AFTER_TESTS;
         use crate::util::display_utils::indent_string;
+        use crate::{compile, output_program};
 
         fn run_capture_output_test(filename: &str) {
             crate::tests::init_args();

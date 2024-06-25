@@ -2,7 +2,7 @@ use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, PointerValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
+use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVarInit, MlirVariable};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_global_variable_declaration(&mut self, var: &'mlir MlirVariable) {
@@ -41,15 +41,10 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     fn create_default_value_for_type(&mut self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
         let basic_value = match ty {
             BasicTypeEnum::ArrayType(array_type) => array_type.const_zero().into(),
-
             BasicTypeEnum::StructType(struct_type) => struct_type.const_zero().into(),
-
             BasicTypeEnum::FloatType(float_type) => float_type.const_float(0.0).into(),
-
             BasicTypeEnum::IntType(int_type) => int_type.const_int(0, false).into(),
-
             BasicTypeEnum::PointerType(ptr_type) => ptr_type.const_null().into(),
-
             _ => unreachable!(),
         };
 
