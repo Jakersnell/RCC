@@ -1,5 +1,5 @@
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{ArrayValue, BasicValueEnum, PointerValue};
+use inkwell::values::{BasicValueEnum, PointerValue};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
@@ -22,11 +22,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         let global = match &mlir_type.decl {
             MlirTypeDecl::Array(size) => {
-                let ty = ty.array_type(*size as u32);
+                ty = ty.array_type(*size as u32).into();
                 self.module.add_global(ty, None, ident)
             }
             _ => self.module.add_global(ty, None, ident),
         };
+
+        global.set_initializer(&self.create_default_value_for_type(ty));
 
         self.insert_pointer(ident.value.clone(), global.as_pointer_value());
 
@@ -38,21 +40,9 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn create_default_value_for_type(&mut self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
         let basic_value = match ty {
-            BasicTypeEnum::ArrayType(array_type) => {
-                let values = std::iter::repeat(array_type.get_element_type())
-                    .take(array_type.len() as usize)
-                    .map(|ty| ArrayValue::try_from(self.create_default_value_for_type(ty)).unwrap())
-                    .collect::<Vec<ArrayValue>>();
-                array_type.const_array(&values).into()
-            }
+            BasicTypeEnum::ArrayType(array_type) => array_type.const_zero().into(),
 
-            BasicTypeEnum::StructType(struct_type) => {
-                let field_values = struct_type
-                    .get_field_types_iter()
-                    .map(|field_type| self.create_default_value_for_type(ty))
-                    .collect::<Vec<_>>();
-                struct_type.const_named_struct(&field_values).into()
-            }
+            BasicTypeEnum::StructType(struct_type) => struct_type.const_zero().into(),
 
             BasicTypeEnum::FloatType(float_type) => float_type.const_float(0.0).into(),
 
