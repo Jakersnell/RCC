@@ -2,13 +2,13 @@ use rand::RngCore;
 
 use macros::*;
 
-use crate::{display_ast, output_parser};
 use crate::data::ast::*;
 use crate::data::error::CompilerError;
 use crate::data::tokens::{Keyword, Literal};
 use crate::data::tokens::{Symbol, Token};
-use crate::util::{Locatable, LocatableToken, Span};
 use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, LocatableToken, Span};
+use crate::{display_ast, output_parser};
 
 pub(super) mod declarations;
 pub(super) mod expressions;

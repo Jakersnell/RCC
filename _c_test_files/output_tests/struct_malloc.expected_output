@@ -1,0 +1,5 @@
+struct test {
+	x = 3;
+	str = "hello world!";
+	f = 3.140000;
+};

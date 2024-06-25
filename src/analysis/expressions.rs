@@ -1,4 +1,4 @@
-use crate::analysis::{Analyzer, err};
+use crate::analysis::{err, Analyzer};
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
@@ -7,8 +7,8 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind, VOID_PTR,
 };
 use crate::data::tokens::Literal;
-use crate::util::{Locatable, Span};
 use crate::util::str_intern::InternedStr;
+use crate::util::{Locatable, Span};
 
 impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {

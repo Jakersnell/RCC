@@ -1,12 +1,11 @@
-use inkwell::types::BasicTypeEnum;
-use inkwell::values::PointerValue;
-use inkwell::AddressSpace;
+use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::values::{BasicValueEnum, PointerValue};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVarInit, MlirVariable};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
-    pub fn compile_variable_declaration(&mut self, var: &'mlir MlirVariable, is_global: bool) {
+    pub fn compile_global_variable_declaration(&mut self, var: &'mlir MlirVariable) {
         let MlirVariable {
             span,
             ty: mlir_type,
@@ -15,18 +14,59 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             initializer,
         } = var;
 
-        let ty = if matches!(&mlir_type.decl, MlirTypeDecl::Array(_)) {
+        let mut ty = self.convert_type(&if matches!(&mlir_type.decl, MlirTypeDecl::Array(_)) {
             mlir_type.as_basic()
         } else {
             mlir_type.value.clone()
+        });
+
+        let global = match &mlir_type.decl {
+            MlirTypeDecl::Array(size) => {
+                ty = ty.array_type(*size as u32).into();
+                self.module.add_global(ty, None, ident)
+            }
+            _ => self.module.add_global(ty, None, ident),
         };
-        let ty = self.convert_type(&ty);
+
+        global.set_initializer(&self.create_default_value_for_type(ty));
+
+        self.insert_pointer(ident.value.clone(), global.as_pointer_value());
+
+        let initializer = initializer.as_ref().map(|val| &val.value);
+
+        self.init_in_main
+            .push((ident.value.clone(), ty, initializer));
+    }
+
+    fn create_default_value_for_type(&mut self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        let basic_value = match ty {
+            BasicTypeEnum::ArrayType(array_type) => array_type.const_zero().into(),
+            BasicTypeEnum::StructType(struct_type) => struct_type.const_zero().into(),
+            BasicTypeEnum::FloatType(float_type) => float_type.const_float(0.0).into(),
+            BasicTypeEnum::IntType(int_type) => int_type.const_int(0, false).into(),
+            BasicTypeEnum::PointerType(ptr_type) => ptr_type.const_null().into(),
+            _ => unreachable!(),
+        };
+
+        basic_value
+    }
+
+    pub fn compile_variable_declaration(&mut self, var: &'mlir MlirVariable) {
+        let MlirVariable {
+            span,
+            ty: mlir_type,
+            ident,
+            is_const,
+            initializer,
+        } = var;
+
+        let ty = self.convert_type(&if matches!(&mlir_type.decl, MlirTypeDecl::Array(_)) {
+            mlir_type.as_basic()
+        } else {
+            mlir_type.value.clone()
+        });
 
         let var_ptr = match &mlir_type.decl {
-            _ if is_global => self
-                .module
-                .add_global(ty, Some(AddressSpace::default()), ident)
-                .as_pointer_value(),
             MlirTypeDecl::Array(size) => self.create_entry_block_array_allocation(ty, *size),
             MlirTypeDecl::Pointer | MlirTypeDecl::Basic => {
                 self.create_entry_block_allocation(ty, ident)
@@ -37,12 +77,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         let initializer = initializer.as_ref().map(|val| &val.value);
 
-        if is_global {
-            self.init_in_main
-                .push((ident.value.clone(), ty, initializer));
-        } else {
-            self.initialize_variable(ty, var_ptr, initializer);
-        }
+        self.initialize_variable(ty, var_ptr, initializer);
     }
 
     pub fn initialize_variable(

@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
 use crate::data::tokens::{Keyword, Literal, Symbol, Token};
-use crate::util::Locatable;
 use crate::util::str_intern::InternedStr;
+use crate::util::Locatable;
 
 pub type ASTRoot = Vec<InitDeclaration>;
 
