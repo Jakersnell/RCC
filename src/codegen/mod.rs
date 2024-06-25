@@ -75,7 +75,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         }
 
         for global in self.mlir.globals.iter() {
-            self.compile_global(global);
+            self.compile_global_variable_declaration(global);
         }
 
         for function in self.mlir.functions.iter() {
@@ -131,11 +131,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .struct_types
             .get(ident)
             .unwrap_or_else(|| panic!("Struct '{}' does not exist!", ident))
-    }
-
-    #[inline(always)]
-    fn compile_global(&mut self, global: &'mlir MlirVariable) {
-        self.compile_variable_declaration(global, true);
     }
 
     fn compile_builtins(&mut self) {

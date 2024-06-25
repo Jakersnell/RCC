@@ -1,7 +1,7 @@
 use inkwell::values::BasicValue;
 
 use crate::codegen::{Compiler, MlirBasicBlock};
-use crate::data::mlir::{MlirExpr, MlirStmt, MlirVariable};
+use crate::data::mlir::{MlirExpr, MlirStmt};
 use crate::util::str_intern::InternedStr;
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -14,7 +14,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 }
 
                 MlirStmt::VariableDeclaration(var) => {
-                    self.compile_variable_declaration_statement(var);
+                    self.compile_variable_declaration(var);
                 }
 
                 MlirStmt::Goto(label) => {
@@ -42,11 +42,6 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     #[inline(always)]
     fn compile_expression_statement(&mut self, expression: &MlirExpr) {
         self.compile_expression(expression);
-    }
-
-    #[inline(always)]
-    fn compile_variable_declaration_statement(&mut self, var: &'mlir MlirVariable) {
-        self.compile_variable_declaration(var, false);
     }
 
     #[inline(always)]
