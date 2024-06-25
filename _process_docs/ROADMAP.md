@@ -63,4 +63,9 @@ This document is a roadmap for the development of the compiler. It will be updat
 [X] Emitting variable declarations
 [X] Emitting return statements
 [X] Emitting Control flow
+
+[X] Verification and integration tests for various features
+[ ] CI/CD pipeline to deploy to homebrew
+[ ] Complete writeup of readme
+[ ] Short youtube video to explain the compiler
 </pre>
