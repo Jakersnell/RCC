@@ -1,6 +1,6 @@
 # Micro-C
 
-### A small handwritten compiler focusing on a subset of the C language. 
+### A small handwritten compiler focusing on a subset of the C language.
 
 ---
 
@@ -18,10 +18,40 @@
 
 ---
 
-#### Notice: This compiler only supports apple Arm64 CPUs
+#### Notice: This compiler only support operation on MacOS arm64 systems
+
+I plan on creating a web application playground that will allow access to the compiler in the future.
 
 ---
+
+## Directory
+
+### [How to use](_process_docs/HOW-TO-USE.md)
+
+### [Codegen and emission process description - Phase 4](_process_docs/CODEGEN.md)
+
+### [Semantic analysis process description - Phase 3](_process_docs/SEMANTIC-ANALYSIS.md)
+
+### [Parsing process description - Phase 2](_process_docs/AST-PROCESS.md)
+
+### [Lexing process description - Phase 1](_process_docs/LEXING.md)
+
+### [Specification for casting operations](_process_docs/CASTING_SPEC.md)
+
+### [Formal specification grammar ](_process_docs/MICRO-C-GRAMMAR.md)
+
+### [Roadmap](_process_docs/ROADMAP.md)
+
+---
+
 ## About the Project
+
+### Phases of the compiler
+
+1. Lexical analysis (Reading literals, keywords, operators, etc) {done}
+2. Parsing (Reading the logical structure of the code) {done}
+3. Semantic analysis (Type checking, variable validation, and the like) {in progress}
+4. Codegen (Creating the IR, linking the object files, creating a binary)
 
 ### Goal
 
@@ -74,34 +104,6 @@ Rust conventions the tests are within the file of the items they are testing. Th
 tests throughout the compiler to verify integrity of the system. The only code ever pushed to this repository is code
 that passes all of these tests. In ```src/_c_test_files``` you will see integration tests that correspond to which type
 of test they are based on the directory they are within.
-___
-
-#### All phases of the compiler are finished except for emission. Emission is being worked on currently.
-
----
-
-## Directory
-
-### [Semantic analysis process description - Phase 3](_process_docs/SEMANTIC-ANALYSIS.md)
-
-### [Parsing process description - Phase 2](_process_docs/AST-PROCESS.md)
-
-### [Lexing process description - Phase 1](_process_docs/LEXING.md)
-
-### [Specification for casting operations](_process_docs/CASTING_SPEC.md)
-
-### [Formal specification grammar ](_process_docs/MICRO-C-GRAMMAR.md)
-
-### [Roadmap](_process_docs/ROADMAP.md)
-
----
-
-### Phases of the compiler
-
-1. Lexical analysis (Reading literals, keywords, operators, etc) {done}
-2. Parsing (Reading the logical structure of the code) {done}
-3. Semantic analysis (Type checking, variable validation, and the like) {in progress}
-4. Codegen (Creating the IR, linking the object files, creating a binary)
 
 ---
 
