@@ -108,10 +108,10 @@ of test they are based on the directory they are within.
 ---
 
 ### Resources I have found helpful
-
+- [Inkwell documentation](https://thedan64.github.io/inkwell/inkwell/index.html)
+- [LLVM documentation](https://llvm.org/docs/)_
 - [ANSI C specification pdf](https://web.archive.org/web/20200909074736if_/https://www.pdf-archive.com/2014/10/02/ansi-iso-9899-1990-1/ansi-iso-9899-1990-1.pdf)
 - [Stanford CS143 semantic analysis](https://web.stanford.edu/class/archive/cs/cs143/cs143.1128/handouts/180%20Semantic%20Analysis.pdf)
-- [Developing a C compiler from scratch in C - Daniel McCarthy](https://www.udemy.com/course/creating-a-c-compiler-from-scratch-module-1)
 - [Compiler Design - neso academy](https://www.youtube.com/playlist?list=PLBlnK6fEyqRjT3oJxFXRgjPNzeS-LFY-q)
 - [Building a compiler - Immo Landwerth](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y)
 - [The rust compiler - for reference](https://github.com/rust-lang/rust)
