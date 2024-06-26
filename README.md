@@ -20,7 +20,7 @@
 
 #### Notice: This compiler only support operation on MacOS arm64 systems
 
-I plan on creating a web application playground that will allow access to the compiler in the future.
+I plan on creating a web playground that will allow access to the compiler in the future. But for now the only way to use this compiler is to run it natively.
 
 ---
 
