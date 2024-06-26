@@ -4,7 +4,7 @@
 
 ### How to install
 
-#### You must have LLVM and LLC version 18.1.7 installed to procede
+#### You must have Rust, LLVM, and LLC version 18.1.7 installed to procede
 
 To use the compiler by cloning and building the repository follow these steps
 
