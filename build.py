@@ -93,10 +93,20 @@ def install_cargo():
 def run_cargo_build():
     try:
         print("Running Cargo build...")
-        subprocess.check_call(["cargo", "build"])
+        subprocess.check_call(["cargo", "build", "--release"])
         print("Cargo build completed successfully.")
     except subprocess.CalledProcessError as e:
         print(f"An error occurred during the Cargo build: {e}")
+        sys.exit(1)
+
+
+def copy_to_usr_bin():
+    try:
+        print("Copying to usr/bin...")
+        subprocess.check_call(["cp", "./target/release/microc", "/usr/bin"])
+        print("Successfully copied to '/usr/bin'")
+    except subprocess.CalledProcessError as e:
+        print(f"An error occured while copying to '/usr/bin': {e}")
         sys.exit(1)
 
 
@@ -110,8 +120,10 @@ def main():
 
         run_cargo_build()
 
+        copy_to_usr_bin()
+
     except Exception as e:
-        print(f"A fatal error occured {e}")
+        print(f"A fatal error occurred: {e}")
         sys.exit(1)
 
 
