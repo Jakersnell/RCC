@@ -44,16 +44,76 @@ and its location in memory (On little endian systems).
 Another good observation is that the 'char *' is turned into a 'ptr'. This is because fundamentally at a low level all
 pointers are the same. The type distinction is just used for higher level compiler functions.
 
-### Global Variable Compilation
-
-### Builtin Function Declaration
-
 ### Function Compilation
+
+During compilation functions have a variety of operations done. Firstly a function can have parameters, and these
+parameters
+need to be organized so that they can be passed in CPU registers or on the stack, and the codegen phase needs to
+determine which method will be used and how it will be done. Second, those parameters, and all other variables in the
+function, will need
+stack allocation instructions to be generated in the LLIR so that they have a memory location to occupy.
+Third, the instructions in the function need to be compiled, or broken down into their most primitive components that
+can
+be executed by the CPU.
+A program is a set of steps that is usually executed
+sequentially. During compilation each type of instruction like
+add, sub, goto, and others, are broken into single commands. At an assembly level these are usually commands that are
+directly executed by the CPU. The LLIR produced by the codegen phase is very similar to assembly, and thus the program
+is compiled into its most primitive instructions.
 
 ### Statements: Basic Blocks and Branches
 
+Statements in a program such as if, while, for, etc, generally do not exist at the assembly level. These constructs are
+replaced with two things. Branch instructions aka goto statements, tell the program to go to another part of the
+program, and labels,
+which mark locations in the program so that they can be accessed, or "jumped to" from branch instructions. These are
+what
+all types of control flow break down into at such a low level.
+
+Basic blocks are blocks representing logical segments of an assembly or ssa like program. These blocks are meant to
+represent the program as a control flow graph or CFG for short. A basic block is created like this. While stepping
+through your program, at the start you begin a basic block. When you encounter a label statement, you end the current
+basic block or complete it, and then start a new one and add the label into the new block, this is that blocks label
+and is used to identify the block. Second, if you encounter a return, or branch statement, add that into the current
+block and create a new block to be used. For all other types of statements you add them into the current block. At the
+end of this process you have converted the program into a set of basic blocks that can be used to construct a control
+flow graph. A control flow graph represents the structure of the program. See google for more on control flow graph.
+
+    Ex program:
+    
+    int main() {
+        int x = 3;
+        if (x) {
+            printf("test");
+        }
+        return 0;
+    }
+
+    Ex program as basic blocks (in pseudo code):
+        
+        static string arg1 = "test";
+        fn main:
+            label entry:
+                stack_alloc i32 x;
+                goto body;
+            
+            label body:                               
+                assign x, i32 3;
+                cond_goto x, if_then, end
+
+            label if_then:
+                load r0, @arg1;             // load string ptr into fn arg register
+                fn_call printf;
+                goto end;
+
+            label end:
+                return i32 0;
+
 ### Lval operations
 
-### Rval operations
-
+Lval operations are operations that involve assigning a value into a memory location, or register in the case of
+register
+variables in C or other languages that allow for similar functionality. These values are on the left-hand side of
+assignment expressions and thus are given the name Lval. During compilation these assignment operations are implemented
+as storing a Rvalue or literal data value into the memory location of a Lval.
 
