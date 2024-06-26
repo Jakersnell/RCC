@@ -32,6 +32,7 @@ Micro C is almost exactly the same as C except for a few things.
 9. declaring a function with varargs is invalid. only builtin functions can have varargs.
 10. the entire preprocessor system does not exist.
 11. printf's formatter string is unchecked for validity.
+12. the compiler only supports single file programs, as there is currently no way to import from other files.
 
 ### Micro C built in functions
 
