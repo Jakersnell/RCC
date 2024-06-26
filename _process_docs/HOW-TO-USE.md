@@ -9,8 +9,8 @@
 To use the compiler by cloning and building the repository follow these steps
 
 1. clone this repository with git, by using the following commands in your terminal
-   ```cd <path to your preferred containing directory here>```
-   ```git clone <this repository url here>```
+   ```cd <path-to-your-preferred-containing-directory-here>```
+   ```git clone <this-repository-url-here>```
 2. in the repository on your local machine run this command
    ```cargo build --release```
 3. run the following command
