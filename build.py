@@ -2,12 +2,17 @@ import os
 import subprocess
 import sys
 import tarfile
-import urllib.request
+
+import requests
 
 LLVM_VERSION = "18.1.7"
 LLVM_DOWNLOAD_URL = f"https://github.com/llvm/llvm-project/releases/download/llvmorg-{LLVM_VERSION}/llvm-{LLVM_VERSION}.src.tar.xz"
 LLVM_INSTALL_DIR = f"/usr/local/llvm-{LLVM_VERSION}"
 CARGO_VERSION = "cargo 1.75.0 (1d8b05cdd 2023-11-20)"
+
+
+def check_micro_c_version():
+    raise NotImplementedError()
 
 
 def check_llvm_version():
@@ -32,7 +37,14 @@ def check_llvm_version():
 def install_llvm():
     try:
         print(f"Downloading LLVM version {LLVM_VERSION} from {LLVM_DOWNLOAD_URL}...")
-        urllib.request.urlretrieve(LLVM_DOWNLOAD_URL, f"llvm-{LLVM_VERSION}.src.tar.xz")
+
+        if not os.path.exists(f"llvm-{LLVM_VERSION}.src.tar.xz"):
+            response = requests.get(LLVM_DOWNLOAD_URL, stream=True)
+            response.raise_for_status()
+
+        with open(f"llvm-{LLVM_VERSION}.src.tar.xz", 'wb') as out_file:
+            for chunk in response.iter_content(chunk_size=8192):
+                out_file.write(chunk)
 
         print(f"Extracting LLVM version {LLVM_VERSION}...")
         with tarfile.open(f"llvm-{LLVM_VERSION}.src.tar.xz", "r:xz") as tar:
@@ -46,6 +58,9 @@ def install_llvm():
         subprocess.check_call(["make", "install"])
 
         print(f"LLVM version {LLVM_VERSION} installed successfully.")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred while downloading LLVM: {e}")
+        sys.exit(1)
     except Exception as e:
         print(f"An error occurred while installing LLVM: {e}")
         sys.exit(1)
@@ -106,7 +121,7 @@ def copy_to_usr_bin():
         subprocess.check_call(["cp", "./target/release/microc", "/usr/bin"])
         print("Successfully copied to '/usr/bin'")
     except subprocess.CalledProcessError as e:
-        print(f"An error occured while copying to '/usr/bin': {e}")
+        print(f"An error occurred while copying to '/usr/bin': {e}")
         sys.exit(1)
 
 

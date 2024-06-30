@@ -17,7 +17,7 @@ install_python3() {
     then
         brew install python
     else
-        echo "Homebrew is not installed. Please install Homebrew first."
+        echo "Homebrew is not installed. Please install or Python3 directly."
         exit 1
     fi
 }
