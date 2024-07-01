@@ -1,105 +1,52 @@
-import os
 import subprocess
 import sys
-import tarfile
+from shutil import which
 
-import requests
-
-LLVM_VERSION = "18.1.7"
-LLVM_DOWNLOAD_URL = f"https://github.com/llvm/llvm-project/releases/download/llvmorg-{LLVM_VERSION}/llvm-{LLVM_VERSION}.src.tar.xz"
-LLVM_INSTALL_DIR = f"/usr/local/llvm-{LLVM_VERSION}"
+LLVM_VERSION = "18"
 CARGO_VERSION = "cargo 1.75.0 (1d8b05cdd 2023-11-20)"
 
 
-def check_micro_c_version():
-    raise NotImplementedError()
+# 1. check that llvm-config exists and version is usable
+# 2. if llvm exists continue to step 4
+# 3. if llvm not exists install llvm@18 from homebrew
+# 4. check that rustc & cargo of correct version exists
+# 5. if correct cargo version exists skip to step 7
+# 6. if cargo version incorrect install correct version
+# 7. run cargo build
+# 8. copy to usr/bin
 
 
-def check_llvm_version():
-    try:
-        # Check LLVM version
-        output = subprocess.check_output(['llvm-config', '--version'], stderr=subprocess.STDOUT)
-        version = output.decode().strip()
-        if version == LLVM_VERSION:
-            print(f"LLVM version {version} is already installed.")
-            return True
-        else:
-            print(f"LLVM version {version} is installed, but version {LLVM_VERSION} is required.")
-            return False
-    except subprocess.CalledProcessError:
-        print("LLVM is not installed.")
-        return False
-    except FileNotFoundError:
-        print("LLVM is not installed.")
+def check_llvm():
+    if which("llvm-config") is not None:
+        print("llvm is installed.")
+        return True
+    else:
+        print("llc is not installed.")
         return False
 
 
 def install_llvm():
     try:
-        print(f"Downloading LLVM version {LLVM_VERSION} from {LLVM_DOWNLOAD_URL}...")
-
-        if not os.path.exists(f"llvm-{LLVM_VERSION}.src.tar.xz"):
-            response = requests.get(LLVM_DOWNLOAD_URL, stream=True)
-            response.raise_for_status()
-
-        with open(f"llvm-{LLVM_VERSION}.src.tar.xz", 'wb') as out_file:
-            for chunk in response.iter_content(chunk_size=8192):
-                out_file.write(chunk)
-
-        print(f"Extracting LLVM version {LLVM_VERSION}...")
-        with tarfile.open(f"llvm-{LLVM_VERSION}.src.tar.xz", "r:xz") as tar:
-            tar.extractall()
-
-        print(f"Installing LLVM version {LLVM_VERSION} to {LLVM_INSTALL_DIR}...")
-        os.chdir(f"llvm-{LLVM_VERSION}.src")
-        os.makedirs(LLVM_INSTALL_DIR, exist_ok=True)
-        subprocess.check_call(["./configure", f"--prefix={LLVM_INSTALL_DIR}"])
-        subprocess.check_call(["make"])
-        subprocess.check_call(["make", "install"])
-
-        print(f"LLVM version {LLVM_VERSION} installed successfully.")
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred while downloading LLVM: {e}")
-        sys.exit(1)
+        print(f"Downloading LLVM version {LLVM_VERSION}...")
+        subprocess.check_output(['brew', 'install', f'llvm@{LLVM_VERSION}'])
     except Exception as e:
         print(f"An error occurred while installing LLVM: {e}")
         sys.exit(1)
 
 
-def check_cargo_version():
-    try:
-        # Check Cargo version
-        output = subprocess.check_output(['cargo', '--version'], stderr=subprocess.STDOUT)
-        version = output.decode().strip()
-        if version == CARGO_VERSION:
-            print(f"Cargo version {version} is already installed.")
-            return True
-        else:
-            print(f"Cargo version {version} is installed, but version {CARGO_VERSION} is required.")
-            return False
-    except subprocess.CalledProcessError:
-        print("Cargo is not installed.")
-        return False
-    except FileNotFoundError:
-        print("Cargo is not installed.")
+def check_rust():
+    if which("cargo") is not None:
+        print(f"Cargo is already installed.")
+        return True
+    else:
+        print(f"Cargo is not installed.")
         return False
 
 
-def install_cargo():
+def install_rust():
     try:
-        print("Installing Rust and Cargo...")
-        # Download and install Rust (which includes Cargo)
-        subprocess.check_call(
-            ["curl", "--proto", "=https", "--tlsv1.2", "-sSf", "https://sh.rustup.rs", "-o", "rustup-init.sh"])
-        subprocess.check_call(["sh", "rustup-init.sh", "-y"])
-        os.remove("rustup-init.sh")  # Clean up the installer
-
-        # Set the specific version of Cargo
-        subprocess.check_call(["rustup", "default", "stable"])
-        subprocess.check_call(["rustup", "update", "stable"])
-        subprocess.check_call(["rustup", "override", "set", "1.75.0"])
-
-        print("Cargo (and Rust) installed successfully.")
+        print("Installing Cargo...")
+        subprocess.check_output(['brew', 'install', 'cargo'])
     except subprocess.CalledProcessError as e:
         print(f"An error occurred while installing Cargo: {e}")
         sys.exit(1)
@@ -127,11 +74,11 @@ def copy_to_usr_bin():
 
 def main():
     try:
-        if not check_llvm_version():
+        if not check_llvm():
             install_llvm()
 
-        if not check_cargo_version():
-            install_cargo()
+        if not check_rust():
+            install_rust()
 
         run_cargo_build()
 
