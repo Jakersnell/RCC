@@ -379,7 +379,7 @@ impl MlirExpr {
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
     Literal(MlirLiteral),
-    Variable(InternedStr),
+    Variable(usize),
 
     // unary
     PostIncrement(MlirExpr),

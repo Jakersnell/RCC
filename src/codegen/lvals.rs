@@ -1,6 +1,6 @@
+use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
-use inkwell::AddressSpace;
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{MlirExpr, MlirExprKind, MlirType};
@@ -17,7 +17,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     pub fn compile_address_of(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         let ptr = match &*expr.kind {
-            MlirExprKind::Variable(ident) => self.get_pointer(ident),
+            MlirExprKind::Variable(uid) => self.get_pointer(*uid),
             MlirExprKind::Deref(pointer) => self.compile_expression(pointer).into_pointer_value(),
             MlirExprKind::Assign(left, right) => self
                 .compile_assignment(left, right, true)
@@ -60,7 +60,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
         match &*lval.kind {
             MlirExprKind::Deref(expr) => self.compile_expression(expr).into_pointer_value(),
 
-            MlirExprKind::Variable(ident) => self.get_pointer(ident),
+            MlirExprKind::Variable(uid) => self.get_pointer(*uid),
 
             MlirExprKind::Member(_struct, member) => {
                 self.compile_struct_member_pointer(self.convert_type(&lval.ty), _struct, member)
@@ -151,11 +151,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .unwrap()
     }
 
-    pub fn compile_variable_access(
-        &mut self,
-        ty: &MlirType,
-        id: &InternedStr,
-    ) -> BasicValueEnum<'ctx> {
+    pub fn compile_variable_access(&mut self, ty: &MlirType, id: usize) -> BasicValueEnum<'ctx> {
         let pointee_ty = self.convert_type(ty);
         let ptr = self.get_pointer(id);
         self.builder()

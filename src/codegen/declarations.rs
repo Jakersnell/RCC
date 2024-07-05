@@ -31,12 +31,11 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
         global.set_initializer(&self.create_default_value_for_type(ty));
 
-        self.insert_pointer(ident.value.clone(), global.as_pointer_value());
+        self.insert_pointer(*uid, global.as_pointer_value());
 
         let initializer = initializer.as_ref().map(|val| &val.value);
 
-        self.init_in_main
-            .push((ident.value.clone(), ty, initializer));
+        self.init_in_main.push((*uid, ty, initializer));
     }
 
     fn create_default_value_for_type(&mut self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
@@ -75,7 +74,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             }
         };
 
-        self.insert_pointer(ident.value.clone(), var_ptr);
+        self.insert_pointer(*uid, var_ptr);
 
         let initializer = initializer.as_ref().map(|val| &val.value);
 

@@ -1,5 +1,5 @@
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 
 use crate::codegen::Compiler;
 use crate::data::mlir::{CastType, MlirExpr, MlirExprKind, MlirType};
@@ -9,7 +9,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         match &*expr.kind {
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
-            MlirExprKind::Variable(id) => self.compile_variable_access(&expr.ty, id),
+            MlirExprKind::Variable(id) => self.compile_variable_access(&expr.ty, *id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
             MlirExprKind::PostDecrement(expr) => self.compile_post_decrement(expr),
             MlirExprKind::Negate(expr) => self.compile_negate(expr),

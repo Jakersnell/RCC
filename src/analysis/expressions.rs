@@ -1,4 +1,4 @@
-use crate::analysis::{err, Analyzer};
+use crate::analysis::{Analyzer, err};
 use crate::data::ast::{
     AssignOp, BinaryOp, Declaration, Expression, PostfixOp, TypeOrExpression, UnaryOp,
 };
@@ -7,8 +7,8 @@ use crate::data::mlir::{
     MlirExpr, MlirExprKind, MlirLiteral, MlirType, MlirTypeDecl, MlirTypeKind, VOID_PTR,
 };
 use crate::data::tokens::Literal;
-use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
+use crate::util::str_intern::InternedStr;
 
 impl Analyzer {
     pub(super) fn validate_expression(&mut self, expr: &Expression) -> Result<MlirExpr, ()> {
@@ -38,9 +38,9 @@ impl Analyzer {
             .scope
             .borrow_mut()
             .get_variable_type_and_id(&variable.value, variable.location)
-            .map(|ty| MlirExpr {
+            .map(|(ty, uid)| MlirExpr {
                 span: variable.location,
-                kind: Box::new(MlirExprKind::Variable(variable.value.clone())),
+                kind: Box::new(MlirExprKind::Variable(uid)),
                 ty,
                 is_lval: true,
             });

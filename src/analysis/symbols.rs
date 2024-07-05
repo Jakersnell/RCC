@@ -142,9 +142,9 @@ impl SymbolResolver {
         &mut self,
         ident: &InternedStr,
         span: Span,
-    ) -> Result<MlirType, CompilerError> {
+    ) -> Result<(MlirType, usize), CompilerError> {
         match self.retrieve(ident, span)? {
-            SymbolKind::Variable(var) => Ok(var.ty.clone()),
+            SymbolKind::Variable(var) => Ok((var.ty.clone(), var.uid)),
             _ => Err(CompilerError::NotAVariable(span)),
         }
     }

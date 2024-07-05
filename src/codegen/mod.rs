@@ -45,9 +45,9 @@ pub struct Compiler<'a, 'mlir, 'ctx> {
     pub(in crate::codegen) struct_types: HashMap<InternedStr, StructType<'ctx>>,
     pub(in crate::codegen) block_has_jumped: bool,
     pub(in crate::codegen) init_in_main:
-        Vec<(InternedStr, BasicTypeEnum<'ctx>, Option<&'mlir MlirVarInit>)>,
+        Vec<(usize, BasicTypeEnum<'ctx>, Option<&'mlir MlirVarInit>)>,
     functions: HashMap<InternedStr, FunctionValue<'ctx>>,
-    variables: HashMap<InternedStr, PointerValue<'ctx>>,
+    variables: HashMap<usize, PointerValue<'ctx>>,
 }
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
@@ -88,13 +88,13 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     }
 
     #[inline(always)]
-    pub(in crate::codegen) fn insert_pointer(&mut self, uid: InternedStr, ptr: PointerValue<'ctx>) {
+    pub(in crate::codegen) fn insert_pointer(&mut self, uid: usize, ptr: PointerValue<'ctx>) {
         self.variables.insert(uid, ptr);
     }
 
     #[inline(always)]
-    pub(in crate::codegen) fn get_pointer(&self, ident: &InternedStr) -> PointerValue<'ctx> {
-        *self.variables.get(ident).unwrap()
+    pub(in crate::codegen) fn get_pointer(&self, uid: usize) -> PointerValue<'ctx> {
+        *self.variables.get(&uid).unwrap()
     }
 
     #[inline(always)]
@@ -181,8 +181,8 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     fn init_static_globals(&mut self) {
         let init_in_main = std::mem::take(&mut self.init_in_main);
-        for (ident, ty, initializer) in init_in_main {
-            let ptr = self.get_pointer(&ident);
+        for (uid, ty, initializer) in init_in_main {
+            let ptr = self.get_pointer(uid);
             self.initialize_variable(ty, ptr, initializer);
         }
     }
@@ -228,7 +228,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
             self.builder().build_store(allocation, llvm_param).unwrap();
 
-            self.insert_pointer(mlir_param.ident.clone(), allocation)
+            self.insert_pointer(*uid, allocation)
         }
 
         self.process_function_body(&function.body);
