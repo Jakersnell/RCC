@@ -1,9 +1,10 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::{format, Formatter};
 use std::rc::Rc;
 
 use derive_new::new;
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -12,22 +13,21 @@ use inkwell::support::LLVMString;
 use inkwell::types::{
     AnyType, AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType,
 };
-use inkwell::values::IntValue;
 use inkwell::values::{
     BasicValue, BasicValueEnum, FloatValue, FunctionValue, IntMathValue, PointerValue,
 };
-use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
+use inkwell::values::IntValue;
 use log::debug;
 use serde::ser::SerializeTuple;
 
 use crate::data::ast::BinaryOp::Add;
 use crate::data::mlir::{
     MlirBlock, MlirExpr, MlirExprKind, MlirFunction, MlirLiteral, MlirModule, MlirStmt, MlirStruct,
-    MlirType, MlirTypeDecl, MlirTypeKind, MlirVarInit, MlirVariable, VOID_PTR, VOID_TYPE,
+    MlirType, MlirTypeDecl, MlirTypeKind, MlirVariable, MlirVarInit, VOID_PTR, VOID_TYPE,
 };
 use crate::data::symbols::BUILTINS;
+use crate::util::{Locatable, str_intern};
 use crate::util::str_intern::InternedStr;
-use crate::util::{str_intern, Locatable};
 
 pub(in crate::codegen) mod binary_expressions;
 pub(in crate::codegen) mod declarations;
@@ -204,6 +204,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
             .zip(function.parameters.iter())
         {
             let MlirVariable {
+                uid,
                 span,
                 ty: mlir_type,
                 ident,

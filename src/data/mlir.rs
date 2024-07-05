@@ -5,8 +5,8 @@ use std::ops::{Deref, DerefMut};
 use derive_new::new;
 
 use crate::data::ast::BinaryOp;
-use crate::util::str_intern::InternedStr;
 use crate::util::{Locatable, Span};
+use crate::util::str_intern::InternedStr;
 
 macro_rules! basic_ty {
     ($kind:expr) => {
@@ -115,6 +115,7 @@ pub struct MlirFunction {
 
 #[derive(Debug, PartialEq, Hash, PartialOrd, Eq)]
 pub struct MlirVariable {
+    pub uid: usize,
     pub span: Span,
     pub ty: Locatable<MlirType>,
     pub ident: Locatable<InternedStr>,

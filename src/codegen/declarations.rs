@@ -2,11 +2,12 @@ use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, PointerValue};
 
 use crate::codegen::Compiler;
-use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVarInit, MlirVariable};
+use crate::data::mlir::{MlirExpr, MlirTypeDecl, MlirVariable, MlirVarInit};
 
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_global_variable_declaration(&mut self, var: &'mlir MlirVariable) {
         let MlirVariable {
+            uid,
             span,
             ty: mlir_type,
             ident,
@@ -53,6 +54,7 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
 
     pub fn compile_variable_declaration(&mut self, var: &'mlir MlirVariable) {
         let MlirVariable {
+            uid,
             span,
             ty: mlir_type,
             ident,
