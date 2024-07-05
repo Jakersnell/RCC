@@ -11,11 +11,9 @@ To use the compiler by cloning and building the repository follow these steps
 1. clone this repository with git, by using the following commands in your terminal
    ```cd <path-to-your-preferred-containing-directory-here>```
    ```git clone <this-repository-url-here>```
-2. in the repository on your local machine run this command
-   ```cargo build --release```
-3. run the following command
-   ```cp ./target/release/microc /usr/bin```
-4. call the microc compiler on a micro c file, the file will be output as a runnable binary file
+2. in the repository on your local machine run this command to start the build script
+   ```./build.sh```
+3. call the microc compiler on a micro c file, the file will be output as a runnable binary file
    ```microc test.c```
 
 ### Micro C syntax
