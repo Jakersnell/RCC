@@ -1,4 +1,5 @@
 use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::types::BasicType;
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
 
 use crate::codegen::Compiler;
@@ -8,6 +9,7 @@ use crate::util::str_intern::InternedStr;
 impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
     pub fn compile_expression(&mut self, expr: &MlirExpr) -> BasicValueEnum<'ctx> {
         match &*expr.kind {
+            MlirExprKind::Sizeof(sizeof_ty) => self.compile_sizeof(sizeof_ty),
             MlirExprKind::Literal(literal) => self.compile_literal(literal),
             MlirExprKind::Variable(id) => self.compile_variable_access(&expr.ty, *id),
             MlirExprKind::PostIncrement(expr) => self.compile_post_increment(expr),
@@ -57,6 +59,14 @@ impl<'a, 'mlir, 'ctx> Compiler<'a, 'mlir, 'ctx> {
                 self.compile_function_call(ident, args)
             }
         }
+    }
+
+    fn compile_sizeof(&mut self, sizeof_ty: &MlirType) -> BasicValueEnum<'ctx> {
+        let ll_ty = self.convert_type(sizeof_ty);
+        ll_ty
+            .size_of()
+            .unwrap_or_else(|| panic!("Could not access size of type: {}", sizeof_ty.to_string()))
+            .into()
     }
 
     fn compile_function_call(

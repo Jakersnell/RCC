@@ -56,10 +56,9 @@ impl Analyzer {
         &mut self,
         ty_or_expr: &Locatable<TypeOrExpression>,
     ) -> Result<MlirExpr, ()> {
-        let size = match &ty_or_expr.value {
+        let sizeof_ty = match &ty_or_expr.value {
             TypeOrExpression::Type(ty) => {
-                let ty = self.validate_type(&ty.specifier, ty_or_expr.location, false, false)?;
-                self.sizeof(&ty, ty_or_expr.location)
+                self.validate_type(&ty.specifier, ty_or_expr.location, false, false)?
             }
             TypeOrExpression::Expr(expr) => {
                 let expr = self.validate_expression(expr)?;
@@ -70,13 +69,13 @@ impl Analyzer {
                     let warning = CompilerWarning::ExprNoEffect(ty_or_expr.location);
                     self.report_warning(warning);
                 }
-                self.sizeof(&expr.ty, ty_or_expr.location)
+                expr.ty
             }
         };
         let ty = MlirType::new(MlirTypeKind::Int(true), MlirTypeDecl::Basic);
         Ok(MlirExpr {
             span: ty_or_expr.location,
-            kind: Box::new(MlirExprKind::Literal(MlirLiteral::UInt(size as u32))),
+            kind: Box::new(MlirExprKind::Sizeof(sizeof_ty)),
             ty,
             is_lval: false,
         })

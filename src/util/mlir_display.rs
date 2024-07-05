@@ -114,6 +114,7 @@ impl Display for MlirLiteral {
 impl Display for MlirExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &*self.kind {
+            MlirExprKind::Sizeof(sizeof_ty) => write!(f, "sizeof({})", sizeof_ty.to_string()),
             MlirExprKind::Literal(literal) => write!(f, "{}", literal),
             MlirExprKind::Variable(ident) => write!(f, "{}", ident),
             MlirExprKind::PostIncrement(expression) => write!(f, "{}++", expression),
