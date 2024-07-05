@@ -379,7 +379,7 @@ impl MlirExpr {
 #[derive(Debug, Clone, PartialEq, Hash, PartialOrd, Eq)]
 pub enum MlirExprKind {
     // preserved to be handled in codegen so that llvm can track padding and offsets
-    Sizeof(MlirExpr),
+    Sizeof(MlirType),
 
     Literal(MlirLiteral),
     Variable(usize),
